@@ -63,19 +63,67 @@ local plotTypeMap = {}
 local Space =
 {
 	scale = 20, -- how many tiles of map area per voronoi point
+	maxContinentPolygons = 4, -- how many polygons can make up a continent at maximum
+	landRatio = 0.3, -- how much of the map is land
+	wrapX = true,
+	wrapY = false,
+	continents = {},
+	regions = {},
 	polygons = {},
+	hexes = {},
     plotTypes = {}, -- map generation result
+    terrainTypes = {}, -- map generation result
+    featureTypes = {}, -- map generation result
     polygonType = {},
     Create = function(self)
         self.iW, self.iH = Map.GetGridSize()
         self.iA = self.iW * self.iH
+        self.landArea = self.iA * self.landRatio
         self.w = self.iW - 1
         self.h = self.iH - 1
+        self.halfWidth = self.w / 2
+        self.halfHeight = self.h / 2
         self.polygonCount = mCeil(self.iA / self.scale)
         print(self.polygonCount)
         self:InitPolygons()
-        self:ComputePlots()
+        self:FillPolygons()
+        self:PickContinents()
         return self.plotTypes
+    end,
+    ComputePlots = function(self)
+    	--[[
+		for pi, hex in pairs(self.hexes) do
+			local polygon = hex.polygon
+			if self.polygonType[polygon] == nil then
+				self.polygonType[polygon] = Map.Rand(3, "pick a plot type")
+			end
+			if hex.liminality == 0 then
+				local pt = self.polygonType[polygon]
+				self.plotTypes[hex.index] = plotTypeMap[pt]
+			else
+				self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
+			end
+		end
+		]]--
+		for c, continent in pairs(self.continents) do
+			for p, polygon in pairs(continent) do
+				for h, hex in pairs(polygon.hexes) do
+					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+				end
+			end
+		end
+		for pi, hex in pairs(self.hexes) do
+			if self.plotTypes[hex.index] == nil then
+				self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+			end
+		end
+		return self.plotTypes
+	end,
+    ComputeTerrain = function(self)
+    	return self.terrainTypes
+    end,
+    ComputeFeatures = function(self)
+    	return featureTypes
     end,
     InitPolygons = function(self)
     	for i = 1, self.polygonCount do
@@ -85,62 +133,103 @@ local Space =
     DistanceSquared = function(self, polygon, x, y)
     	local xdist = mAbs(polygon.x - x)
 		local ydist = mAbs(polygon.y - y)
-		if xdist > self.w / 2 then
-			if polygon.x < x then
-				xdist = polygon.x + (self.w - x)
-			else
-				xdist = x + (self.w - polygon.x)
+		if self.wrapX then
+			if xdist > self.halfWidth then
+				if polygon.x < x then
+					xdist = polygon.x + (self.w - x)
+				else
+					xdist = x + (self.w - polygon.x)
+				end
 			end
 		end
-		if ydist > self.h / 2 then
-			if polygon.y < y then
-				ydist = polygon.y + (self.h - y)
-			else
-				ydist = y + (self.h - polygon.y)
+		if self.wrapY then
+			if ydist > self.halfHeight then
+				if polygon.y < y then
+					ydist = polygon.y + (self.h - y)
+				else
+					ydist = y + (self.h - polygon.y)
+				end
 			end
 		end
 		return (xdist * xdist) + (ydist * ydist)
     end,
     ClosestPolygon = function(self, x, y)
+    	local dists = {}
     	local closest_distance = 0
     	local closest_polygon
     	-- find the closest point to this point
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
-    		local dist = self:DistanceSquared(polygon, x, y)
-    		if i == 1 or dist < closest_distance then
-    			closest_distance = dist
+    		dists[i] = self:DistanceSquared(polygon, x, y)
+    		if i == 1 or dists[i] < closest_distance then
+    			closest_distance = dists[i]
     			closest_polygon = polygon
     		end
     	end
-    	return closest_polygon
+    	-- sometimes a point is closer to more than one point
+    	local liminality = 0
+    	for i = 1, #self.polygons do
+    		local polygon = self.polygons[i]
+    		if dists[i] == closest_distance and polygon ~= closest_polygon then
+    			table.insert(closest_polygon.neighbors, polygon)
+    			liminality = liminality + 1
+    		end
+    	end
+    	return closest_polygon, liminality
     end,
     NewPolygon = function(self, x, y)
 		return {
 			x = x or Map.Rand(self.iW, "random x"),
 			y = y or Map.Rand(self.iH, "random y"),
+			hexes = {},
+			neighbors = {},
+			area = 0,
 		}
 	end,
-	ComputePlots = function(self)
+	FillPolygons = function(self)
 		for x = 0, self.w do
 			for y = 0, self.h do
-				local polygon = self:ClosestPolygon(x, y)
+				local polygon, liminality = self:ClosestPolygon(x, y)
 				if polygon ~= nil then
-					if self.polygonType[polygon] == nil then
-						self.polygonType[polygon] = Map.Rand(4, "pick a plot type")
-					end
-					local pt = self.polygonType[polygon]
-					self:SetPlotTypeXY(x, y, plotTypeMap[pt])
+					local pi = self:GetIndex(x, y)
+					local hex = { polygon = polygon, liminality = liminality, index = pi, x = x, y = y }
+					self.hexes[pi] = hex
+					tInsert(polygon.hexes, hex)
+					polygon.area = polygon.area + 1
 				else
 					print("nil polygon")
 				end
 			end
 		end
 	end,
-	DrawSegment = function(self, segment)
-		local indices = self:GetIndicesInLine(segment.startPoint.x, segment.startPoint.y, segment.endPoint.x, segment.endPoint.y)
-		for i, pi in pairs(indices) do
-			self.plotTypes[pi] = PlotTypes.PLOT_LAND
+	PickContinents = function(self)
+		local polygonBuffer = {}
+		for i, polygon in pairs(self.polygons) do
+			tInsert(polygonBuffer, polygon)
+		end
+		local filledArea = 0
+		while #polygonBuffer > 0 and filledArea < self.landArea do
+			local i = mRandom(1, #polygonBuffer)
+			local polygon = table.remove(polygonBuffer, i)
+			if #polygon.neighbors ~= 0 and not polygon.picked then
+				polygon.picked = true
+				filledArea = filledArea + polygon.area
+				local size = mRandom(1, self.maxContinentPolygons)
+				local continent = { polygon }
+				local neighbor = polygon
+				for n = 1, size do
+					if #neighbor.neighbors > 0 then
+						local ni = mRandom(1, #neighbor.neighbors)
+						neighbor = neighbor.neighbors[ni]
+					end
+					if not neighbor.picked then
+						neighbor.picked = true
+						filledArea = filledArea + neighbor.area
+						tInsert(continent, neighbor)
+					end
+				end
+				tInsert(self.continents, continent)
+			end
 		end
 	end,
 	SetPlotTypeXY = function(self, x, y, plotType)
@@ -148,44 +237,6 @@ local Space =
 	end,
 	GetIndex = function(self, x, y)
 		return (y * self.iW) + x + 1
-	end,
-	GetIndicesInLine = function(self, x1, y1, x2, y2)
-		local plots = {}
-		local x1, y1 = mCeil(x1), mCeil(y1)
-		local x2, y2 = mCeil(x2), mCeil(y2)
-		if x1 > x2 then
-			local x1store = x1+0
-			x1 = x2+0
-			x2 = x1store
-		end
-		if y1 > y2 then
-			local y1store = y1+0
-			y1 = y2+0
-			y2 = y1store
-		end
-		local dx = x2 - x1
-		local dy = y2 - y1
-		if dx == 0 then
-			if dy ~= 0 then
-				for y = y1, y2 do
-					tInsert(plots, self:GetIndex(x1, y))
-				end
-			end
-		elseif dy == 0 then
-			if dx ~= 0 then
-				for x = x1, x2 do
-					tInsert(plots, self:GetIndex(x, y1))
-				end
-			end
-		else
-			local m = dy / dx
-	        local b = y1 - m*x1
-			for x = x1, x2 do
-				local y = mFloor( (m * x) + b + 0.5 )
-				tInsert(plots, self:GetIndex(x, y))
-			end
-		end
-		return plots
 	end,
 }
 
@@ -216,7 +267,8 @@ function GeneratePlotTypes()
     	[3] = PlotTypes.PLOT_MOUNTAIN,
 	}
 
-    local plotTypes = Space:Create()
+	Space:Create()
+    local plotTypes = Space:ComputePlots()
     SetPlotTypes(plotTypes)
     local args = { bExpandCoasts = false }
     GenerateCoasts(args) -- will have to look into that as I want to avoid coasts spanning into oceans as they currently do too easily
@@ -241,4 +293,34 @@ function AddFeatures()
     local featuregen = FeatureGenerator.Create()
     featuregen:AddFeatures()
     ]]--
+end
+
+function AddLakes()
+	print("Adding Lakes (Fantastical)")
+	--[[
+	
+	local numLakesAdded = 0;
+	local lakePlotRand = GameDefines.LAKE_PLOT_RAND;
+	lakePlotRand = lakePlotRand + (lakePlotRand * ismuthChance)
+	for i, plot in Plots() do
+		if not plot:IsWater() then
+			if not plot:IsCoastalLand() then
+				if not plot:IsRiver() then
+					local r = Map.Rand(lakePlotRand, "Fantasy AddLakes");
+					if r == 0 then
+						plot:SetArea(-1);
+						plot:SetPlotType(PlotTypes.PLOT_OCEAN);
+						numLakesAdded = numLakesAdded + 1;
+					end
+				end
+			end
+		end
+	end
+	
+	-- this is a minimalist update because lakes have been added
+	if numLakesAdded > 0 then
+		print(tostring(numLakesAdded).." lakes added")
+		Map.CalculateAreas();
+	end
+	]]--
 end
