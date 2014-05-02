@@ -63,8 +63,9 @@ local plotTypeMap = {}
 local Space =
 {
 	scale = 20, -- how many tiles of map area per voronoi point
-	maxContinentPolygons = 4, -- how many polygons can make up a continent at maximum
-	landRatio = 0.3, -- how much of the map is land
+	maxContinentRatio = 0.4, -- how many polygons can make up a continent at maximum
+	minContinentRatio = 0.05, -- how many polygons can make up a continent at maximum
+	landRatio = 0.29, -- how much of the map is land
 	wrapX = true,
 	wrapY = false,
 	continents = {},
@@ -84,29 +85,17 @@ local Space =
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
         self.polygonCount = mCeil(self.iA / self.scale)
-        print(self.polygonCount)
+        self.maxContinentPolygons = mCeil(self.polygonCount * self.maxContinentRatio)
+        self.minContinentPolygons = mCeil(self.polygonCount * self.minContinentRatio)
+        print(self.polygonCount .. " polygons")
         self:InitPolygons()
         self:FillPolygons()
         self:PickContinents()
         return self.plotTypes
     end,
     ComputePlots = function(self)
-    	--[[
-		for pi, hex in pairs(self.hexes) do
-			local polygon = hex.polygon
-			if self.polygonType[polygon] == nil then
-				self.polygonType[polygon] = Map.Rand(3, "pick a plot type")
-			end
-			if hex.liminality == 0 then
-				local pt = self.polygonType[polygon]
-				self.plotTypes[hex.index] = plotTypeMap[pt]
-			else
-				self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
-			end
-		end
-		]]--
 		for c, continent in pairs(self.continents) do
-			for p, polygon in pairs(continent) do
+			for p, polygon in pairs(continent.polygons) do
 				for h, hex in pairs(polygon.hexes) do
 					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
 				end
@@ -151,7 +140,7 @@ local Space =
 				end
 			end
 		end
-		return (xdist * xdist) + (ydist * ydist)
+		return mSqrt ( (xdist * xdist) + (ydist * ydist) )
     end,
     ClosestPolygon = function(self, x, y)
     	local dists = {}
@@ -184,6 +173,7 @@ local Space =
 			hexes = {},
 			neighbors = {},
 			area = 0,
+			continentIndex = 0,
 		}
 	end,
 	FillPolygons = function(self)
@@ -208,26 +198,50 @@ local Space =
 			tInsert(polygonBuffer, polygon)
 		end
 		local filledArea = 0
+		local continentIndex = 1
 		while #polygonBuffer > 0 and filledArea < self.landArea do
 			local i = mRandom(1, #polygonBuffer)
 			local polygon = table.remove(polygonBuffer, i)
-			if #polygon.neighbors ~= 0 and not polygon.picked then
-				polygon.picked = true
+			if #polygon.neighbors ~= 0 and polygon.continentIndex == 0 then
+				polygon.continentIndex = continentIndex
 				filledArea = filledArea + polygon.area
-				local size = mRandom(1, self.maxContinentPolygons)
-				local continent = { polygon }
+				local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
+				local continent = { polygons = { polygon }, index = continentIndex }
 				local neighbor = polygon
-				for n = 1, size do
+				local n = 1
+				local iterations = 0
+				while n < size and iterations < 20 and filledArea < self.landArea do
+					local lastNeigh
+					if neighbor == nil then break end
 					if #neighbor.neighbors > 0 then
-						local ni = mRandom(1, #neighbor.neighbors)
-						neighbor = neighbor.neighbors[ni]
+						for ni, neigh in pairs (neighbor.neighbors) do
+							if neigh.continentIndex == 0 then
+								local nearLand = false
+								for nn, neighneigh in pairs(neigh.neighbors) do
+									if neighneigh.continentIndex ~= continentIndex and neighneigh.continentIndex ~= 0 then
+										nearOtherLand = true
+										break
+									end
+								end
+								if not nearOtherLand then
+									neigh.continentIndex = continentIndex
+									filledArea = filledArea + neigh.area
+									n = n + 1
+									tInsert(continent.polygons, neigh)
+								end
+							end
+							lastNeigh = neigh
+						end
+					elseif #continent.polygons > 1 then
+						local ri = mRandom(2, #continent.polygons)
+						lastNeigh = continent.polygons[ri]
+					else
+						break
 					end
-					if not neighbor.picked then
-						neighbor.picked = true
-						filledArea = filledArea + neighbor.area
-						tInsert(continent, neighbor)
-					end
+					neighbor = lastNeigh
+					iterations = iterations + 1
 				end
+				print(n, size, iterations)
 				tInsert(self.continents, continent)
 			end
 		end
