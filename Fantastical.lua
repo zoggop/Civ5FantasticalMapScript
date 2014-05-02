@@ -63,8 +63,8 @@ local plotTypeMap = {}
 local Space =
 {
 	scale = 20, -- how many tiles of map area per voronoi point
-	maxContinentRatio = 0.4, -- how many polygons can make up a continent at maximum
-	minContinentRatio = 0.05, -- how many polygons can make up a continent at maximum
+	maxContinentRatio = 0.12, -- how many polygons can make up a continent at maximum
+	minContinentRatio = 0.01, -- how many polygons can make up a continent at maximum
 	landRatio = 0.29, -- how much of the map is land
 	wrapX = true,
 	wrapY = false,
@@ -90,6 +90,7 @@ local Space =
         print(self.polygonCount .. " polygons")
         self:InitPolygons()
         self:FillPolygons()
+        self:ListPolygonNeighbors()
         self:PickContinents()
         return self.plotTypes
     end,
@@ -160,21 +161,25 @@ local Space =
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
     		if dists[i] == closest_distance and polygon ~= closest_polygon then
-    			table.insert(closest_polygon.neighbors, polygon)
     			liminality = liminality + 1
     		end
     	end
     	return closest_polygon, liminality
     end,
-    NewPolygon = function(self, x, y)
+    NewPolygon = function(self, x, y, index)
 		return {
 			x = x or Map.Rand(self.iW, "random x"),
 			y = y or Map.Rand(self.iH, "random y"),
 			hexes = {},
-			neighbors = {},
+			isNeighbor = {},
 			area = 0,
 			continentIndex = 0,
+			index = index or #self.polygons+1,
 		}
+	end,
+	SetNeighborPolygons = function(self, polygon1, polygon2)
+		polygon1.isNeighbor[polygon2] = true
+		polygon2.isNeighbor[polygon1] = true
 	end,
 	FillPolygons = function(self)
 		for x = 0, self.w do
@@ -186,11 +191,38 @@ local Space =
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
+					-- find neighbors from one hex to the next
+					for i, nindex in pairs(self:HexNeighbors(pi)) do
+						if nindex ~= pi then
+							local nhex = self.hexes[nindex]
+							if nhex ~= nil then
+								if nhex.polygon ~= nil and nhex.polygon ~= hex.polygon then
+									self:SetNeighborPolygons(polygon, nhex.polygon)
+								end
+							end
+						end
+					end
 				else
 					print("nil polygon")
 				end
 			end
 		end
+	end,
+	ListPolygonNeighbors = function(self)
+		for i, polygon in pairs(self.polygons) do
+			polygon.neighbors = {}
+			for neighbor, yes in pairs(polygon.isNeighbor) do
+				tInsert(polygon.neighbors, neighbor)
+			end
+		end
+	end,
+	NearOtherLand = function(self, polygon, continentIndex)
+		for ni, neigh in pairs (polygon.neighbors) do
+			if neigh.continentIndex ~= 0 and neigh.continentIndex ~= continentIndex then
+				return true
+			end
+		end
+		return false
 	end,
 	PickContinents = function(self)
 		local polygonBuffer = {}
@@ -199,55 +231,96 @@ local Space =
 		end
 		local filledArea = 0
 		local continentIndex = 1
-		while #polygonBuffer > 0 and filledArea < self.landArea do
-			local i = mRandom(1, #polygonBuffer)
-			local polygon = table.remove(polygonBuffer, i)
-			if #polygon.neighbors ~= 0 and polygon.continentIndex == 0 then
-				polygon.continentIndex = continentIndex
-				filledArea = filledArea + polygon.area
-				local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
-				local continent = { polygons = { polygon }, index = continentIndex }
-				local neighbor = polygon
-				local n = 1
-				local iterations = 0
-				while n < size and iterations < 20 and filledArea < self.landArea do
-					local lastNeigh
-					if neighbor == nil then break end
-					if #neighbor.neighbors > 0 then
-						for ni, neigh in pairs (neighbor.neighbors) do
-							if neigh.continentIndex == 0 then
-								local nearLand = false
-								for nn, neighneigh in pairs(neigh.neighbors) do
-									if neighneigh.continentIndex ~= continentIndex and neighneigh.continentIndex ~= 0 then
-										nearOtherLand = true
-										break
-									end
-								end
-								if not nearOtherLand then
-									neigh.continentIndex = continentIndex
-									filledArea = filledArea + neigh.area
-									n = n + 1
-									tInsert(continent.polygons, neigh)
-								end
-							end
-							lastNeigh = neigh
-						end
-					elseif #continent.polygons > 1 then
-						local ri = mRandom(2, #continent.polygons)
-						lastNeigh = continent.polygons[ri]
-					else
-						break
-					end
-					neighbor = lastNeigh
-					iterations = iterations + 1
+		while #polygonBuffer > 1 and filledArea < self.landArea do
+			local polygon
+			repeat
+				polygon = tRemove(polygonBuffer, mRandom(1, #polygonBuffer))
+			until #polygon.neighbors ~= 0 and polygon.continentIndex == 0 and not self:NearOtherLand(polygon, 0)
+			polygon.continentIndex = continentIndex
+			filledArea = filledArea + polygon.area
+			local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
+			local continent = { polygons = { polygon }, index = continentIndex }
+			local n = 1
+			local iterations = 0
+			local lastRN
+			while n < size and iterations < size * 2 and filledArea < self.landArea do
+				local rn
+				if lastRN ~= nil then
+					rn = (lastRN + 1) % #polygon.neighbors
+					if rn == 0 then rn = 1 end
+				else
+					rn = mRandom(1, #polygon.neighbors)
 				end
-				print(n, size, iterations)
-				tInsert(self.continents, continent)
+				local neighbor = polygon.neighbors[rn]
+				if not self:NearOtherLand(neighbor, continentIndex) then
+					neighbor.continentIndex = continentIndex
+					filledArea = filledArea + neighbor.area
+					n = n + 1
+					tInsert(continent.polygons, neighbor)
+					polygon = neighbor
+					lastRN = nil
+				else
+					lastRN = rn
+				end
+				iterations = iterations + 1
 			end
+			print(n, size, iterations)
+			tInsert(self.continents, continent)
+			continentIndex = continentIndex + 1
 		end
+		print(filledArea, self.landArea, continentIndex-1)
+	end,
+	HexNeighbors = function(self, index, directions)
+		if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
+		local neighbors = {}
+		local thisX, thisY = self:GetXY(index)
+		for i, direction in pairs(directions) do
+			local x, y = self:HexMove(thisX, thisY, direction)
+			tInsert(neighbors, self:GetIndex(x, y))
+		end
+		return neighbors
+	end,
+	HexMove = function(self, x, y, direction)
+		local nx = x
+		local ny = y
+		local odd = y % 2
+		if direction == 0 then
+
+		elseif direction == 1 then
+			nx = x - 1
+		elseif direction == 2 then
+			nx = x - 1 + odd
+			ny = y + 1
+		elseif direction == 3 then
+			nx = x + odd
+			ny = y + 1
+		elseif direction == 4 then
+			nx = x + 1
+		elseif direction == 5 then
+			nx = x + odd
+			ny = y - 1
+		elseif direction == 6 then
+			nx = x - 1 + odd
+			ny = y - 1
+		end
+		if self.wrapX then
+			if nx > self.w then nx = 0 elseif nx < 0 then nx = self.w end
+		else
+			if nx > self.w then nx = self.w elseif nx < 0 then nx = 0 end
+		end
+		if self.wrapY then
+			if ny > self.h then ny = 0 elseif ny < 0 then ny = self.h end
+		else
+			if ny > self.h then ny = self.h elseif ny < 0 then ny = 0 end
+		end
+		return nx, ny
 	end,
 	SetPlotTypeXY = function(self, x, y, plotType)
 		self.plotTypes[self:GetIndex(x, y)] = plotType
+	end,
+	GetXY = function(self, index)
+		index = index - 1
+		return index % self.iW, mFloor(index / self.iW)
 	end,
 	GetIndex = function(self, x, y)
 		return (y * self.iW) + x + 1
