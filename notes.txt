@@ -1,0 +1,145 @@
+struct ColoredPoint {
+        int x, y;
+        Color color;
+        ColoredPoint( int x = 0 , int y = 0 ) {
+                set( x, y );
+        }
+        void set( int x, int y ) {
+                this->x = x;
+                this->y = y;
+                this->color.random();
+        }
+        void random( int w, int h ) {
+                this->set( rand() % w, rand() % h );
+        }
+        /*
+           this distance calculation wraps around
+        */
+        int distanceSquared( float x, float y, int w, int h ) {
+                float xdist = fabs( this->x - x );
+                float ydist = fabs( this->y - y );
+
+                if ( xdist > w / 2 ) {
+                        if ( this->x < x ) {
+                                xdist = this->x + ( w - x );
+                        } else {
+                                xdist = x + ( w - this->x );
+                        }
+                }
+                if ( ydist > h / 2 ) {
+                        if ( this->y < y ) {
+                                ydist = this->y + ( h - y );
+                        } else {
+                                ydist = y + ( h - this->y );
+                        }
+                }
+                return xdist * xdist + ydist * ydist;
+        }
+
+
+struct Voronoi {
+        int w, h, n;
+        int antialias;
+        PointMode mode;
+        const char *ppm_filename;
+        float rotation;
+        float kolor;
+
+        Voronoi() {
+                w = 256;
+                h = 256;
+                n = 64;
+                antialias = 1;
+                mode = RANDOM;
+                ppm_filename = "voronoi.ppm";
+                rotation = 0;
+                kolor = 0;
+        }
+
+        void closestColor( std::vector< ColoredPoint > points, int x, int y, Color &accumulator ) {
+                n = points.size();
+                accumulator.zero();
+
+                float d = 0;
+                int closest_distance = 0;
+                int distance[ n ];
+
+                // find the closest point to this point (x,y)
+                for ( int i = 0 ; i < n ; i++ ) {
+                        distance[ i ] = points[ i ].distanceSquared( x, y, w, h );
+                        if ( 0 == i || distance[ i ] < closest_distance ) {
+                                closest_distance = distance[ i ];
+                        }
+                }
+
+                // sometimes a point is closer to more than one point
+                for ( int i = 0 ; i < n ; i++ ) {
+                        if ( 0 == kolor ) {
+                                if ( distance[ i ] == closest_distance ) {
+                                        d++;
+                                        accumulator.add( points[ i ].color );
+                                }
+                        } else {
+                                float f = kolor * ( 1 / float( 1 + distance[ i ] ) );
+                                accumulator.r += points[ i ].color.r * f ;
+                                accumulator.g += points[ i ].color.g * f ;
+                                accumulator.b += points[ i ].color.b * f ;
+                        }
+                }
+                accumulator.cap();
+
+
+                accumulator.div( d );
+        }
+
+        void initPoints( std::vector< ColoredPoint > &points ) {
+                int xi = w / floor( sqrt( n ) );
+                int yi = h / floor( sqrt( n ) );
+                int q = 0;
+                for ( int i = 0 ; i < n ; i++ ) {
+                        ColoredPoint point;
+                        point.random( w, h );
+                        points.push_back( point );
+                }
+        }
+
+        int main( int argc, char *argv[] ) {
+                int parsedArgs = parseArgs( argc, argv );
+                if ( !parsedArgs ) {
+                        return usage( argv[ 0 ] );
+                }
+                printf( "%dx%d n=%d f=%s\n", w, h, n, ppm_filename );
+
+                std::vector< ColoredPoint > points;
+                initPoints( points );
+
+                Color current;
+                Color previous;
+
+                FILE *fp = fopen( ppm_filename, "w" );
+                fprintf( fp, "P6\n" "%d %d\n" "255\n", w, h );
+
+                float a_cos = cos( rotation );
+                float a_sin = sin( rotation );
+
+                for ( int i = 0 ; i < points.size() ; i++ ) {
+                        points[ i ].rotate( a_cos, a_sin, w, h );
+                }
+
+                for ( int y = 0 ; y < h ; y++ ) {
+                        for ( int x = 0 ; x < w ; x++ ) {
+                                closestColor( points, x, y, current );
+                                if ( antialias && 0 != x ) {
+                                        // sort of a trailing average to "antialias"
+                                        current.average( previous );
+                                        previous.copy( current );
+                                }
+                                current.print( fp );
+                        }
+                }
+
+                fclose( fp );
+
+                return 0;
+        }
+};
