@@ -65,17 +65,25 @@ local Space =
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
+	mountainLiminality = 1, -- how much polygon overlap results in a mountain tile (3 or 4 is the maximum that occurs). above 1 will create almost no mountains
+	mountainDice = 5,
+	mountainThreshold = 3, -- if this many dice (coins really) come up, create a mountain
 	wrapX = true,
 	wrapY = false,
 	oceans = {},
 	continents = {},
 	regions = {},
 	polygons = {},
+	bottomYPolygons = {},
+	bottomXPolygons = {},
+	topYPolygons = {},
+	topXPolygons = {},
 	hexes = {},
     plotTypes = {}, -- map generation result
     terrainTypes = {}, -- map generation result
     featureTypes = {}, -- map generation result
     polygonType = {},
+    maxLiminality = 0,
     Create = function(self)
         self.iW, self.iH = Map.GetGridSize()
         self.iA = self.iW * self.iH
@@ -84,8 +92,10 @@ local Space =
         self.h = self.iH - 1
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
-        self.polygonCount = math.min(mCeil(self.iA / 5), self.polygonCount)
-        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 60))
+        self.polygonCount = math.min(mCeil(self.iA / 10), self.polygonCount)
+        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 50))
+        self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
+        if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
         self.nonOceanPolygons = self.polygonCount
         EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
         self:InitPolygons()
@@ -99,7 +109,11 @@ local Space =
 		for c, continent in pairs(self.continents) do
 			for p, polygon in pairs(continent.polygons) do
 				for h, hex in pairs(polygon.hexes) do
-					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+					if hex.liminality < self.mountainLiminality or Map.Rand(self.mountainDice, "mountain dice") < self.mountainThreshold then
+						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+					else
+						self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
+					end
 				end
 			end
 		end
@@ -175,6 +189,7 @@ local Space =
     			liminality = liminality + 1
     		end
     	end
+    	if liminality > self.maxLiminality then self.maxLiminality = liminality end
     	return closest_polygon, liminality
     end,
     NewPolygon = function(self, x, y, index)
@@ -191,6 +206,24 @@ local Space =
 		polygon1.isNeighbor[polygon2] = true
 		polygon2.isNeighbor[polygon1] = true
 	end,
+	CheckBottomTop = function(self, polygon, x, y)
+		if y == 0 and polygon.y < self.halfHeight then
+			polygon.bottomY = true
+			tInsert(self.bottomYPolygons, polygon)
+		end
+		if x == 0 and polygon.x < self.halfWidth then
+			polygon.bottomX = true
+			tInsert(self.bottomXPolygons, polygon)
+		end
+		if y == self.h and polygon.y >= self.halfHeight then
+			polygon.topY = true
+			tInsert(self.topYPolygons, polygon)
+		end
+		if x == self.w and polygon.x >= self.halfWidth then
+			polygon.topX = true
+			tInsert(self.topXPolygons, polygon)
+		end
+	end,
 	FillPolygons = function(self)
 		for x = 0, self.w do
 			for y = 0, self.h do
@@ -201,17 +234,16 @@ local Space =
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
-					if y == 0 then polygon.bottomY = true end
-					if x == 0 then polygon.bottomX = true end
-					if y == self.h then polygon.topY = true end
-					if x == self.w then polygon.topX = true end
+					self:CheckBottomTop(polygon, x, y)
 					-- find neighbors from one hex to the next
-					for i, nindex in pairs(self:HexNeighbors(pi)) do
+					for i, nindex in pairs(self:HexNeighbors(pi), {1, 2, 5, 6}) do -- 3 and 4 are are never there yet
 						if nindex ~= pi then
 							local nhex = self.hexes[nindex]
 							if nhex ~= nil then
-								if nhex.polygon ~= nil and nhex.polygon ~= hex.polygon then
-									self:SetNeighborPolygons(polygon, nhex.polygon)
+								if nhex.polygon ~= nil then
+									if nhex.polygon ~= hex.polygon then
+										self:SetNeighborPolygons(polygon, nhex.polygon)
+									end
 								end
 							end
 						end
@@ -221,6 +253,7 @@ local Space =
 				end
 			end
 		end
+		EchoDebug(self.maxLiminality .. " maximum overlap")
 	end,
 	ListPolygonNeighbors = function(self)
 		for i, polygon in pairs(self.polygons) do
@@ -232,25 +265,72 @@ local Space =
 	end,
 	PickOceans = function(self)
 		local div = self.w / self.oceanNumber
-		local x = mRandom(0, self.w)
+		local x, y = 0, 0
+		local axis = 1
+		if self.iH > self.iW then axis = 2 end
+		if not self.wrapX and not self.wrapY then axis = 3 end
+		if axis == 1 then x = mRandom(0, self.w) end
+		if axis == 2 then
+			y = mRandom(0, self.h)
+			div = self.h / self.oceanNumber
+		end
+		local xcorner, ycorner
+		if axis == 3 then
+			-- if it's a nonwrapping map, pick a corner and grow the ocean from there
+			xcorner = mRandom(1, 2)
+			ycorner = mRandom(1, 2)
+			if xcorner == 1 then x = 0 else x = self.w end
+			if ycorner == 1 then y = 0 else y = self.h end
+		end
+		EchoDebug(axis, #self.bottomYPolygons, #self.bottomXPolygons)
 		for oceanIndex = 1, self.oceanNumber do
-			local hex = self.hexes[self:GetIndex(x, 0)]
-			local polygon = hex.polygon
-			if polygon == nil then EchoDebug(x .. ',0 has no polygon') end
+			local polygon
+			if axis == 1 then
+				polygon = tRemove(self.bottomYPolygons, mRandom(1, #self.bottomYPolygons))
+			elseif axis == 2 then
+				polygon = tRemove(self.bottomXPolygons, mRandom(1, #self.bottomXPolygons))
+				EchoDebug(polygon.x)
+			elseif axis == 3 then
+				local hex = self.hexes[self:GetIndex(x, y)]
+				polygon = hex.polgyon
+			end
+			if polygon == nil then EchoDebug(x .. ',' .. y .. ' no polygon') end
 			local ocean = {}
-			while #polygon.neighbors ~= 0 do
-				polygon.oceanIndex = oceanIndex
-				tInsert(ocean, polygon)
-				self.nonOceanArea = self.nonOceanArea - polygon.area
-				self.nonOceanPolygons = self.nonOceanPolygons - 1
-				if polygon.topY then break end
-				local upNeighbors = {}
-				for ni, neighbor in pairs(polygon.neighbors) do
-					if (neighbor.y > polygon.y or neighbor.topY) and not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
-						tInsert(upNeighbors, neighbor)
+			local iterations = 0
+			while self.nonOceanPolygons > self.minNonOceanPolygons do
+				if iterations == 0 then
+					polygon.oceanIndex = oceanIndex
+					tInsert(ocean, polygon)
+					self.nonOceanArea = self.nonOceanArea - polygon.area
+					self.nonOceanPolygons = self.nonOceanPolygons - 1
+				else
+					if axis == 1 and polygon.topY then break end
+					if axis == 2 and polygon.topX then
+						EchoDebug("found topX at x=" .. polygon.x)
+						break
 					end
 				end
-				if #upNeighbors == 0 then break end
+				local upNeighbors = {}
+				for ni, neighbor in pairs(polygon.neighbors) do
+					if not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
+						if (axis == 1 or (axis == 3 and ycorner == 1)) and (neighbor.y > polygon.y or neighbor.topY) then
+							tInsert(upNeighbors, neighbor)
+						end
+						if (axis == 2 or (axis == 3 and xcorner == 1)) and (neighbor.x > polygon.x or neighbor.topX) then
+							tInsert(upNeighbors, neighbor)
+						end
+						if axis == 3 and ycorner == 2 and (neighbor.y < polygon.y or neighbor.bottomY) then
+							tInsert(upNeighbors, neighbor)
+						end
+						if axis == 3 and xcorner == 2 and (neighbor.x < polygon.x or neighbor.bottomX) then
+							tInsert(upNeighbors, neighbor)
+						end
+					end
+				end
+				if #upNeighbors == 0 then
+					EchoDebug("no upNeighbors")
+					break
+				end
 				for ni, neighbor in pairs(upNeighbors) do
 					neighbor.oceanIndex = oceanIndex
 					tInsert(ocean, neighbor)
@@ -258,10 +338,13 @@ local Space =
 					self.nonOceanPolygons = self.nonOceanPolygons - 1
 				end
 				polygon = upNeighbors[mRandom(1, #upNeighbors)]
+				iterations = iterations + 1
 			end
 			tInsert(self.oceans, ocean)
-			x = mCeil(x + div) % self.w
+			if axis == 1 then x = mCeil(x + div) % self.w end
+			if axis == 2 then y = mCeil(y + div) % self.h end
 		end
+		EchoDebug(self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
 	end,
 	NearOther = function(self, polygon, value, key)
 		if key == nil then key = "continentIndex" end
