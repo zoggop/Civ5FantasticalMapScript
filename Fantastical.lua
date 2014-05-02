@@ -56,18 +56,20 @@ local tRemove = table.remove
 
 ------------------------------------------------------------------------------
 
-local plotTypeMap = {}
 
 ------------------------------------------------------------------------------
 
 local Space =
 {
-	scale = 20, -- how many tiles of map area per voronoi point
+	scale = 25, -- how many tiles of map area per voronoi point
+	oceanNumber = 2, -- how many major ocean basins
+	majorContinentNumber = 2,
 	maxContinentRatio = 0.12, -- how many polygons can make up a continent at maximum
 	minContinentRatio = 0.01, -- how many polygons can make up a continent at maximum
-	landRatio = 0.29, -- how much of the map is land
+	landRatio = 1, -- how much of the map is land
 	wrapX = true,
 	wrapY = false,
+	oceans = {},
 	continents = {},
 	regions = {},
 	polygons = {},
@@ -79,6 +81,7 @@ local Space =
     Create = function(self)
         self.iW, self.iH = Map.GetGridSize()
         self.iA = self.iW * self.iH
+        self.nonOceanArea = self.iA
         self.landArea = self.iA * self.landRatio
         self.w = self.iW - 1
         self.h = self.iH - 1
@@ -86,11 +89,12 @@ local Space =
         self.halfHeight = self.h / 2
         self.polygonCount = mCeil(self.iA / self.scale)
         self.maxContinentPolygons = mCeil(self.polygonCount * self.maxContinentRatio)
-        self.minContinentPolygons = mCeil(self.polygonCount * self.minContinentRatio)
+        self.minContinentPolygons = 1 -- mCeil(self.polygonCount * self.minContinentRatio)
         print(self.polygonCount .. " polygons")
         self:InitPolygons()
         self:FillPolygons()
         self:ListPolygonNeighbors()
+        self:PickOceans()
         self:PickContinents()
         return self.plotTypes
     end,
@@ -114,6 +118,16 @@ local Space =
     end,
     ComputeFeatures = function(self)
     	return featureTypes
+    end,
+    DeepenOcean = function(self)
+    	for oceanIndex, ocean in pairs(self.oceans) do
+			for p, polygon in pairs(ocean) do
+				for h, hex in pairs(polygon.hexes) do
+					local plot = Map.GetPlotByIndex(hex.index - 1)
+					plot:SetTerrainType(GameDefines.DEEP_WATER_TERRAIN, false, false)
+				end
+			end
+		end
     end,
     InitPolygons = function(self)
     	for i = 1, self.polygonCount do
@@ -173,7 +187,6 @@ local Space =
 			hexes = {},
 			isNeighbor = {},
 			area = 0,
-			continentIndex = 0,
 			index = index or #self.polygons+1,
 		}
 	end,
@@ -191,6 +204,10 @@ local Space =
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
+					if y == 0 then polygon.bottomY = true end
+					if x == 0 then polygon.bottomX = true end
+					if y == self.h then polygon.topY = true end
+					if x == self.w then polygon.topX = true end
 					-- find neighbors from one hex to the next
 					for i, nindex in pairs(self:HexNeighbors(pi)) do
 						if nindex ~= pi then
@@ -216,9 +233,41 @@ local Space =
 			end
 		end
 	end,
-	NearOtherLand = function(self, polygon, continentIndex)
-		for ni, neigh in pairs (polygon.neighbors) do
-			if neigh.continentIndex ~= 0 and neigh.continentIndex ~= continentIndex then
+	PickOceans = function(self)
+		local div = self.w / self.oceanNumber
+		local x = mRandom(0, self.w)
+		for oceanIndex = 1, self.oceanNumber do
+			local hex = self.hexes[self:GetIndex(x, 0)]
+			local polygon = hex.polygon
+			if polygon == nil then print(x .. ',0 has no polygon') end
+			local ocean = {}
+			while #polygon.neighbors ~= 0 do
+				polygon.oceanIndex = oceanIndex
+				tInsert(ocean, polygon)
+				self.nonOceanArea = self.nonOceanArea - polygon.area
+				if polygon.topY then break end
+				local upNeighbors = {}
+				for ni, neighbor in pairs(polygon.neighbors) do
+					if (neighbor.y > polygon.y or neighbor.topY) and not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
+						tInsert(upNeighbors, neighbor)
+					end
+				end
+				if #upNeighbors == 0 then break end
+				for ni, neighbor in pairs(upNeighbors) do
+					neighbor.oceanIndex = oceanIndex
+					tInsert(ocean, neighbor)
+					self.nonOceanArea = self.nonOceanArea - neighbor.area
+				end
+				polygon = upNeighbors[mRandom(1, #upNeighbors)]
+			end
+			tInsert(self.oceans, ocean)
+			x = mCeil(x + div) % self.w
+		end
+	end,
+	NearOther = function(self, polygon, value, key)
+		if key == nil then key = "continentIndex" end
+		for ni, neighbor in pairs (polygon.neighbors) do
+			if neighbor[key] ~= nil and neighbor[key] ~= value then
 				return true
 			end
 		end
@@ -231,19 +280,22 @@ local Space =
 		end
 		local filledArea = 0
 		local continentIndex = 1
+		local majorContinentArea = mCeil(self.nonOceanArea / self.majorContinentNumber)
 		while #polygonBuffer > 1 and filledArea < self.landArea do
 			local polygon
 			repeat
+				if #polygonBuffer == 2 then return end
 				polygon = tRemove(polygonBuffer, mRandom(1, #polygonBuffer))
-			until #polygon.neighbors ~= 0 and polygon.continentIndex == 0 and not self:NearOtherLand(polygon, 0)
+			until #polygon.neighbors ~= 0 and polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and not polygon.oceanIndex and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
 			polygon.continentIndex = continentIndex
 			filledArea = filledArea + polygon.area
-			local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
+			-- local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
+			local filledContinentArea = polygon.area
 			local continent = { polygons = { polygon }, index = continentIndex }
 			local n = 1
 			local iterations = 0
 			local lastRN
-			while n < size and iterations < size * 2 and filledArea < self.landArea do
+			while iterations < #self.polygons and filledArea < self.landArea and filledContinentArea < majorContinentArea do
 				local rn
 				if lastRN ~= nil then
 					rn = (lastRN + 1) % #polygon.neighbors
@@ -252,9 +304,10 @@ local Space =
 					rn = mRandom(1, #polygon.neighbors)
 				end
 				local neighbor = polygon.neighbors[rn]
-				if not self:NearOtherLand(neighbor, continentIndex) then
+				if not self:NearOther(neighbor, continentIndex) and not polygon.oceanIndex then
 					neighbor.continentIndex = continentIndex
 					filledArea = filledArea + neighbor.area
+					filledContinentArea = filledContinentArea + neighbor.area
 					n = n + 1
 					tInsert(continent.polygons, neighbor)
 					polygon = neighbor
@@ -264,7 +317,7 @@ local Space =
 				end
 				iterations = iterations + 1
 			end
-			print(n, size, iterations)
+			print(n, size, iterations, filledContinentArea)
 			tInsert(self.continents, continent)
 			continentIndex = continentIndex + 1
 		end
@@ -347,20 +400,15 @@ end
 function GeneratePlotTypes()
     print("Setting Plot Types (Fantastical) ...")
 
-    plotTypeMap = {
-    	[0] = PlotTypes.PLOT_OCEAN,
-    	[1] = PlotTypes.PLOT_LAND,
-    	[2] = PlotTypes.PLOT_HILLS,
-    	[3] = PlotTypes.PLOT_MOUNTAIN,
-	}
-
 	Space:Create()
     local plotTypes = Space:ComputePlots()
     SetPlotTypes(plotTypes)
     local args = { bExpandCoasts = false }
     GenerateCoasts(args) -- will have to look into that as I want to avoid coasts spanning into oceans as they currently do too easily
+    --Space:DeepenOcean()
 
 end
+
 
 function GenerateTerrain()
 	--[[
