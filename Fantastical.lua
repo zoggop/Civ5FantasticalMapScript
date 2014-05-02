@@ -14,7 +14,7 @@ include("TerrainGenerator")
 
 ----------------------------------------------------------------------------------
 
-local debugEnabled = false
+local debugEnabled = true
 local function EchoDebug(...)
 	if debugEnabled then
 		local printResult = ""
@@ -61,12 +61,10 @@ local tRemove = table.remove
 
 local Space =
 {
-	scale = 25, -- how many tiles of map area per voronoi point
-	oceanNumber = 2, -- how many major ocean basins
-	majorContinentNumber = 2,
-	maxContinentRatio = 0.12, -- how many polygons can make up a continent at maximum
-	minContinentRatio = 0.01, -- how many polygons can make up a continent at maximum
-	landRatio = 1, -- how much of the map is land
+	polygonCount = 200, -- how many polygons (map scale)
+	oceanNumber = 2, -- how many large ocean basins
+	majorContinentNumber = 2, -- how many large continents, more or less
+	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
 	wrapX = true,
 	wrapY = false,
 	oceans = {},
@@ -82,15 +80,14 @@ local Space =
         self.iW, self.iH = Map.GetGridSize()
         self.iA = self.iW * self.iH
         self.nonOceanArea = self.iA
-        self.landArea = self.iA * self.landRatio
         self.w = self.iW - 1
         self.h = self.iH - 1
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
-        self.polygonCount = mCeil(self.iA / self.scale)
-        self.maxContinentPolygons = mCeil(self.polygonCount * self.maxContinentRatio)
-        self.minContinentPolygons = 1 -- mCeil(self.polygonCount * self.minContinentRatio)
-        print(self.polygonCount .. " polygons")
+        self.polygonCount = math.min(mCeil(self.iA / 5), self.polygonCount)
+        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 60))
+        self.nonOceanPolygons = self.polygonCount
+        EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
         self:InitPolygons()
         self:FillPolygons()
         self:ListPolygonNeighbors()
@@ -220,7 +217,7 @@ local Space =
 						end
 					end
 				else
-					print("nil polygon")
+					EchoDebug("nil polygon")
 				end
 			end
 		end
@@ -239,12 +236,13 @@ local Space =
 		for oceanIndex = 1, self.oceanNumber do
 			local hex = self.hexes[self:GetIndex(x, 0)]
 			local polygon = hex.polygon
-			if polygon == nil then print(x .. ',0 has no polygon') end
+			if polygon == nil then EchoDebug(x .. ',0 has no polygon') end
 			local ocean = {}
 			while #polygon.neighbors ~= 0 do
 				polygon.oceanIndex = oceanIndex
 				tInsert(ocean, polygon)
 				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanPolygons = self.nonOceanPolygons - 1
 				if polygon.topY then break end
 				local upNeighbors = {}
 				for ni, neighbor in pairs(polygon.neighbors) do
@@ -257,6 +255,7 @@ local Space =
 					neighbor.oceanIndex = oceanIndex
 					tInsert(ocean, neighbor)
 					self.nonOceanArea = self.nonOceanArea - neighbor.area
+					self.nonOceanPolygons = self.nonOceanPolygons - 1
 				end
 				polygon = upNeighbors[mRandom(1, #upNeighbors)]
 			end
@@ -279,23 +278,29 @@ local Space =
 			tInsert(polygonBuffer, polygon)
 		end
 		local filledArea = 0
+		local filledPolygons = 0
 		local continentIndex = 1
-		local majorContinentArea = mCeil(self.nonOceanArea / self.majorContinentNumber)
-		while #polygonBuffer > 1 and filledArea < self.landArea do
+		local islandPolygons = mCeil(self.nonOceanPolygons * self.islandRatio)
+		local nonIslandPolygons = mMax(2, self.nonOceanPolygons - islandPolygons)
+		local continentSize = mCeil(nonIslandPolygons / self.majorContinentNumber)
+		EchoDebug(islandPolygons .. " island polygons", nonIslandPolygons .. " non-island polygons", continentSize .. " continent size in polygons")
+		while #polygonBuffer > 1 do
 			local polygon
 			repeat
-				if #polygonBuffer == 2 then return end
+				if #polygonBuffer == 1 then break end
 				polygon = tRemove(polygonBuffer, mRandom(1, #polygonBuffer))
-			until #polygon.neighbors ~= 0 and polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and not polygon.oceanIndex and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
+			until polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
 			polygon.continentIndex = continentIndex
 			filledArea = filledArea + polygon.area
-			-- local size = mRandom(self.minContinentPolygons, self.maxContinentPolygons)
+			filledPolygons = filledPolygons + 1
+			local size = continentSize
+			if filledPolygons >= nonIslandPolygons then size = mRandom(1, 3) end
 			local filledContinentArea = polygon.area
 			local continent = { polygons = { polygon }, index = continentIndex }
 			local n = 1
 			local iterations = 0
 			local lastRN
-			while iterations < #self.polygons and filledArea < self.landArea and filledContinentArea < majorContinentArea do
+			while n < size and iterations < #polygonBuffer do
 				local rn
 				if lastRN ~= nil then
 					rn = (lastRN + 1) % #polygon.neighbors
@@ -304,10 +309,11 @@ local Space =
 					rn = mRandom(1, #polygon.neighbors)
 				end
 				local neighbor = polygon.neighbors[rn]
-				if not self:NearOther(neighbor, continentIndex) and not polygon.oceanIndex then
+				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil then
 					neighbor.continentIndex = continentIndex
 					filledArea = filledArea + neighbor.area
 					filledContinentArea = filledContinentArea + neighbor.area
+					filledPolygons = filledPolygons + 1
 					n = n + 1
 					tInsert(continent.polygons, neighbor)
 					polygon = neighbor
@@ -317,11 +323,11 @@ local Space =
 				end
 				iterations = iterations + 1
 			end
-			print(n, size, iterations, filledContinentArea)
+			EchoDebug(n, size, iterations, filledContinentArea)
 			tInsert(self.continents, continent)
 			continentIndex = continentIndex + 1
 		end
-		print(filledArea, self.landArea, continentIndex-1)
+		EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", filledArea .. " filled hexes")
 	end,
 	HexNeighbors = function(self, index, directions)
 		if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
@@ -334,12 +340,11 @@ local Space =
 		return neighbors
 	end,
 	HexMove = function(self, x, y, direction)
+		if direction == 0 or direction == nil then return x, y end
 		local nx = x
 		local ny = y
 		local odd = y % 2
-		if direction == 0 then
-
-		elseif direction == 1 then
+		if direction == 1 then
 			nx = x - 1
 		elseif direction == 2 then
 			nx = x - 1 + odd
