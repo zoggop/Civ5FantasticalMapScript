@@ -264,65 +264,34 @@ local Space =
 		end
 	end,
 	PickOceans = function(self)
+		if self.wrapX and self.wrapY then
+			self:PickOceansDoughnut()
+		elseif not self.wrapX and not self.wrapY then
+			self:PickOceansRectangle()
+		elseif self.wrapX and not self.wrapY then
+			self:PickOceansCylinder()
+		elseif self.wrapY and not self.wrapX then
+			print("why have a vertically wrapped map?")
+		end
+		EchoDebug(self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
+	end,
+	PickOceansCylinder = function(self)
 		local div = self.w / self.oceanNumber
-		local x, y = 0, 0
-		local axis = 1
-		if self.iH > self.iW then axis = 2 end
-		if not self.wrapX and not self.wrapY then axis = 3 end
-		if axis == 1 then x = mRandom(0, self.w) end
-		if axis == 2 then
-			y = mRandom(0, self.h)
-			div = self.h / self.oceanNumber
-		end
-		local xcorner, ycorner
-		if axis == 3 then
-			-- if it's a nonwrapping map, pick a corner and grow the ocean from there
-			xcorner = mRandom(1, 2)
-			ycorner = mRandom(1, 2)
-			if xcorner == 1 then x = 0 else x = self.w end
-			if ycorner == 1 then y = 0 else y = self.h end
-		end
-		EchoDebug(axis, #self.bottomYPolygons, #self.bottomXPolygons)
+		local x = mRandom(0, self.w)
 		for oceanIndex = 1, self.oceanNumber do
-			local polygon
-			if axis == 1 then
-				polygon = tRemove(self.bottomYPolygons, mRandom(1, #self.bottomYPolygons))
-			elseif axis == 2 then
-				polygon = tRemove(self.bottomXPolygons, mRandom(1, #self.bottomXPolygons))
-				EchoDebug(polygon.x)
-			elseif axis == 3 then
-				local hex = self.hexes[self:GetIndex(x, y)]
-				polygon = hex.polgyon
-			end
-			if polygon == nil then EchoDebug(x .. ',' .. y .. ' no polygon') end
+			local hex = self.hexes[self:GetIndex(x, 0)]
+			local polygon = hex.polygon
 			local ocean = {}
 			local iterations = 0
 			while self.nonOceanPolygons > self.minNonOceanPolygons do
-				if iterations == 0 then
-					polygon.oceanIndex = oceanIndex
-					tInsert(ocean, polygon)
-					self.nonOceanArea = self.nonOceanArea - polygon.area
-					self.nonOceanPolygons = self.nonOceanPolygons - 1
-				else
-					if axis == 1 and polygon.topY then break end
-					if axis == 2 and polygon.topX then
-						EchoDebug("found topX at x=" .. polygon.x)
-						break
-					end
+				if iterations ~= 0 and polygon.topY then
+					EchoDebug("found topY")
+					break
 				end
 				local upNeighbors = {}
 				for ni, neighbor in pairs(polygon.neighbors) do
 					if not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
-						if (axis == 1 or (axis == 3 and ycorner == 1)) and (neighbor.y > polygon.y or neighbor.topY) then
-							tInsert(upNeighbors, neighbor)
-						end
-						if (axis == 2 or (axis == 3 and xcorner == 1)) and (neighbor.x > polygon.x or neighbor.topX) then
-							tInsert(upNeighbors, neighbor)
-						end
-						if axis == 3 and ycorner == 2 and (neighbor.y < polygon.y or neighbor.bottomY) then
-							tInsert(upNeighbors, neighbor)
-						end
-						if axis == 3 and xcorner == 2 and (neighbor.x < polygon.x or neighbor.bottomX) then
+						if neighbor.y > polygon.y or neighbor.topY then
 							tInsert(upNeighbors, neighbor)
 						end
 					end
@@ -331,6 +300,7 @@ local Space =
 					EchoDebug("no upNeighbors")
 					break
 				end
+				if iterations == 0 then tInsert(upNeighbors, polygon) end
 				for ni, neighbor in pairs(upNeighbors) do
 					neighbor.oceanIndex = oceanIndex
 					tInsert(ocean, neighbor)
@@ -341,10 +311,42 @@ local Space =
 				iterations = iterations + 1
 			end
 			tInsert(self.oceans, ocean)
-			if axis == 1 then x = mCeil(x + div) % self.w end
-			if axis == 2 then y = mCeil(y + div) % self.h end
+			x = mCeil(x + div) % self.w
 		end
-		EchoDebug(self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
+	end,
+	PickOceansRectangle = function(self)
+		-- pick a corner and grow the ocean from there
+		local corners = { [1] = {x = 0, y = 0}, [2] = {x = 0, y = self.h}, [3] = {x = self.w, y = 0}, [4] = {x = self.w, y = self.h} }
+		for oceanIndex = 1, self.oceanNumber do
+			local corner = tRemove(corners, mRandom(1, #corners))
+			local x, y = corner.x, corner.y
+			local hex = self.hexes[self:GetIndex(x, y)]
+			local polygon = hex.polygon
+			local ocean = {}
+			local iterations = 0
+			while self.nonOceanPolygons > self.minNonOceanPolygons do
+				local upNeighbors = {}
+				for ni, neighbor in pairs(polygon.neighbors) do
+					if neighbor.oceanIndex == nil then tInsert(upNeighbors, neighbor) end
+				end
+				if #upNeighbors == 0 then
+					EchoDebug("no upNeighbors")
+					break
+				end
+				if iterations == 0 then tInsert(upNeighbors, polygon) end
+				for ni, neighbor in pairs(upNeighbors) do
+					neighbor.oceanIndex = oceanIndex
+					tInsert(ocean, neighbor)
+					self.nonOceanArea = self.nonOceanArea - neighbor.area
+					self.nonOceanPolygons = self.nonOceanPolygons - 1
+				end
+				polygon = upNeighbors[mRandom(1, #upNeighbors)]
+				iterations = iterations + 1
+			end
+		end
+	end,
+	PickOceansDoughnut = function(self)
+
 	end,
 	NearOther = function(self, polygon, value, key)
 		if key == nil then key = "continentIndex" end
