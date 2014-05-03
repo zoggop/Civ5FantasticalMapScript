@@ -59,17 +59,19 @@ local tRemove = table.remove
 
 ------------------------------------------------------------------------------
 
-local Space =
-{
+local Space = {
+	-- CONFIG: --
 	polygonCount = 200, -- how many polygons (map scale)
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
-	mountainLiminality = 1, -- how much polygon overlap results in a mountain tile (3 or 4 is the maximum that occurs). above 1 will create almost no mountains
+	mountainRatio = 0.05, -- how much of the land to be mountain tiles
 	mountainDice = 5,
 	mountainThreshold = 3, -- if this many dice (coins really) come up, create a mountain
 	wrapX = true,
 	wrapY = false,
+	----------------------------------
+	-- DEFINITIONS: --
 	oceans = {},
 	continents = {},
 	regions = {},
@@ -83,7 +85,11 @@ local Space =
     terrainTypes = {}, -- map generation result
     featureTypes = {}, -- map generation result
     polygonType = {},
+    mountainPlots = {},
     maxLiminality = 0,
+    liminalTileCount = 0,
+    ----------------------------------
+    -- EXTERNAL FUNCTIONS: --
     Create = function(self)
         self.iW, self.iH = Map.GetGridSize()
         self.iA = self.iW * self.iH
@@ -103,25 +109,21 @@ local Space =
         self:ListPolygonNeighbors()
         self:PickOceans()
         self:PickContinents()
-        return self.plotTypes
     end,
     ComputePlots = function(self)
-		for c, continent in pairs(self.continents) do
-			for p, polygon in pairs(continent.polygons) do
-				for h, hex in pairs(polygon.hexes) do
-					if hex.liminality < self.mountainLiminality or Map.Rand(self.mountainDice, "mountain dice") < self.mountainThreshold then
-						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
-					else
-						self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
-					end
+		for pi, hex in pairs(self.hexes) do
+			if hex.polygon.continentIndex == nil then
+				self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+			else
+				if hex.liminality == 0 then
+					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+				else
+					self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
+					tInsert(self.mountainPlots, hex.index)
 				end
 			end
 		end
-		for pi, hex in pairs(self.hexes) do
-			if self.plotTypes[hex.index] == nil then
-				self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
-			end
-		end
+		self:AdjustMountains()
 		return self.plotTypes
 	end,
     ComputeTerrain = function(self)
@@ -140,97 +142,23 @@ local Space =
 			end
 		end
     end,
+    ----------------------------------
+    -- INTERNAL METAFUNCTIONS: --
     InitPolygons = function(self)
     	for i = 1, self.polygonCount do
     		tInsert(self.polygons, self:NewPolygon())
     	end
     end,
-    DistanceSquared = function(self, polygon, x, y)
-    	local xdist = mAbs(polygon.x - x)
-		local ydist = mAbs(polygon.y - y)
-		if self.wrapX then
-			if xdist > self.halfWidth then
-				if polygon.x < x then
-					xdist = polygon.x + (self.w - x)
-				else
-					xdist = x + (self.w - polygon.x)
-				end
-			end
-		end
-		if self.wrapY then
-			if ydist > self.halfHeight then
-				if polygon.y < y then
-					ydist = polygon.y + (self.h - y)
-				else
-					ydist = y + (self.h - polygon.y)
-				end
-			end
-		end
-		return mSqrt ( (xdist * xdist) + (ydist * ydist) )
-    end,
-    ClosestPolygon = function(self, x, y)
-    	local dists = {}
-    	local closest_distance = 0
-    	local closest_polygon
-    	-- find the closest point to this point
-    	for i = 1, #self.polygons do
-    		local polygon = self.polygons[i]
-    		dists[i] = self:DistanceSquared(polygon, x, y)
-    		if i == 1 or dists[i] < closest_distance then
-    			closest_distance = dists[i]
-    			closest_polygon = polygon
-    		end
-    	end
-    	-- sometimes a point is closer to more than one point
-    	local liminality = 0
-    	for i = 1, #self.polygons do
-    		local polygon = self.polygons[i]
-    		if dists[i] == closest_distance and polygon ~= closest_polygon then
-    			liminality = liminality + 1
-    		end
-    	end
-    	if liminality > self.maxLiminality then self.maxLiminality = liminality end
-    	return closest_polygon, liminality
-    end,
-    NewPolygon = function(self, x, y, index)
-		return {
-			x = x or Map.Rand(self.iW, "random x"),
-			y = y or Map.Rand(self.iH, "random y"),
-			hexes = {},
-			isNeighbor = {},
-			area = 0,
-			index = index or #self.polygons+1,
-		}
-	end,
-	SetNeighborPolygons = function(self, polygon1, polygon2)
-		polygon1.isNeighbor[polygon2] = true
-		polygon2.isNeighbor[polygon1] = true
-	end,
-	CheckBottomTop = function(self, polygon, x, y)
-		if y == 0 and polygon.y < self.halfHeight then
-			polygon.bottomY = true
-			tInsert(self.bottomYPolygons, polygon)
-		end
-		if x == 0 and polygon.x < self.halfWidth then
-			polygon.bottomX = true
-			tInsert(self.bottomXPolygons, polygon)
-		end
-		if y == self.h and polygon.y >= self.halfHeight then
-			polygon.topY = true
-			tInsert(self.topYPolygons, polygon)
-		end
-		if x == self.w and polygon.x >= self.halfWidth then
-			polygon.topX = true
-			tInsert(self.topXPolygons, polygon)
-		end
-	end,
-	FillPolygons = function(self)
+    FillPolygons = function(self)
 		for x = 0, self.w do
 			for y = 0, self.h do
 				local polygon, liminality = self:ClosestPolygon(x, y)
 				if polygon ~= nil then
 					local pi = self:GetIndex(x, y)
 					local hex = { polygon = polygon, liminality = liminality, index = pi, x = x, y = y }
+					if liminality ~= 0 then
+						self.liminalTileCount = self.liminalTileCount + 1
+					end
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
@@ -253,7 +181,7 @@ local Space =
 				end
 			end
 		end
-		EchoDebug(self.maxLiminality .. " maximum overlap")
+		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total limial tiles")
 	end,
 	ListPolygonNeighbors = function(self)
 		for i, polygon in pairs(self.polygons) do
@@ -348,21 +276,12 @@ local Space =
 	PickOceansDoughnut = function(self)
 
 	end,
-	NearOther = function(self, polygon, value, key)
-		if key == nil then key = "continentIndex" end
-		for ni, neighbor in pairs (polygon.neighbors) do
-			if neighbor[key] ~= nil and neighbor[key] ~= value then
-				return true
-			end
-		end
-		return false
-	end,
 	PickContinents = function(self)
 		local polygonBuffer = {}
 		for i, polygon in pairs(self.polygons) do
 			tInsert(polygonBuffer, polygon)
 		end
-		local filledArea = 0
+		self.filledArea = 0
 		local filledPolygons = 0
 		local continentIndex = 1
 		local islandPolygons = mCeil(self.nonOceanPolygons * self.islandRatio)
@@ -376,7 +295,7 @@ local Space =
 				polygon = tRemove(polygonBuffer, mRandom(1, #polygonBuffer))
 			until polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
 			polygon.continentIndex = continentIndex
-			filledArea = filledArea + polygon.area
+			self.filledArea = self.filledArea + polygon.area
 			filledPolygons = filledPolygons + 1
 			local size = continentSize
 			if filledPolygons >= nonIslandPolygons then size = mRandom(1, 3) end
@@ -396,7 +315,7 @@ local Space =
 				local neighbor = polygon.neighbors[rn]
 				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil then
 					neighbor.continentIndex = continentIndex
-					filledArea = filledArea + neighbor.area
+					self.filledArea = self.filledArea + neighbor.area
 					filledContinentArea = filledContinentArea + neighbor.area
 					filledPolygons = filledPolygons + 1
 					n = n + 1
@@ -412,7 +331,121 @@ local Space =
 			tInsert(self.continents, continent)
 			continentIndex = continentIndex + 1
 		end
-		EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", filledArea .. " filled hexes")
+		EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", self.filledArea .. " filled hexes")
+	end,
+	AdjustMountains = function(self)
+		-- reduce or expand mountains
+		self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
+		EchoDebug(#self.mountainPlots, self.mountainArea)
+		if #self.mountainPlots > self.mountainArea * 1.1 then
+			repeat
+				local pi = tRemove(self.mountainPlots, mRandom(1, #self.mountainPlots))
+				self.plotTypes[pi] = PlotTypes.PLOT_LAND
+			until #self.mountainPlots <= self.mountainArea
+		elseif #self.mountainPlots < self.mountainArea * 0.9 and #self.mountainPlots > 0 then
+			repeat
+				local pi = self.mountainPlots[mRandom(1, #self.mountainPlots)]
+				local neighbors = self:HexNeighbors(pi)
+				for i, npi in pairs(neighbors) do
+					if self.plotTypes[npi] == PlotTypes.PLOT_LAND then
+						self.plotTypes[npi] = PlotTypes.PLOT_MOUNTAIN
+						tInsert(self.mountainPlots, npi)
+						break
+					end
+				end
+			until #self.mountainPlots >= self.mountainArea
+		end
+		EchoDebug(#self.mountainPlots, self.mountainArea)
+	end,
+	----------------------------------
+	-- INTERNAL FUNCTIONS: --
+    DistanceSquared = function(self, polygon, x, y)
+    	local xdist = mAbs(polygon.x - x)
+		local ydist = mAbs(polygon.y - y)
+		if self.wrapX then
+			if xdist > self.halfWidth then
+				if polygon.x < x then
+					xdist = polygon.x + (self.w - x)
+				else
+					xdist = x + (self.w - polygon.x)
+				end
+			end
+		end
+		if self.wrapY then
+			if ydist > self.halfHeight then
+				if polygon.y < y then
+					ydist = polygon.y + (self.h - y)
+				else
+					ydist = y + (self.h - polygon.y)
+				end
+			end
+		end
+		return mSqrt ( (xdist * xdist) + (ydist * ydist) )
+    end,
+    ClosestPolygon = function(self, x, y)
+    	local dists = {}
+    	local closest_distance = 0
+    	local closest_polygon
+    	-- find the closest point to this point
+    	for i = 1, #self.polygons do
+    		local polygon = self.polygons[i]
+    		dists[i] = self:DistanceSquared(polygon, x, y)
+    		if i == 1 or dists[i] < closest_distance then
+    			closest_distance = dists[i]
+    			closest_polygon = polygon
+    		end
+    	end
+    	-- sometimes a point is closer to more than one point
+    	local liminality = 0
+    	for i = 1, #self.polygons do
+    		local polygon = self.polygons[i]
+    		if dists[i] == closest_distance and polygon ~= closest_polygon then
+    			liminality = liminality + 1
+    		end
+    	end
+    	if liminality > self.maxLiminality then self.maxLiminality = liminality end
+    	return closest_polygon, liminality
+    end,
+    NewPolygon = function(self, x, y, index)
+		return {
+			x = x or Map.Rand(self.iW, "random x"),
+			y = y or Map.Rand(self.iH, "random y"),
+			hexes = {},
+			isNeighbor = {},
+			area = 0,
+			index = index or #self.polygons+1,
+		}
+	end,
+	SetNeighborPolygons = function(self, polygon1, polygon2)
+		polygon1.isNeighbor[polygon2] = true
+		polygon2.isNeighbor[polygon1] = true
+	end,
+	CheckBottomTop = function(self, polygon, x, y)
+		if y == 0 and polygon.y < self.halfHeight then
+			polygon.bottomY = true
+			tInsert(self.bottomYPolygons, polygon)
+		end
+		if x == 0 and polygon.x < self.halfWidth then
+			polygon.bottomX = true
+			tInsert(self.bottomXPolygons, polygon)
+		end
+		if y == self.h and polygon.y >= self.halfHeight then
+			polygon.topY = true
+			tInsert(self.topYPolygons, polygon)
+		end
+		if x == self.w and polygon.x >= self.halfWidth then
+			polygon.topX = true
+			tInsert(self.topXPolygons, polygon)
+		end
+	end,
+	NearOther = function(self, polygon, value, key)
+		if key == nil then key = "continentIndex" end
+		for ni, neighbor in pairs (polygon.neighbors) do
+			if neighbor[key] ~= nil and neighbor[key] ~= value then
+				return true
+			end
+		end
+		return false
 	end,
 	HexNeighbors = function(self, index, directions)
 		if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
