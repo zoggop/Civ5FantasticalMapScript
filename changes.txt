@@ -1,6 +1,9 @@
-- voronoi-based coastal generation
-	- any polygons whose neighbors are not touching ocean trench polygons may become coastal
-	- put atolls in coastal polygons whose neighbors are a warm terrain region
-- adjust mountains before placing (if there are too many liminal tiles), and after placing (if there are too few mountains)
+- put atolls in coastal polygons whose neighbors are a warm terrain region
 - add doughnut ocean algo
 - add simplified fantasy region terrain/feature generation
+
+
+DONE
+- voronoi-based coastal generation
+- polygons whose neighbors are not touching ocean trench polygons may become coastal
+- adjust mountains before placing (if there are too many liminal tiles), and after placing (if there are too few mountains)

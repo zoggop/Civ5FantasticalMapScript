@@ -65,9 +65,10 @@ local Space = {
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
-	mountainRatio = 0.05, -- how much of the land to be mountain tiles
-	mountainDice = 5,
-	mountainThreshold = 3, -- if this many dice (coins really) come up, create a mountain
+	mountainRatio = 0.03, -- how much of the land to be mountain tiles
+	coastalChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
+	tinyIslandChance = 8, -- out of 100 tiles, how often do coastal shelves produce tiny islands
+	coastExpansionDice = {3, 4},
 	wrapX = true,
 	wrapY = false,
 	----------------------------------
@@ -86,6 +87,7 @@ local Space = {
     featureTypes = {}, -- map generation result
     polygonType = {},
     mountainPlots = {},
+    deepTiles = {},
     maxLiminality = 0,
     liminalTileCount = 0,
     ----------------------------------
@@ -109,11 +111,20 @@ local Space = {
         self:ListPolygonNeighbors()
         self:PickOceans()
         self:PickContinents()
+    	self:PickCoasts()
     end,
     ComputePlots = function(self)
 		for pi, hex in pairs(self.hexes) do
 			if hex.polygon.continentIndex == nil then
-				self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+				if hex.polygon.coastal then
+					if Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
+						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+					else
+						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+					end
+				else
+					self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+				end
 			else
 				if hex.liminality == 0 then
 					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
@@ -127,20 +138,35 @@ local Space = {
 		return self.plotTypes
 	end,
     ComputeTerrain = function(self)
+    	for pi, hex in pairs(self.hexes) do
+    		if self.plotTypes[hex.index] == PlotTypes.PLOT_OCEAN then
+    			local coast = false
+    			local neighbors = self:HexNeighbors(hex.index)
+				for i, npi in pairs(neighbors) do
+					if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
+						coast = true
+						break
+					end
+				end
+    			if coast then
+    				self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_COAST"]
+    			else
+    				if hex.polygon.coastal then
+    					self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_COAST"]
+    				else
+    					self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_OCEAN"]
+    					tInsert(self.deepTiles, hex.index)
+    				end
+    			end
+    		elseif self.plotTypes[hex.index] == PlotTypes.PLOT_LAND then
+    			self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_GRASS"]
+    		end
+    	end
+    	self:ExpandCoasts()
     	return self.terrainTypes
     end,
     ComputeFeatures = function(self)
-    	return featureTypes
-    end,
-    DeepenOcean = function(self)
-    	for oceanIndex, ocean in pairs(self.oceans) do
-			for p, polygon in pairs(ocean) do
-				for h, hex in pairs(polygon.hexes) do
-					local plot = Map.GetPlotByIndex(hex.index - 1)
-					plot:SetTerrainType(GameDefines.DEEP_WATER_TERRAIN, false, false)
-				end
-			end
-		end
+    	return self.featureTypes
     end,
     ----------------------------------
     -- INTERNAL METAFUNCTIONS: --
@@ -333,6 +359,15 @@ local Space = {
 		end
 		EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", self.filledArea .. " filled hexes")
 	end,
+	PickCoasts = function(self)
+		for i, polygon in pairs(self.polygons) do
+			if polygon.continentIndex == nil and polygon.oceanIndex == nil and not self:NearOther(polygon, nil, "oceanIndex") then
+				if Map.Rand(10, "coastal polygon dice") <= self.coastalChance then
+					polygon.coastal = true
+				end
+			end
+		end
+	end,
 	AdjustMountains = function(self)
 		-- reduce or expand mountains
 		self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
@@ -356,6 +391,37 @@ local Space = {
 			until #self.mountainPlots >= self.mountainArea
 		end
 		EchoDebug(#self.mountainPlots, self.mountainArea)
+	end,
+	ExpandCoasts = function(self)
+		for d, dice in ipairs(self.coastExpansionDice) do
+			local makeCoast = {}
+			for i, pi in pairs(self.deepTiles) do
+				if self.terrainTypes[pi] == GameInfoTypes["TERRAIN_OCEAN"] then
+					local neighbors = self:HexNeighbors(pi)
+					local nearcoast = false
+					local nearocean = false
+					for n, npi in pairs(neighbors) do
+						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
+							nearcoast = true
+						end
+						if self.hexes[npi].polygon.oceanIndex ~= nil then
+							nearocean = true
+							break
+						end
+					end
+					if nearcoast and Map.Rand(dice, "expand coast?") == 0 then
+						if not nearocean or Map.Rand(2, "expand near ocean?") == 0 then
+							if self.hexes[pi].polygon.oceanIndex == nil or Map.Rand(2, "expand into ocean?") == 0 then
+								tInsert(makeCoast, pi)
+							end
+						end
+					end
+				end
+			end
+			for i, pi in pairs(makeCoast) do
+				self.terrainTypes[pi] = GameInfoTypes["TERRAIN_COAST"]
+			end
+		end
 	end,
 	----------------------------------
 	-- INTERNAL FUNCTIONS: --
@@ -527,21 +593,23 @@ function GeneratePlotTypes()
     local plotTypes = Space:ComputePlots()
     SetPlotTypes(plotTypes)
     local args = { bExpandCoasts = false }
-    GenerateCoasts(args) -- will have to look into that as I want to avoid coasts spanning into oceans as they currently do too easily
-    --Space:DeepenOcean()
+    -- GenerateCoasts(args)
 
 end
 
 
 function GenerateTerrain()
-	--[[
-    print("Generating Terrain (Using default for the moment) ...")
-    
-    local terraingen = TerrainGenerator.Create()
-    local terrainTypes = terraingen:GenerateTerrain()
-        
-    SetTerrainTypes(terrainTypes)
-    ]]--
+    print("Generating Terrain (Fantastical) ...")
+	local terrainTypes = Space:ComputeTerrain()    
+	SetTerrainTypes(terrainTypes)
+end
+
+function SetTerrainTypes(terrainTypes)
+	print("Setting Terrain Types (Fantastical)");
+	for i, plot in Plots() do
+		plot:SetTerrainType(terrainTypes[i+1], false, false)
+		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.
+	end
 end
 
 function AddFeatures()
