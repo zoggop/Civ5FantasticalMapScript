@@ -1,9 +1,11 @@
+- add hill generation
 - put atolls in coastal polygons whose neighbors are a warm terrain region
-- add doughnut ocean algo
 - add simplified fantasy region terrain/feature generation
+- add doughnut ocean algo
 
 
 DONE
+- found edges between polygons better
 - voronoi-based coastal generation
 - polygons whose neighbors are not touching ocean trench polygons may become coastal
 - adjust mountains before placing (if there are too many liminal tiles), and after placing (if there are too few mountains)

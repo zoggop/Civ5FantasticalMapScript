@@ -8,6 +8,7 @@ if include == nil then
 	include = require
 end
 include("math")
+include("bit")
 include("MapGenerator")
 include("FeatureGenerator")
 include("TerrainGenerator")
@@ -65,7 +66,9 @@ local Space = {
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
-	mountainRatio = 0.03, -- how much of the land to be mountain tiles
+	hillThreshold = 3, -- how much edginess + liminality makes a hill
+	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
+	mountainRatio = 0.04, -- how much of the land to be mountain tiles
 	coastalChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
 	tinyIslandChance = 8, -- out of 100 tiles, how often do coastal shelves produce tiny islands
 	coastExpansionDice = {3, 4},
@@ -100,8 +103,8 @@ local Space = {
         self.h = self.iH - 1
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
-        self.polygonCount = math.min(mCeil(self.iA / 10), self.polygonCount)
-        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 50))
+        self.polygonCount = math.min(mCeil(self.iA / 12), self.polygonCount)
+        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 35))
         self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
         if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
         self.nonOceanPolygons = self.polygonCount
@@ -126,8 +129,11 @@ local Space = {
 					self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
 				end
 			else
-				if hex.liminality == 0 then
+				local edgeLim = hex.liminality + hex.edginess
+				if edgeLim < self.hillThreshold then
 					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+				elseif edgeLim < self.mountainThreshold then
+					self.plotTypes[hex.index] = PlotTypes.PLOT_HILLS
 				else
 					self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
 					tInsert(self.mountainPlots, hex.index)
@@ -181,7 +187,7 @@ local Space = {
 				local polygon, liminality = self:ClosestPolygon(x, y)
 				if polygon ~= nil then
 					local pi = self:GetIndex(x, y)
-					local hex = { polygon = polygon, liminality = liminality, index = pi, x = x, y = y }
+					local hex = { polygon = polygon, liminality = liminality, edginess = 0, edgeWith = {}, index = pi, x = x, y = y }
 					if liminality ~= 0 then
 						self.liminalTileCount = self.liminalTileCount + 1
 					end
@@ -197,6 +203,14 @@ local Space = {
 								if nhex.polygon ~= nil then
 									if nhex.polygon ~= hex.polygon then
 										self:SetNeighborPolygons(polygon, nhex.polygon)
+										if not hex.edgeWith[nindex] then
+											hex.edginess = hex.edginess + 1
+											hex.edgeWith[nindex] = true
+										end
+										if not nhex.edgeWith[pi] then
+											nhex.edginess = nhex.edginess + 1
+											nhex.edgeWith[pi] =true
+										end
 									end
 								end
 							end
@@ -410,11 +424,11 @@ local Space = {
 						end
 					end
 					if nearcoast and Map.Rand(dice, "expand coast?") == 0 then
-						if not nearocean or Map.Rand(2, "expand near ocean?") == 0 then
+						-- if not nearocean or Map.Rand(2, "expand near ocean?") == 0 then
 							if self.hexes[pi].polygon.oceanIndex == nil or Map.Rand(2, "expand into ocean?") == 0 then
 								tInsert(makeCoast, pi)
 							end
-						end
+						-- end
 					end
 				end
 			end
@@ -425,28 +439,41 @@ local Space = {
 	end,
 	----------------------------------
 	-- INTERNAL FUNCTIONS: --
-    DistanceSquared = function(self, polygon, x, y)
-    	local xdist = mAbs(polygon.x - x)
-		local ydist = mAbs(polygon.y - y)
+    EucDistance = function(self, x1, y1, x2, y2)
+    	local xdist = mAbs(x1 - x2)
+		local ydist = mAbs(y1 - y2)
 		if self.wrapX then
 			if xdist > self.halfWidth then
-				if polygon.x < x then
-					xdist = polygon.x + (self.w - x)
+				if x1 < x2 then
+					xdist = x1 + (self.w - x2)
 				else
-					xdist = x + (self.w - polygon.x)
+					xdist = x2 + (self.w - x1)
 				end
 			end
 		end
 		if self.wrapY then
 			if ydist > self.halfHeight then
-				if polygon.y < y then
-					ydist = polygon.y + (self.h - y)
+				if y1 < y2 then
+					ydist = y1 + (self.h - y2)
 				else
-					ydist = y + (self.h - polygon.y)
+					ydist = y2 + (self.h - y1)
 				end
 			end
 		end
-		return mSqrt ( (xdist * xdist) + (ydist * ydist) )
+		return mSqrt( (xdist * xdist) + (ydist * ydist) )
+    end,
+    HexDistance = function(self, x1, y1, x2, y2)
+    	local xx1 = x1
+		local zz1 = y1 - (x1 + x1%2) / 2
+		local yy1 = -xx1-zz1
+		local xx2 = x2
+		local zz2 = y2 - (x2 + x2%2) / 2
+		local yy2 = -xx2-zz2
+		return (mAbs(xx1 - xx2) + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
+    end,
+    MixDistance = function(self, x1, y1, x2, y2)
+    	local dist = self:EucDistance(x1, y1, x2, y2) + self:HexDistance(x1, y1, x2, y2)
+    	return dist / 2
     end,
     ClosestPolygon = function(self, x, y)
     	local dists = {}
@@ -455,7 +482,7 @@ local Space = {
     	-- find the closest point to this point
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
-    		dists[i] = self:DistanceSquared(polygon, x, y)
+    		dists[i] = self:MixDistance(polygon.x, polygon.y, x, y)
     		if i == 1 or dists[i] < closest_distance then
     			closest_distance = dists[i]
     			closest_polygon = polygon
@@ -597,10 +624,9 @@ function GeneratePlotTypes()
 
 end
 
-
 function GenerateTerrain()
     print("Generating Terrain (Fantastical) ...")
-	local terrainTypes = Space:ComputeTerrain()    
+	local terrainTypes = Space:ComputeTerrain()
 	SetTerrainTypes(terrainTypes)
 end
 
