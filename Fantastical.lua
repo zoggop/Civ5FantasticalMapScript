@@ -62,7 +62,7 @@ local tRemove = table.remove
 
 local Space = {
 	-- CONFIG: --
-	polygonCount = 200, -- how many polygons (map scale)
+	polygonCount = 140, -- how many polygons (map scale)
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
@@ -70,7 +70,7 @@ local Space = {
 	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
 	mountainRatio = 0.04, -- how much of the land to be mountain tiles
 	coastalChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
-	tinyIslandChance = 8, -- out of 100 tiles, how often do coastal shelves produce tiny islands
+	tinyIslandChance = 5, -- out of 100 tiles, how often do coastal shelves produce tiny islands
 	coastExpansionDice = {3, 4},
 	wrapX = true,
 	wrapY = false,
@@ -93,6 +93,8 @@ local Space = {
     deepTiles = {},
     maxLiminality = 0,
     liminalTileCount = 0,
+    polygonMinArea = 100,
+    polygonMaxArea = 0,
     ----------------------------------
     -- EXTERNAL FUNCTIONS: --
     Create = function(self)
@@ -103,8 +105,9 @@ local Space = {
         self.h = self.iH - 1
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
-        self.polygonCount = math.min(mCeil(self.iA / 12), self.polygonCount)
-        self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 35))
+        self.polygonCount = mCeil(self.iA / 29)
+        -- self.polygonCount = math.min(mCeil(self.iA / 12), self.polygonCount)
+        -- self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 35))
         self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
         if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
         self.nonOceanPolygons = self.polygonCount
@@ -229,7 +232,14 @@ local Space = {
 			for neighbor, yes in pairs(polygon.isNeighbor) do
 				tInsert(polygon.neighbors, neighbor)
 			end
+			if polygon.area < self.polygonMinArea and polygon.area > 0 then
+				self.polygonMinArea = polygon.area
+			end
+			if polygon.area > self.polygonMaxArea then
+				self.polygonMaxArea = polygon.area
+			end
 		end
+		EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
 	end,
 	PickOceans = function(self)
 		if self.wrapX and self.wrapY then
@@ -439,8 +449,8 @@ local Space = {
 	end,
 	----------------------------------
 	-- INTERNAL FUNCTIONS: --
-    EucDistance = function(self, x1, y1, x2, y2)
-    	local xdist = mAbs(x1 - x2)
+	WrapDistance = function(self, x1, y1, x2, y2)
+		local xdist = mAbs(x1 - x2)
 		local ydist = mAbs(y1 - y2)
 		if self.wrapX then
 			if xdist > self.halfWidth then
@@ -460,6 +470,14 @@ local Space = {
 				end
 			end
 		end
+		return xdist, ydist
+	end,
+	SquareDistance = function(self, x1, y1, x2, y2)
+		local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+		return (xdist * xdist) + (ydist * ydist)
+	end,
+    EucDistance = function(self, x1, y1, x2, y2)
+    	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
 		return mSqrt( (xdist * xdist) + (ydist * ydist) )
     end,
     HexDistance = function(self, x1, y1, x2, y2)
@@ -471,9 +489,10 @@ local Space = {
 		local yy2 = -xx2-zz2
 		return (mAbs(xx1 - xx2) + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
     end,
-    MixDistance = function(self, x1, y1, x2, y2)
-    	local dist = self:EucDistance(x1, y1, x2, y2) + self:HexDistance(x1, y1, x2, y2)
-    	return dist / 2
+    Minkowski = function(self, x1, y1, x2, y2, order)
+    	if order == nil then order = 3 end
+    	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+    	return (xdist^order + ydist^order)^(1/order)
     end,
     ClosestPolygon = function(self, x, y)
     	local dists = {}
@@ -482,7 +501,7 @@ local Space = {
     	-- find the closest point to this point
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
-    		dists[i] = self:MixDistance(polygon.x, polygon.y, x, y)
+    		dists[i] = self:Minkowski(polygon.x, polygon.y, x, y)
     		if i == 1 or dists[i] < closest_distance then
     			closest_distance = dists[i]
     			closest_polygon = polygon
