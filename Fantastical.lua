@@ -115,11 +115,7 @@ local Space = {
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
         -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
-        self.tinyIslandChance = mCeil(self.iA / 20000)
-        self.tinyIslandOceanDice = mCeil(4000000 / self.iA)
-        -- self.polygonCount = mCeil(self.iA / 29)
-        -- self.polygonCount = math.min(mCeil(self.iA / 12), self.polygonCount)
-        -- self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 35))
+        self.tinyIslandChance = mCeil(20000 / self.iA)
         self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
         if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
         self.nonOceanPolygons = self.polygonCount
@@ -143,7 +139,7 @@ local Space = {
 						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
 					end
 				else
-					if Map.Rand(self.tinyIslandOceanDice, "tiny ocean island chance") <= self.tinyIslandChance then
+					if Map.Rand(1500, "tiny ocean island chance") <= self.tinyIslandChance then
 						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
 						tInsert(self.tinyIslandPlots, hex.index)
 					else
@@ -450,7 +446,7 @@ local Space = {
 		self:ResizeMountains(self.mountainArea)
 	end,
 	ExpandTinyIslands = function(self)
-		local chance = mCeil(40 / self.tinyIslandChance)
+		local chance = mCeil(60 / self.tinyIslandChance)
 		local toExpand = {}
 		EchoDebug(#self.tinyIslandPlots .. " tiny islands")
 		for i, pi in pairs(self.tinyIslandPlots) do
