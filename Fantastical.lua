@@ -57,20 +57,27 @@ local tRemove = table.remove
 
 ------------------------------------------------------------------------------
 
+local function tRemoveRandom(fromTable)
+	return tRemove(fromTable, mRandom(1, #fromTable))
+end
+local oneOverOrder = {}
 
 ------------------------------------------------------------------------------
 
 local Space = {
 	-- CONFIG: --
 	polygonCount = 140, -- how many polygons (map scale)
+	minkowskiOrder = 3,
+	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
-	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-2 polygon continents
+	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-3 polygon continents
 	hillThreshold = 3, -- how much edginess + liminality makes a hill
+	hillChance = 3, -- how many possible mountains out of ten become a hill when expanding
 	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
 	mountainRatio = 0.04, -- how much of the land to be mountain tiles
-	coastalChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
-	tinyIslandChance = 5, -- out of 100 tiles, how often do coastal shelves produce tiny islands
+	coastalPolygonChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
+	tinyIslandChance = 5, -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
 	coastExpansionDice = {3, 4},
 	wrapX = true,
 	wrapY = false,
@@ -90,6 +97,8 @@ local Space = {
     featureTypes = {}, -- map generation result
     polygonType = {},
     mountainPlots = {},
+    tinyIslandPlots = {},
+    hillPlots = {},
     deepTiles = {},
     maxLiminality = 0,
     liminalTileCount = 0,
@@ -105,16 +114,20 @@ local Space = {
         self.h = self.iH - 1
         self.halfWidth = self.w / 2
         self.halfHeight = self.h / 2
-        self.polygonCount = mCeil(self.iA / 29)
+        -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
+        self.tinyIslandChance = mCeil(self.iA / 20000)
+        self.tinyIslandOceanDice = mCeil(4000000 / self.iA)
+        -- self.polygonCount = mCeil(self.iA / 29)
         -- self.polygonCount = math.min(mCeil(self.iA / 12), self.polygonCount)
         -- self.polygonCount = math.max(self.polygonCount, mCeil(self.iA / 35))
         self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
         if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
         self.nonOceanPolygons = self.polygonCount
+		self.inverseMinkowskiOrder = 1 / self.minkowskiOrder
         EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
         self:InitPolygons()
         self:FillPolygons()
-        self:ListPolygonNeighbors()
+        self:ProcessPolygons()
         self:PickOceans()
         self:PickContinents()
     	self:PickCoasts()
@@ -125,24 +138,32 @@ local Space = {
 				if hex.polygon.coastal then
 					if Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
 						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+						tInsert(self.tinyIslandPlots, hex.index)
 					else
 						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
 					end
 				else
-					self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+					if Map.Rand(self.tinyIslandOceanDice, "tiny ocean island chance") <= self.tinyIslandChance then
+						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+						tInsert(self.tinyIslandPlots, hex.index)
+					else
+						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
+					end
 				end
 			else
 				local edgeLim = hex.liminality + hex.edginess
 				if edgeLim < self.hillThreshold then
 					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
-				elseif edgeLim < self.mountainThreshold then
+				elseif edgeLim < self.mountainThreshold and Map.Rand(10, "hill dice primary") < self.hillChance then
 					self.plotTypes[hex.index] = PlotTypes.PLOT_HILLS
+					tInsert(self.hillPlots, hex.index)
 				else
 					self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
 					tInsert(self.mountainPlots, hex.index)
 				end
 			end
 		end
+		self:ExpandTinyIslands()
 		self:AdjustMountains()
 		return self.plotTypes
 	end,
@@ -197,9 +218,15 @@ local Space = {
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
+					if x > polygon.maxX then polygon.maxX = x end
+					if x < polygon.minX then polygon.minX = x end
+					if y > polygon.maxY then polygon.maxY = y end
+					if y < polygon.minY then polygon.minY = y end
 					self:CheckBottomTop(polygon, x, y)
 					-- find neighbors from one hex to the next
-					for i, nindex in pairs(self:HexNeighbors(pi), {1, 2, 5, 6}) do -- 3 and 4 are are never there yet
+					local directions
+					if pi % 2 == 0 then directions = {1, 2, 5, 6} else directions = {1, 6} end
+					for i, nindex in pairs(self:HexNeighbors(pi), directions) do -- 3 and 4 are are never there yet
 						if nindex ~= pi then
 							local nhex = self.hexes[nindex]
 							if nhex ~= nil then
@@ -226,7 +253,7 @@ local Space = {
 		end
 		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total limial tiles")
 	end,
-	ListPolygonNeighbors = function(self)
+	ProcessPolygons = function(self)
 		for i, polygon in pairs(self.polygons) do
 			polygon.neighbors = {}
 			for neighbor, yes in pairs(polygon.isNeighbor) do
@@ -238,6 +265,8 @@ local Space = {
 			if polygon.area > self.polygonMaxArea then
 				self.polygonMaxArea = polygon.area
 			end
+			polygon.width = polygon.maxX - polygon.minX
+			polygon.height = polygon.maxY - polygon.minY
 		end
 		EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
 	end,
@@ -262,10 +291,7 @@ local Space = {
 			local ocean = {}
 			local iterations = 0
 			while self.nonOceanPolygons > self.minNonOceanPolygons do
-				if iterations ~= 0 and polygon.topY then
-					EchoDebug("found topY")
-					break
-				end
+				if iterations ~= 0 and polygon.topY then break end
 				local upNeighbors = {}
 				for ni, neighbor in pairs(polygon.neighbors) do
 					if not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
@@ -274,10 +300,7 @@ local Space = {
 						end
 					end
 				end
-				if #upNeighbors == 0 then
-					EchoDebug("no upNeighbors")
-					break
-				end
+				if #upNeighbors == 0 then break end
 				if iterations == 0 then tInsert(upNeighbors, polygon) end
 				for ni, neighbor in pairs(upNeighbors) do
 					neighbor.oceanIndex = oceanIndex
@@ -296,7 +319,7 @@ local Space = {
 		-- pick a corner and grow the ocean from there
 		local corners = { [1] = {x = 0, y = 0}, [2] = {x = 0, y = self.h}, [3] = {x = self.w, y = 0}, [4] = {x = self.w, y = self.h} }
 		for oceanIndex = 1, self.oceanNumber do
-			local corner = tRemove(corners, mRandom(1, #corners))
+			local corner = tRemoveRandom(corners)
 			local x, y = corner.x, corner.y
 			local hex = self.hexes[self:GetIndex(x, y)]
 			local polygon = hex.polygon
@@ -342,7 +365,7 @@ local Space = {
 			local polygon
 			repeat
 				if #polygonBuffer == 1 then break end
-				polygon = tRemove(polygonBuffer, mRandom(1, #polygonBuffer))
+				polygon = tRemoveRandom(polygonBuffer)
 			until polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
 			polygon.continentIndex = continentIndex
 			self.filledArea = self.filledArea + polygon.area
@@ -386,35 +409,72 @@ local Space = {
 	PickCoasts = function(self)
 		for i, polygon in pairs(self.polygons) do
 			if polygon.continentIndex == nil and polygon.oceanIndex == nil and not self:NearOther(polygon, nil, "oceanIndex") then
-				if Map.Rand(10, "coastal polygon dice") <= self.coastalChance then
+				if Map.Rand(10, "coastal polygon dice") <= self.coastalPolygonChance then
 					polygon.coastal = true
 				end
 			end
 		end
 	end,
-	AdjustMountains = function(self)
-		-- reduce or expand mountains
-		self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
-		EchoDebug(#self.mountainPlots, self.mountainArea)
-		if #self.mountainPlots > self.mountainArea * 1.1 then
+	ResizeMountains = function(self, perscribedArea)
+		if #self.mountainPlots == perscribedArea then return end
+		if #self.mountainPlots > perscribedArea then
 			repeat
-				local pi = tRemove(self.mountainPlots, mRandom(1, #self.mountainPlots))
+				local pi = tRemoveRandom(self.mountainPlots)
 				self.plotTypes[pi] = PlotTypes.PLOT_LAND
-			until #self.mountainPlots <= self.mountainArea
-		elseif #self.mountainPlots < self.mountainArea * 0.9 and #self.mountainPlots > 0 then
+			until #self.mountainPlots <= perscribedArea
+		elseif #self.mountainPlots < perscribedArea then
 			repeat
 				local pi = self.mountainPlots[mRandom(1, #self.mountainPlots)]
 				local neighbors = self:HexNeighbors(pi)
-				for i, npi in pairs(neighbors) do
-					if self.plotTypes[npi] == PlotTypes.PLOT_LAND then
+				local npi
+				repeat
+					npi = tRemoveRandom(neighbors)
+				until self.plotTypes[npi] == PlotTypes.PLOT_LAND or #neighbors == 0
+				if npi ~= nil then
+					if Map.Rand(10, "hill dice") < self.hillChance then
+						self.plotTypes[npi] = PlotTypes.PLOT_HILLS
+						tInsert(self.hillPlots, npi)
+					else
 						self.plotTypes[npi] = PlotTypes.PLOT_MOUNTAIN
 						tInsert(self.mountainPlots, npi)
-						break
 					end
 				end
-			until #self.mountainPlots >= self.mountainArea
+			until #self.mountainPlots >= perscribedArea
 		end
-		EchoDebug(#self.mountainPlots, self.mountainArea)
+	end,
+	AdjustMountains = function(self)
+		-- first expand them 1.5 times their size
+		self:ResizeMountains(#self.mountainPlots * 1.5)
+		-- then adjust to the right amount
+		self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
+		self:ResizeMountains(self.mountainArea)
+	end,
+	ExpandTinyIslands = function(self)
+		local chance = mCeil(40 / self.tinyIslandChance)
+		local toExpand = {}
+		EchoDebug(#self.tinyIslandPlots .. " tiny islands")
+		for i, pi in pairs(self.tinyIslandPlots) do
+			local neighbors = self:HexNeighbors(pi)
+			for i, npi in pairs(neighbors) do
+				if self.plotTypes[npi] == PlotTypes.PLOT_OCEAN then
+					local okay = true
+					for i, nnpi in pairs(self:HexNeighbors(npi)) do
+						if nnpi ~= pi and self.plotTypes[nnpi] ~= PlotTypes.PLOT_OCEAN then
+							okay = false
+							break
+						end
+					end
+					if okay and Map.Rand(100, "tiny island expansion") < chance then
+						tInsert(toExpand, npi)
+					end
+				end
+			end
+		end
+		for i, pi in pairs(toExpand) do
+			self.plotTypes[pi] = PlotTypes.PLOT_LAND
+			tInsert(self.tinyIslandPlots, pi)
+		end
+		EchoDebug(#self.tinyIslandPlots .. " tiny islands")
 	end,
 	ExpandCoasts = function(self)
 		for d, dice in ipairs(self.coastExpansionDice) do
@@ -489,10 +549,9 @@ local Space = {
 		local yy2 = -xx2-zz2
 		return (mAbs(xx1 - xx2) + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
     end,
-    Minkowski = function(self, x1, y1, x2, y2, order)
-    	if order == nil then order = 3 end
+    Minkowski = function(self, x1, y1, x2, y2)
     	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
-    	return (xdist^order + ydist^order)^(1/order)
+    	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
     end,
     ClosestPolygon = function(self, x, y)
     	local dists = {}
@@ -511,7 +570,7 @@ local Space = {
     	local liminality = 0
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
-    		if dists[i] == closest_distance and polygon ~= closest_polygon then
+    		if dists[i] < closest_distance + self.liminalTolerance and polygon ~= closest_polygon then
     			liminality = liminality + 1
     		end
     	end
@@ -525,6 +584,7 @@ local Space = {
 			hexes = {},
 			isNeighbor = {},
 			area = 0,
+			minX = self.w, maxX = 0, minY = self.h, maxY = 0,
 			index = index or #self.polygons+1,
 		}
 	end,

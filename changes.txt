@@ -1,4 +1,7 @@
-- add hill generation
+- add lloyd relaxation: get the centroid by averaging the location of all the hexes within each polygon
+- need better mountain generation
+	- either more like the old one, using edge tiles
+	- or by finding particularly skinny voronoi
 - put atolls in coastal polygons whose neighbors are a warm terrain region
 - add simplified fantasy region terrain/feature generation
 - add doughnut ocean algo
