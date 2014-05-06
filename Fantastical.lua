@@ -68,11 +68,13 @@ local Space = {
 	-- CONFIG: --
 	polygonCount = 140, -- how many polygons (map scale)
 	minkowskiOrder = 3,
-	relaxations = 3, -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	relaxations = 4, -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	noiseMultiplier = 0.33, -- plus or minus a maximum of this number randomly to every distance calculation
 	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-3 polygon continents
+	polarContinentChance = 1, -- out of ten chances
 	hillThreshold = 3, -- how much edginess + liminality makes a hill
 	hillChance = 3, -- how many possible mountains out of ten become a hill when expanding
 	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
@@ -103,8 +105,6 @@ local Space = {
     deepTiles = {},
     maxLiminality = 0,
     liminalTileCount = 0,
-    polygonMinArea = 100,
-    polygonMaxArea = 0,
     ----------------------------------
     -- EXTERNAL FUNCTIONS: --
     Create = function(self)
@@ -127,6 +127,7 @@ local Space = {
         	for i = 1, self.relaxations do
         		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
 	        	self:FillPolygons(true)
+	        	self:PostProcessPolygons()
 	        	self:RelaxPolygons()
 	        end
         end
@@ -259,14 +260,16 @@ local Space = {
 	end,
 	RelaxPolygons = function(self)
 		for i, polygon in pairs(self.polygons) do
-			if #polygon.hexes == 0 then
-				tRemove(self.polygons, i)
-			else
+			--if #polygon.hexes == 0 then
+			--	tRemove(self.polygons, i)
+			-- else
 				self:RelaxToCentroid(polygon)
-			end
+			--end
 		end
 	end,
 	PostProcessPolygons = function(self)
+		self.polygonMinArea = self.iA
+		self.polygonMaxArea = 0
 		for i, polygon in pairs(self.polygons) do
 			polygon.neighbors = {}
 			for neighbor, yes in pairs(polygon.isNeighbor) do
@@ -313,13 +316,19 @@ local Space = {
 				end
 				if #upNeighbors == 0 then break end
 				if iterations == 0 then tInsert(upNeighbors, polygon) end
+				local highestY = polygon.y
+				local highestNeigh
 				for ni, neighbor in pairs(upNeighbors) do
 					neighbor.oceanIndex = oceanIndex
 					tInsert(ocean, neighbor)
 					self.nonOceanArea = self.nonOceanArea - neighbor.area
 					self.nonOceanPolygons = self.nonOceanPolygons - 1
+					if neighbor.y > highestY then
+						highestY = neighbor.y
+						highestNeigh = neighbor
+					end
 				end
-				polygon = upNeighbors[mRandom(1, #upNeighbors)]
+				polygon = highestNeigh or upNeighbors[mRandom(1, #upNeighbors)]
 				iterations = iterations + 1
 			end
 			tInsert(self.oceans, ocean)
@@ -397,7 +406,8 @@ local Space = {
 					rn = mRandom(1, #polygon.neighbors)
 				end
 				local neighbor = polygon.neighbors[rn]
-				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil then
+				local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
+				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil and polarOkay then
 					neighbor.continentIndex = continentIndex
 					self.filledArea = self.filledArea + neighbor.area
 					filledContinentArea = filledContinentArea + neighbor.area
@@ -572,6 +582,10 @@ local Space = {
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
     		dists[i] = self:Minkowski(polygon.x, polygon.y, x, y)
+    		if not relax then
+    			local squiggle = (Map.Rand(21, "polygon squigglyness") - 10) * 0.1 * self.noiseMultiplier
+    			dists[i] = dists[i] + squiggle
+    		end
     		if i == 1 or dists[i] < closest_distance then
     			closest_distance = dists[i]
     			closest_polygon = polygon
@@ -610,12 +624,12 @@ local Space = {
 		for i, hex in pairs(polygon.hexes) do
 			local x, y = hex.x, hex.y
 			if self.wrapX then
-				local xdist = mAbs(y - polygon.minX)
+				local xdist = mAbs(x - polygon.minX)
 				if xdist > self.halfWidth then x = x - self.w end
 			end
 			if self.wrapY then
 				local ydist = mAbs(y - polygon.minY)
-				if ydist > self.halfHeight then x = x - self.h end
+				if ydist > self.halfHeight then y = y - self.h end
 			end
 			totalX = totalX + x
 			totalY = totalY + y
