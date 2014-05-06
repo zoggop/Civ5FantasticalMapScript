@@ -68,6 +68,7 @@ local Space = {
 	-- CONFIG: --
 	polygonCount = 140, -- how many polygons (map scale)
 	minkowskiOrder = 3,
+	relaxations = 3, -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
@@ -122,8 +123,15 @@ local Space = {
 		self.inverseMinkowskiOrder = 1 / self.minkowskiOrder
         EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
         self:InitPolygons()
+        if self.relaxations > 0 then
+        	for i = 1, self.relaxations do
+        		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
+	        	self:FillPolygons(true)
+	        	self:RelaxPolygons()
+	        end
+        end
         self:FillPolygons()
-        self:ProcessPolygons()
+        self:PostProcessPolygons()
         self:PickOceans()
         self:PickContinents()
     	self:PickCoasts()
@@ -201,41 +209,41 @@ local Space = {
     		tInsert(self.polygons, self:NewPolygon())
     	end
     end,
-    FillPolygons = function(self)
+    FillPolygons = function(self, relax)
 		for x = 0, self.w do
 			for y = 0, self.h do
-				local polygon, liminality = self:ClosestPolygon(x, y)
+				local polygon, liminality = self:ClosestPolygon(x, y, relax)
 				if polygon ~= nil then
 					local pi = self:GetIndex(x, y)
 					local hex = { polygon = polygon, liminality = liminality, edginess = 0, edgeWith = {}, index = pi, x = x, y = y }
-					if liminality ~= 0 then
-						self.liminalTileCount = self.liminalTileCount + 1
-					end
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
-					if x > polygon.maxX then polygon.maxX = x end
 					if x < polygon.minX then polygon.minX = x end
-					if y > polygon.maxY then polygon.maxY = y end
 					if y < polygon.minY then polygon.minY = y end
-					self:CheckBottomTop(polygon, x, y)
-					-- find neighbors from one hex to the next
-					local directions
-					if pi % 2 == 0 then directions = {1, 2, 5, 6} else directions = {1, 6} end
-					for i, nindex in pairs(self:HexNeighbors(pi), directions) do -- 3 and 4 are are never there yet
-						if nindex ~= pi then
-							local nhex = self.hexes[nindex]
-							if nhex ~= nil then
-								if nhex.polygon ~= nil then
-									if nhex.polygon ~= hex.polygon then
-										self:SetNeighborPolygons(polygon, nhex.polygon)
-										if not hex.edgeWith[nindex] then
-											hex.edginess = hex.edginess + 1
-											hex.edgeWith[nindex] = true
-										end
-										if not nhex.edgeWith[pi] then
-											nhex.edginess = nhex.edginess + 1
-											nhex.edgeWith[pi] =true
+					if not relax then
+						if liminality ~= 0 then
+							self.liminalTileCount = self.liminalTileCount + 1
+						end
+						self:CheckBottomTop(polygon, x, y)
+						-- find neighbors from one hex to the next
+						local directions
+						if pi % 2 == 0 then directions = {1, 2, 5, 6} else directions = {1, 6} end
+						for i, nindex in pairs(self:HexNeighbors(pi), directions) do -- 3 and 4 are are never there yet
+							if nindex ~= pi then
+								local nhex = self.hexes[nindex]
+								if nhex ~= nil then
+									if nhex.polygon ~= nil then
+										if nhex.polygon ~= hex.polygon then
+											self:SetNeighborPolygons(polygon, nhex.polygon)
+											if not hex.edgeWith[nindex] then
+												hex.edginess = hex.edginess + 1
+												hex.edgeWith[nindex] = true
+											end
+											if not nhex.edgeWith[pi] then
+												nhex.edginess = nhex.edginess + 1
+												nhex.edgeWith[pi] =true
+											end
 										end
 									end
 								end
@@ -249,7 +257,16 @@ local Space = {
 		end
 		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total limial tiles")
 	end,
-	ProcessPolygons = function(self)
+	RelaxPolygons = function(self)
+		for i, polygon in pairs(self.polygons) do
+			if #polygon.hexes == 0 then
+				tRemove(self.polygons, i)
+			else
+				self:RelaxToCentroid(polygon)
+			end
+		end
+	end,
+	PostProcessPolygons = function(self)
 		for i, polygon in pairs(self.polygons) do
 			polygon.neighbors = {}
 			for neighbor, yes in pairs(polygon.isNeighbor) do
@@ -261,8 +278,6 @@ local Space = {
 			if polygon.area > self.polygonMaxArea then
 				self.polygonMaxArea = polygon.area
 			end
-			polygon.width = polygon.maxX - polygon.minX
-			polygon.height = polygon.maxY - polygon.minY
 		end
 		EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
 	end,
@@ -549,7 +564,7 @@ local Space = {
     	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
     	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
     end,
-    ClosestPolygon = function(self, x, y)
+    ClosestPolygon = function(self, x, y, relax)
     	local dists = {}
     	local closest_distance = 0
     	local closest_polygon
@@ -562,18 +577,20 @@ local Space = {
     			closest_polygon = polygon
     		end
     	end
-    	-- sometimes a point is closer to more than one point
     	local liminality = 0
-    	for i = 1, #self.polygons do
-    		local polygon = self.polygons[i]
-    		if dists[i] < closest_distance + self.liminalTolerance and polygon ~= closest_polygon then
-    			liminality = liminality + 1
-    		end
-    	end
-    	if liminality > self.maxLiminality then self.maxLiminality = liminality end
+    	if not relax then
+    		-- sometimes a point is closer to more than one point
+	    	for i = 1, #self.polygons do
+	    		local polygon = self.polygons[i]
+	    		if dists[i] < closest_distance + self.liminalTolerance and polygon ~= closest_polygon then
+	    			liminality = liminality + 1
+	    		end
+	    	end
+	    	if liminality > self.maxLiminality then self.maxLiminality = liminality end
+	    end
     	return closest_polygon, liminality
     end,
-    NewPolygon = function(self, x, y, index)
+    NewPolygon = function(self, x, y)
 		return {
 			x = x or Map.Rand(self.iW, "random x"),
 			y = y or Map.Rand(self.iH, "random y"),
@@ -581,12 +598,37 @@ local Space = {
 			isNeighbor = {},
 			area = 0,
 			minX = self.w, maxX = 0, minY = self.h, maxY = 0,
-			index = index or #self.polygons+1,
 		}
 	end,
 	SetNeighborPolygons = function(self, polygon1, polygon2)
 		polygon1.isNeighbor[polygon2] = true
 		polygon2.isNeighbor[polygon1] = true
+	end,
+	RelaxToCentroid = function(self, polygon)
+		if #polygon.hexes == 0 then return end
+		local totalX, totalY = 0, 0
+		for i, hex in pairs(polygon.hexes) do
+			local x, y = hex.x, hex.y
+			if self.wrapX then
+				local xdist = mAbs(y - polygon.minX)
+				if xdist > self.halfWidth then x = x - self.w end
+			end
+			if self.wrapY then
+				local ydist = mAbs(y - polygon.minY)
+				if ydist > self.halfHeight then x = x - self.h end
+			end
+			totalX = totalX + x
+			totalY = totalY + y
+		end
+		local centroidX = mCeil(totalX / #polygon.hexes)
+		if centroidX < 0 then centroidX = self.w + centroidX end
+		local centroidY = mCeil(totalY / #polygon.hexes)
+		if centroidY < 0 then centroidY = self.h + centroidY end
+		-- EchoDebug(polygon.x .. ", " .. polygon.y .. "  to  " .. centroidX .. ", " .. centroidY, polygon.index, #polygon.hexes)
+		polygon.x, polygon.y = centroidX, centroidY
+		polygon.area = 0
+		polygon.minX, polygon.minY = self.w, self.h
+		polygon.hexes = {}
 	end,
 	CheckBottomTop = function(self, polygon, x, y)
 		if y == 0 and polygon.y < self.halfHeight then
