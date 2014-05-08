@@ -68,13 +68,13 @@ local Space = {
 	-- CONFIG: --
 	polygonCount = 140, -- how many polygons (map scale)
 	minkowskiOrder = 3,
-	relaxations = 4, -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	relaxations = 1, -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	noiseMultiplier = 0.33, -- plus or minus a maximum of this number randomly to every distance calculation
 	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-3 polygon continents
-	polarContinentChance = 1, -- out of ten chances
+	polarContinentChance = 3, -- out of ten chances
 	hillThreshold = 3, -- how much edginess + liminality makes a hill
 	hillChance = 3, -- how many possible mountains out of ten become a hill when expanding
 	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
@@ -125,15 +125,16 @@ local Space = {
         self:InitPolygons()
         if self.relaxations > 0 then
         	for i = 1, self.relaxations do
-        		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
 	        	self:FillPolygons(true)
 	        	self:PostProcessPolygons()
+        		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
 	        	self:RelaxPolygons()
 	        end
         end
         self:FillPolygons()
         self:PostProcessPolygons()
         self:PickOceans()
+        self:FindAstronomyBasins()
         self:PickContinents()
     	self:PickCoasts()
     end,
@@ -176,18 +177,29 @@ local Space = {
     	for pi, hex in pairs(self.hexes) do
     		if self.plotTypes[hex.index] == PlotTypes.PLOT_OCEAN then
     			local coast = false
-    			local neighbors = self:HexNeighbors(hex.index)
-				for i, npi in pairs(neighbors) do
-					if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
-						coast = true
-						break
+    			-- near a continent?
+    			for polygon, yes in pairs(hex.neighborPolygons) do
+    				if polygon.continentIndex ~= nil then
+    					coast = polygon.astronomyIndex or 0
+    					break
+    				end
+    			end
+    			-- near land?
+    			if not coast then
+					for i, npi in pairs(self:HexNeighbors(hex.index)) do
+						if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
+							local nhex = self.hexes[npi]
+							coast = nhex.polygon.astronomyIndex or 0
+						end
 					end
 				end
-    			if coast then
+				if coast then
     				self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_COAST"]
+    				hex.coastAstroIndex = coast
     			else
     				if hex.polygon.coastal then
     					self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_COAST"]
+    					hex.coastAstroIndex = hex.polygon.astronomyIndex
     				else
     					self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_OCEAN"]
     					tInsert(self.deepTiles, hex.index)
@@ -216,7 +228,7 @@ local Space = {
 				local polygon, liminality = self:ClosestPolygon(x, y, relax)
 				if polygon ~= nil then
 					local pi = self:GetIndex(x, y)
-					local hex = { polygon = polygon, liminality = liminality, edginess = 0, edgeWith = {}, index = pi, x = x, y = y }
+					local hex = { polygon = polygon, liminality = liminality, edginess = 0, coastAstroIndex = 0, neighborPolygons = {}, edgeWith = {}, index = pi, x = x, y = y }
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
@@ -237,6 +249,8 @@ local Space = {
 									if nhex.polygon ~= nil then
 										if nhex.polygon ~= hex.polygon then
 											self:SetNeighborPolygons(polygon, nhex.polygon)
+											hex.neighborPolygons[nhex.polygon] = true
+											nhex.neighborPolygons[hex.polygon] = true
 											if not hex.edgeWith[nindex] then
 												hex.edginess = hex.edginess + 1
 												hex.edgeWith[nindex] = true
@@ -256,15 +270,15 @@ local Space = {
 				end
 			end
 		end
-		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total limial tiles")
+		if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total liminal tiles") end
 	end,
 	RelaxPolygons = function(self)
 		for i, polygon in pairs(self.polygons) do
-			--if #polygon.hexes == 0 then
-			--	tRemove(self.polygons, i)
-			-- else
+			if #polygon.hexes == 0 then
+				tRemove(self.polygons, i)
+			else
 				self:RelaxToCentroid(polygon)
-			--end
+			end
 		end
 	end,
 	PostProcessPolygons = function(self)
@@ -369,6 +383,23 @@ local Space = {
 	PickOceansDoughnut = function(self)
 
 	end,
+	FindAstronomyBasins = function(self)
+		local astronomyIndex = 1
+		for i, polygon in pairs(self.polygons) do
+			if self:FloodFillAstronomy(polygon, astronomyIndex) then
+				astronomyIndex = astronomyIndex + 1
+			end
+		end
+		EchoDebug(astronomyIndex-1 .. " astronomy basins")
+	end,
+	FloodFillAstronomy = function(self, polygon, astronomyIndex)
+		if polygon.oceanIndex or polygon.astronomyIndex then return nil end
+		polygon.astronomyIndex = astronomyIndex
+		for i, neighbor in pairs(polygon.neighbors) do
+			self:FloodFillAstronomy(neighbor, astronomyIndex)
+		end
+		return true
+	end,
 	PickContinents = function(self)
 		local polygonBuffer = {}
 		for i, polygon in pairs(self.polygons) do
@@ -429,7 +460,7 @@ local Space = {
 	end,
 	PickCoasts = function(self)
 		for i, polygon in pairs(self.polygons) do
-			if polygon.continentIndex == nil and polygon.oceanIndex == nil and not self:NearOther(polygon, nil, "oceanIndex") then
+			if polygon.continentIndex == nil and polygon.oceanIndex == nil and not self:NearOther(polygon, polygon.astronomyIndex, "astronomyIndex") then
 				if Map.Rand(10, "coastal polygon dice") <= self.coastalPolygonChance then
 					polygon.coastal = true
 				end
@@ -502,29 +533,34 @@ local Space = {
 			local makeCoast = {}
 			for i, pi in pairs(self.deepTiles) do
 				if self.terrainTypes[pi] == GameInfoTypes["TERRAIN_OCEAN"] then
-					local neighbors = self:HexNeighbors(pi)
-					local nearcoast = false
-					local nearocean = false
-					for n, npi in pairs(neighbors) do
+					local hex = self.hexes[pi]
+					local nearcoast, outside
+					for n, npi in pairs(self:HexNeighbors(pi)) do
 						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
-							nearcoast = true
-						end
-						if self.hexes[npi].polygon.oceanIndex ~= nil then
-							nearocean = true
-							break
+							nearcoast = self.hexes[npi].coastAstroIndex
+							if nearcoast ~= 0 and nearcoast ~= hex.polygon.astronomyIndex then
+								outside = true
+								break
+							end
 						end
 					end
-					if nearcoast and Map.Rand(dice, "expand coast?") == 0 then
-						-- if not nearocean or Map.Rand(2, "expand near ocean?") == 0 then
-							if self.hexes[pi].polygon.oceanIndex == nil or Map.Rand(2, "expand into ocean?") == 0 then
-								tInsert(makeCoast, pi)
+					if nearcoast and not outside then
+						for neighbor, yes in pairs(hex.neighborPolygons) do
+							if neighbor.astronomyIndex ~= nil and neighbor.astronomyIndex ~= hex.polygon.astronomyIndex then
+								outside = true
 							end
-						-- end
+						end
+					end
+					if nearcoast and not outside and Map.Rand(dice, "expand coast?") == 0 then
+						tInsert(makeCoast, {pi, nearcoast})
 					end
 				end
 			end
-			for i, pi in pairs(makeCoast) do
+			for i, item in pairs(makeCoast) do
+				local pi = item[1]
+				local coastAstroIndex = item[2] 
 				self.terrainTypes[pi] = GameInfoTypes["TERRAIN_COAST"]
+				self.hexes[pi].coastAstroIndex = coastAstroIndex
 			end
 		end
 	end,
@@ -568,7 +604,18 @@ local Space = {
 		local xx2 = x2
 		local zz2 = y2 - (x2 + x2%2) / 2
 		local yy2 = -xx2-zz2
-		return (mAbs(xx1 - xx2) + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
+		local xdist = mAbs(x1 - x2)
+		-- x is the same orientation, so it can still wrap?
+		if self.wrapX then
+			if xdist > self.halfWidth then
+				if x1 < x2 then
+					xdist = x1 + (self.w - x2)
+				else
+					xdist = x2 + (self.w - x1)
+				end
+			end
+		end
+		return (xdist + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
     end,
     Minkowski = function(self, x1, y1, x2, y2)
     	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
@@ -581,7 +628,8 @@ local Space = {
     	-- find the closest point to this point
     	for i = 1, #self.polygons do
     		local polygon = self.polygons[i]
-    		dists[i] = self:Minkowski(polygon.x, polygon.y, x, y)
+    		-- dists[i] = Map.PlotDistance(polygon.x, polygon.y, x, y)
+    		dists[i] = self:EucDistance(polygon.x, polygon.y, x, y)
     		if not relax then
     			local squiggle = (Map.Rand(21, "polygon squigglyness") - 10) * 0.1 * self.noiseMultiplier
     			dists[i] = dists[i] + squiggle
@@ -596,7 +644,7 @@ local Space = {
     		-- sometimes a point is closer to more than one point
 	    	for i = 1, #self.polygons do
 	    		local polygon = self.polygons[i]
-	    		if dists[i] < closest_distance + self.liminalTolerance and polygon ~= closest_polygon then
+	    		if dists[i] < closest_distance + self.liminalTolerance + self.noiseMultiplier and polygon ~= closest_polygon then
 	    			liminality = liminality + 1
 	    		end
 	    	end

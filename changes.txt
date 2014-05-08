@@ -1,6 +1,7 @@
-- add lloyd relaxation: get the centroid by averaging the location of all the hexes within each polygon
+- coasts shouldn't be constrained behind oceans, but constrained not to touch the coasts of continents across the ocean (flood fill to find contiguous coastal regions?)
+- tiny island generation and expansion should be based on perscribed amount (the same for any map size) and perscribed area (goes up with map area)
 - need better mountain generation
-	- either more like the old one, using edge tiles
+	- either more like the old one, using edge tiles + add mountain regions
 	- or by finding particularly skinny voronoi
 - put atolls in coastal polygons whose neighbors are a warm terrain region
 - add simplified fantasy region terrain/feature generation
