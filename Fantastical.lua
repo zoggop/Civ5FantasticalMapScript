@@ -65,7 +65,7 @@ local oneOverOrder = {}
 ------------------------------------------------------------------------------
 
 local Space = {
-	-- CONFIG: --
+	-- CONFIGURATION: --
 	polygonCount = 140, -- how many polygons (map scale)
 	minkowskiOrder = 3,
 	relaxations = 1, -- how many lloyd relaxations (higher number is greater polygon uniformity)
@@ -79,7 +79,7 @@ local Space = {
 	hillChance = 3, -- how many possible mountains out of ten become a hill when expanding
 	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
 	mountainRatio = 0.04, -- how much of the land to be mountain tiles
-	coastalPolygonChance = 4, -- out of ten, how often do possible coastal polygons become coastal?
+	coastalPolygonChance = 0, -- out of ten, how often do possible coastal polygons become coastal?
 	tinyIslandChance = 5, -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
 	coastExpansionDice = {3, 4},
 	wrapX = true,
@@ -149,12 +149,14 @@ local Space = {
 						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
 					end
 				else
+					--[[
 					if Map.Rand(1500, "tiny ocean island chance") <= self.tinyIslandChance then
 						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
 						tInsert(self.tinyIslandPlots, hex.index)
 					else
+					]]--
 						self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
-					end
+					--end
 				end
 			else
 				local edgeLim = hex.liminality + hex.edginess
@@ -176,21 +178,17 @@ local Space = {
     ComputeTerrain = function(self)
     	for pi, hex in pairs(self.hexes) do
     		if self.plotTypes[hex.index] == PlotTypes.PLOT_OCEAN then
-    			local coast = false
-    			-- near a continent?
-    			for polygon, yes in pairs(hex.neighborPolygons) do
-    				if polygon.continentIndex ~= nil then
-    					coast = polygon.astronomyIndex or 0
-    					break
-    				end
-    			end
+    			local coast
     			-- near land?
-    			if not coast then
-					for i, npi in pairs(self:HexNeighbors(hex.index)) do
-						if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
-							local nhex = self.hexes[npi]
-							coast = nhex.polygon.astronomyIndex or 0
+				for i, npi in pairs(self:HexNeighbors(hex.index)) do
+					if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
+						local nhex = self.hexes[npi]
+						if coast and coast ~= nhex.polygon.astronomyIndex then
+							coast = 0
+							EchoDebug("do not expand this coastal tile")
+							break
 						end
+						coast = nhex.polygon.astronomyIndex
 					end
 				end
 				if coast then
@@ -228,7 +226,7 @@ local Space = {
 				local polygon, liminality = self:ClosestPolygon(x, y, relax)
 				if polygon ~= nil then
 					local pi = self:GetIndex(x, y)
-					local hex = { polygon = polygon, liminality = liminality, edginess = 0, coastAstroIndex = 0, neighborPolygons = {}, edgeWith = {}, index = pi, x = x, y = y }
+					local hex = { polygon = polygon, liminality = liminality, edginess = 0, coastAstroIndex = 0, edgeWith = {}, index = pi, x = x, y = y }
 					self.hexes[pi] = hex
 					tInsert(polygon.hexes, hex)
 					polygon.area = polygon.area + 1
@@ -249,8 +247,6 @@ local Space = {
 									if nhex.polygon ~= nil then
 										if nhex.polygon ~= hex.polygon then
 											self:SetNeighborPolygons(polygon, nhex.polygon)
-											hex.neighborPolygons[nhex.polygon] = true
-											nhex.neighborPolygons[hex.polygon] = true
 											if not hex.edgeWith[nindex] then
 												hex.edginess = hex.edginess + 1
 												hex.edgeWith[nindex] = true
@@ -308,7 +304,7 @@ local Space = {
 		elseif self.wrapY and not self.wrapX then
 			print("why have a vertically wrapped map?")
 		end
-		EchoDebug(self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
+		EchoDebug(#self.oceans .. " oceans", self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
 	end,
 	PickOceansCylinder = function(self)
 		local div = self.w / self.oceanNumber
@@ -393,7 +389,12 @@ local Space = {
 		EchoDebug(astronomyIndex-1 .. " astronomy basins")
 	end,
 	FloodFillAstronomy = function(self, polygon, astronomyIndex)
-		if polygon.oceanIndex or polygon.astronomyIndex then return nil end
+		if polygon.oceanIndex then
+			polygon.astronomyIndex = polygon.oceanIndex + 10
+			return nil
+		elseif polygon.astronomyIndex then
+			return nil
+		end
 		polygon.astronomyIndex = astronomyIndex
 		for i, neighbor in pairs(polygon.neighbors) do
 			self:FloodFillAstronomy(neighbor, astronomyIndex)
@@ -459,13 +460,16 @@ local Space = {
 		EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", self.filledArea .. " filled hexes")
 	end,
 	PickCoasts = function(self)
+		self.coastalPolygonCount = 0
 		for i, polygon in pairs(self.polygons) do
-			if polygon.continentIndex == nil and polygon.oceanIndex == nil and not self:NearOther(polygon, polygon.astronomyIndex, "astronomyIndex") then
-				if Map.Rand(10, "coastal polygon dice") <= self.coastalPolygonChance then
+			if polygon.continentIndex == nil and not self:NearOther(polygon, polygon.astronomyIndex, "astronomyIndex") then
+				if Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 					polygon.coastal = true
+					self.coastalPolygonCount = self.coastalPolygonCount + 1
 				end
 			end
 		end
+		EchoDebug(self.coastalPolygonCount .. " coastal polygons")
 	end,
 	ResizeMountains = function(self, perscribedArea)
 		if #self.mountainPlots == perscribedArea then return end
@@ -534,33 +538,37 @@ local Space = {
 			for i, pi in pairs(self.deepTiles) do
 				if self.terrainTypes[pi] == GameInfoTypes["TERRAIN_OCEAN"] then
 					local hex = self.hexes[pi]
-					local nearcoast, outside
+					local nearcoast
 					for n, npi in pairs(self:HexNeighbors(pi)) do
-						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
-							nearcoast = self.hexes[npi].coastAstroIndex
-							if nearcoast ~= 0 and nearcoast ~= hex.polygon.astronomyIndex then
-								outside = true
-								break
+						local nhex = self.hexes[npi]
+						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] or makeCoast[npi] then
+							local thiscoast = makeCoast[npi] or nhex.coastAstroIndex
+							if thiscoast ~= nil then
+								if thiscoast == 0 then
+									nearcoast = nil
+									EchoDebug("bad coast tile! (blacklist)")
+									break
+								end
+								if nearcoast == nil then
+									nearcoast = thiscoast
+								elseif thiscoast ~= nearcoast then
+									nearcoast = nil
+									EchoDebug("bad coast tile! (more than one astronomy neighbor")
+									break
+								end
+							else
+								EchoDebug("nil coast astronomy")
 							end
 						end
 					end
-					if nearcoast and not outside then
-						for neighbor, yes in pairs(hex.neighborPolygons) do
-							if neighbor.astronomyIndex ~= nil and neighbor.astronomyIndex ~= hex.polygon.astronomyIndex then
-								outside = true
-							end
-						end
-					end
-					if nearcoast and not outside and Map.Rand(dice, "expand coast?") == 0 then
-						tInsert(makeCoast, {pi, nearcoast})
+					if nearcoast and Map.Rand(dice, "expand coast?") == 0 then
+						makeCoast[pi] = nearcoast
 					end
 				end
 			end
-			for i, item in pairs(makeCoast) do
-				local pi = item[1]
-				local coastAstroIndex = item[2] 
+			for pi, nearcoast in pairs(makeCoast) do
 				self.terrainTypes[pi] = GameInfoTypes["TERRAIN_COAST"]
-				self.hexes[pi].coastAstroIndex = coastAstroIndex
+				self.hexes[pi].coastAstroIndex = nearcoast
 			end
 		end
 	end,
