@@ -1,4 +1,3 @@
-- coasts shouldn't be constrained behind oceans, but constrained not to touch the coasts of continents across the ocean (flood fill to find contiguous coastal regions?)
 - tiny island generation and expansion should be based on perscribed amount (the same for any map size) and perscribed area (goes up with map area)
 - need better mountain generation
 	- either more like the old one, using edge tiles + add mountain regions
@@ -9,6 +8,9 @@
 
 
 DONE
+- fix neighbor issues by culling polygons with zero hexes
+- fix astronomy basin fill
+- constrain coasts to astronomy barriers (coasts can expand into oceans but not across oceans)
 - found edges between polygons better
 - voronoi-based coastal generation
 - polygons whose neighbors are not touching ocean trench polygons may become coastal

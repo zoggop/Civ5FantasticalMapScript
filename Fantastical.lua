@@ -69,7 +69,6 @@ local Space = {
 	polygonCount = 140, -- how many polygons (map scale)
 	minkowskiOrder = 3,
 	relaxations = 1, -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	noiseMultiplier = 0.33, -- plus or minus a maximum of this number randomly to every distance calculation
 	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
@@ -105,6 +104,7 @@ local Space = {
     deepTiles = {},
     maxLiminality = 0,
     liminalTileCount = 0,
+    culledPolygons = 0,
     ----------------------------------
     -- EXTERNAL FUNCTIONS: --
     Create = function(self)
@@ -126,12 +126,13 @@ local Space = {
         if self.relaxations > 0 then
         	for i = 1, self.relaxations do
 	        	self:FillPolygons(true)
-	        	self:PostProcessPolygons()
         		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
 	        	self:RelaxPolygons()
 	        end
         end
         self:FillPolygons()
+        self:CullPolygons()
+        self:FindPolygonNeighbors()
         self:PostProcessPolygons()
         self:PickOceans()
         self:FindAstronomyBasins()
@@ -211,6 +212,35 @@ local Space = {
     	return self.terrainTypes
     end,
     ComputeFeatures = function(self)
+    	-- to test neighbor problems
+    	--[[
+		EchoDebug(self.halfWidth, self.halfHeight)
+		local polygon = self.hexes[self:GetIndex(mCeil(self.halfWidth), mCeil(self.halfHeight))].polygon
+		for hi, hex in pairs(polygon.hexes) do
+			local plot = Map.GetPlotByIndex(hex.index-1)
+			if plot ~= nil then
+				plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
+			end
+		end
+		for i, neighbor in pairs(polygon.neighbors) do
+			EchoDebug("neighbor " .. i, #neighbor.hexes)
+			for hi, hex in pairs(neighbor.hexes) do
+				local plot = Map.GetPlotByIndex(hex.index-1)
+				if plot ~= nil then
+					plot:SetFeatureType(FeatureTypes.FEATURE_JUNGLE)
+				end
+			end
+		end
+		]]--
+		-- testing ocean rifts
+		for i, hex in pairs(self.hexes) do
+			if hex.polygon.oceanIndex then
+				local plot = Map.GetPlotByIndex(hex.index-1)
+				if plot ~= nil then
+					plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
+				end
+			end
+		end
     	return self.featureTypes
     end,
     ----------------------------------
@@ -232,50 +262,84 @@ local Space = {
 					polygon.area = polygon.area + 1
 					if x < polygon.minX then polygon.minX = x end
 					if y < polygon.minY then polygon.minY = y end
+					if x > polygon.maxX then polygon.maxX = x end
+					if y > polygon.maxY then polygon.maxY = y end
 					if not relax then
 						if liminality ~= 0 then
 							self.liminalTileCount = self.liminalTileCount + 1
 						end
 						self:CheckBottomTop(polygon, x, y)
 						-- find neighbors from one hex to the next
+						--[[
 						local directions
 						if pi % 2 == 0 then directions = {1, 2, 5, 6} else directions = {1, 6} end
 						for i, nindex in pairs(self:HexNeighbors(pi), directions) do -- 3 and 4 are are never there yet
 							if nindex ~= pi then
 								local nhex = self.hexes[nindex]
 								if nhex ~= nil then
-									if nhex.polygon ~= nil then
-										if nhex.polygon ~= hex.polygon then
-											self:SetNeighborPolygons(polygon, nhex.polygon)
-											if not hex.edgeWith[nindex] then
-												hex.edginess = hex.edginess + 1
-												hex.edgeWith[nindex] = true
-											end
-											if not nhex.edgeWith[pi] then
-												nhex.edginess = nhex.edginess + 1
-												nhex.edgeWith[pi] =true
-											end
+									if nhex.polygon ~= polygon then
+										-- EchoDebug(hex.x, hex.y, nhex.x, nhex.y)
+										self:SetNeighborPolygons(polygon, nhex.polygon)
+										if not hex.edgeWith[nindex] then
+											hex.edginess = hex.edginess + 1
+											hex.edgeWith[nindex] = true
+										end
+										if not nhex.edgeWith[pi] then
+											nhex.edginess = nhex.edginess + 1
+											nhex.edgeWith[pi] =true
 										end
 									end
 								end
 							end
 						end
+						]]--
 					end
 				else
-					EchoDebug("nil polygon")
+					EchoDebug("WARNING: NIL POLYGON")
 				end
 			end
 		end
 		if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total liminal tiles") end
 	end,
-	RelaxPolygons = function(self)
-		for i, polygon in pairs(self.polygons) do
-			if #polygon.hexes == 0 then
-				tRemove(self.polygons, i)
-			else
-				self:RelaxToCentroid(polygon)
+	FindPolygonNeighbors = function(self)
+		for i, hex in pairs(self.hexes) do
+			local pi = hex.index
+			local polygon = hex.polygon
+			for ni, nindex in pairs(self:HexNeighbors(pi)) do -- 3 and 4 are are never there yet
+				if nindex ~= pi then
+					local nhex = self.hexes[nindex]
+					if nhex ~= nil then
+						if nhex.polygon ~= polygon then
+							self:SetNeighborPolygons(polygon, nhex.polygon)
+							if not hex.edgeWith[nindex] then
+								hex.edginess = hex.edginess + 1
+								hex.edgeWith[nindex] = true
+							end
+							if not nhex.edgeWith[pi] then
+								nhex.edginess = nhex.edginess + 1
+								nhex.edgeWith[pi] =true
+							end
+						end
+					end
+				end
 			end
 		end
+	end,
+	RelaxPolygons = function(self)
+		for i, polygon in pairs(self.polygons) do
+			self:RelaxToCentroid(polygon)
+		end
+	end,
+	CullPolygons = function(self)
+		self.culled = {}
+		for i = #self.polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
+			local polygon = self.polygons[i]
+			if #polygon.hexes == 0 then
+				tRemove(self.polygons, i)
+				self.culledPolygons = self.culledPolygons + 1
+			end
+		end
+		EchoDebug(self.culledPolygons .. " polygons culled")
 	end,
 	PostProcessPolygons = function(self)
 		self.polygonMinArea = self.iA
@@ -314,30 +378,61 @@ local Space = {
 			local polygon = hex.polygon
 			local ocean = {}
 			local iterations = 0
+			local chosen = {}
 			while self.nonOceanPolygons > self.minNonOceanPolygons do
-				if iterations ~= 0 and polygon.topY then break end
+				chosen[polygon] = true
+				polygon.oceanIndex = oceanIndex
+				tInsert(ocean, polygon)
+				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanPolygons = self.nonOceanPolygons - 1
+				if polygon.topY then
+						EchoDebug("topY found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+						break
+				end
 				local upNeighbors = {}
+				local downNeighbors = {}
 				for ni, neighbor in pairs(polygon.neighbors) do
 					if not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
-						if neighbor.y > polygon.y or neighbor.topY then
-							tInsert(upNeighbors, neighbor)
+						if not chosen[neighbor] then
+							if neighbor.maxY > polygon.maxY then
+								tInsert(upNeighbors, neighbor)
+							else
+								tInsert(downNeighbors, neighbor)
+							end
 						end
 					end
 				end
-				if #upNeighbors == 0 then break end
-				if iterations == 0 then tInsert(upNeighbors, polygon) end
-				local highestY = polygon.y
+				if #upNeighbors == 0 then
+					if #downNeighbors == 0 then
+						if #polygon.neighbors == 0 then
+							EchoDebug("no neighbors!, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+							break
+						else
+							upNeighbors = polygon.neighbors
+						end
+					else
+						upNeighbors = downNeighbors
+					end
+				end
+				local highestY = 0
 				local highestNeigh
 				for ni, neighbor in pairs(upNeighbors) do
-					neighbor.oceanIndex = oceanIndex
-					tInsert(ocean, neighbor)
-					self.nonOceanArea = self.nonOceanArea - neighbor.area
-					self.nonOceanPolygons = self.nonOceanPolygons - 1
 					if neighbor.y > highestY then
 						highestY = neighbor.y
 						highestNeigh = neighbor
 					end
 				end
+				--[[
+				for i, neighbor in pairs(polygon.neighbors) do
+					if not chosen[neighbor] and not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
+						chosen[neighbor] = true
+						neighbor.oceanIndex = oceanIndex
+						tInsert(ocean, neighbor)
+						self.nonOceanArea = self.nonOceanArea - neighbor.area
+						self.nonOceanPolygons = self.nonOceanPolygons - 1
+					end
+				end
+				]]--
 				polygon = highestNeigh or upNeighbors[mRandom(1, #upNeighbors)]
 				iterations = iterations + 1
 			end
@@ -392,9 +487,8 @@ local Space = {
 		if polygon.oceanIndex then
 			polygon.astronomyIndex = polygon.oceanIndex + 10
 			return nil
-		elseif polygon.astronomyIndex then
-			return nil
 		end
+		if polygon.astronomyIndex then return nil end
 		polygon.astronomyIndex = astronomyIndex
 		for i, neighbor in pairs(polygon.neighbors) do
 			self:FloodFillAstronomy(neighbor, astronomyIndex)
@@ -541,19 +635,17 @@ local Space = {
 					local nearcoast
 					for n, npi in pairs(self:HexNeighbors(pi)) do
 						local nhex = self.hexes[npi]
-						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] or makeCoast[npi] then
+						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
 							local thiscoast = makeCoast[npi] or nhex.coastAstroIndex
 							if thiscoast ~= nil then
 								if thiscoast == 0 then
 									nearcoast = nil
-									EchoDebug("bad coast tile! (blacklist)")
 									break
 								end
 								if nearcoast == nil then
 									nearcoast = thiscoast
 								elseif thiscoast ~= nearcoast then
 									nearcoast = nil
-									EchoDebug("bad coast tile! (more than one astronomy neighbor")
 									break
 								end
 							else
@@ -638,10 +730,6 @@ local Space = {
     		local polygon = self.polygons[i]
     		-- dists[i] = Map.PlotDistance(polygon.x, polygon.y, x, y)
     		dists[i] = self:EucDistance(polygon.x, polygon.y, x, y)
-    		if not relax then
-    			local squiggle = (Map.Rand(21, "polygon squigglyness") - 10) * 0.1 * self.noiseMultiplier
-    			dists[i] = dists[i] + squiggle
-    		end
     		if i == 1 or dists[i] < closest_distance then
     			closest_distance = dists[i]
     			closest_polygon = polygon
@@ -652,7 +740,7 @@ local Space = {
     		-- sometimes a point is closer to more than one point
 	    	for i = 1, #self.polygons do
 	    		local polygon = self.polygons[i]
-	    		if dists[i] < closest_distance + self.liminalTolerance + self.noiseMultiplier and polygon ~= closest_polygon then
+	    		if dists[i] < closest_distance + self.liminalTolerance and polygon ~= closest_polygon then
 	    			liminality = liminality + 1
 	    		end
 	    	end
@@ -675,29 +763,30 @@ local Space = {
 		polygon2.isNeighbor[polygon1] = true
 	end,
 	RelaxToCentroid = function(self, polygon)
-		if #polygon.hexes == 0 then return end
-		local totalX, totalY = 0, 0
-		for i, hex in pairs(polygon.hexes) do
-			local x, y = hex.x, hex.y
-			if self.wrapX then
-				local xdist = mAbs(x - polygon.minX)
-				if xdist > self.halfWidth then x = x - self.w end
+		if #polygon.hexes ~= 0 then
+			local totalX, totalY = 0, 0
+			for i, hex in pairs(polygon.hexes) do
+				local x, y = hex.x, hex.y
+				if self.wrapX then
+					local xdist = mAbs(x - polygon.minX)
+					if xdist > self.halfWidth then x = x - self.w end
+				end
+				if self.wrapY then
+					local ydist = mAbs(y - polygon.minY)
+					if ydist > self.halfHeight then y = y - self.h end
+				end
+				totalX = totalX + x
+				totalY = totalY + y
 			end
-			if self.wrapY then
-				local ydist = mAbs(y - polygon.minY)
-				if ydist > self.halfHeight then y = y - self.h end
-			end
-			totalX = totalX + x
-			totalY = totalY + y
+			local centroidX = mCeil(totalX / #polygon.hexes)
+			if centroidX < 0 then centroidX = self.w + centroidX end
+			local centroidY = mCeil(totalY / #polygon.hexes)
+			if centroidY < 0 then centroidY = self.h + centroidY end
+			-- EchoDebug(polygon.x .. ", " .. polygon.y .. "  to  " .. centroidX .. ", " .. centroidY, polygon.index, #polygon.hexes)
+			polygon.x, polygon.y = centroidX, centroidY
 		end
-		local centroidX = mCeil(totalX / #polygon.hexes)
-		if centroidX < 0 then centroidX = self.w + centroidX end
-		local centroidY = mCeil(totalY / #polygon.hexes)
-		if centroidY < 0 then centroidY = self.h + centroidY end
-		-- EchoDebug(polygon.x .. ", " .. polygon.y .. "  to  " .. centroidX .. ", " .. centroidY, polygon.index, #polygon.hexes)
-		polygon.x, polygon.y = centroidX, centroidY
 		polygon.area = 0
-		polygon.minX, polygon.minY = self.w, self.h
+		polygon.minX, polygon.minY, maxX, maxY = self.w, self.h, 0, 0
 		polygon.hexes = {}
 	end,
 	CheckBottomTop = function(self, polygon, x, y)
@@ -826,6 +915,7 @@ function SetTerrainTypes(terrainTypes)
 end
 
 function AddFeatures()
+	-- Space:ComputeFeatures()
 	--[[
     print("Adding Features (using default implementation) ...")
     
