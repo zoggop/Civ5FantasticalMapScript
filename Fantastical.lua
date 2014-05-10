@@ -12,6 +12,7 @@ include("bit")
 include("MapGenerator")
 include("FeatureGenerator")
 include("TerrainGenerator")
+include("AssignStartingPlots")
 
 ----------------------------------------------------------------------------------
 
@@ -75,10 +76,10 @@ local Space = {
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-3 polygon continents
 	polarContinentChance = 3, -- out of ten chances
 	hillThreshold = 3, -- how much edginess + liminality makes a hill
-	hillChance = 3, -- how many possible mountains out of ten become a hill when expanding
-	mountainThreshold = 4, -- how much edginess + liminality makes a mountain
+	hillChance = 6, -- how many possible mountains out of ten become a hill when expanding
+	mountainThreshold = 7, -- how much edginess + liminality makes a mountain
 	mountainRatio = 0.04, -- how much of the land to be mountain tiles
-	coastalPolygonChance = 0, -- out of ten, how often do possible coastal polygons become coastal?
+	coastalPolygonChance = 2, -- out of ten, how often do possible coastal polygons become coastal?
 	tinyIslandChance = 5, -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
 	coastExpansionDice = {3, 4},
 	wrapX = true,
@@ -143,7 +144,14 @@ local Space = {
 		for pi, hex in pairs(self.hexes) do
 			if hex.polygon.continentIndex == nil then
 				if hex.polygon.coastal then
-					if Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
+					local nearOcean = false
+					for npi, yes in pairs(hex.edgeWith) do
+						local polygon = self.hexes[npi].polygon
+						if not polygon.coastal then
+							nearOcean = true
+						end
+					end
+					if not nearOcean and Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
 						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
 						tInsert(self.tinyIslandPlots, hex.index)
 					else
@@ -160,15 +168,26 @@ local Space = {
 					--end
 				end
 			else
-				local edgeLim = hex.liminality + hex.edginess
-				if edgeLim < self.hillThreshold then
-					self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
-				elseif edgeLim < self.mountainThreshold and Map.Rand(10, "hill dice primary") < self.hillChance then
-					self.plotTypes[hex.index] = PlotTypes.PLOT_HILLS
-					tInsert(self.hillPlots, hex.index)
+				-- near ocean trench?
+				for npi, yes in pairs(hex.edgeWith) do
+					local polygon = self.hexes[npi].polygon
+					if polygon.oceanIndex then
+						hex.nearOceanTrench = true
+					end
+				end
+				if hex.nearOceanTrench then
+					self.plotTypes[hex.index] = PlotTypes.PLOT_OCEAN
 				else
-					self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
-					tInsert(self.mountainPlots, hex.index)
+					local edgeLim = hex.liminality + hex.edginess
+					if edgeLim < self.hillThreshold then
+						self.plotTypes[hex.index] = PlotTypes.PLOT_LAND
+					elseif edgeLim < self.mountainThreshold and Map.Rand(10, "hill dice primary") < self.hillChance then
+						self.plotTypes[hex.index] = PlotTypes.PLOT_HILLS
+						tInsert(self.hillPlots, hex.index)
+					else
+						self.plotTypes[hex.index] = PlotTypes.PLOT_MOUNTAIN
+						tInsert(self.mountainPlots, hex.index)
+					end
 				end
 			end
 		end
@@ -192,6 +211,7 @@ local Space = {
 						coast = nhex.polygon.astronomyIndex
 					end
 				end
+				if hex.nearOceanTrench then coast = 0 end
 				if coast then
     				self.terrainTypes[hex.index] = GameInfoTypes["TERRAIN_COAST"]
     				hex.coastAstroIndex = coast
@@ -240,6 +260,14 @@ local Space = {
 					plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
 				end
 			end
+			--[[
+			if hex.nearOceanTrench then
+				local plot = Map.GetPlotByIndex(hex.index-1)
+				if plot ~= nil then
+					plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
+				end
+			end
+			]]--
 		end
     	return self.featureTypes
     end,
@@ -269,30 +297,6 @@ local Space = {
 							self.liminalTileCount = self.liminalTileCount + 1
 						end
 						self:CheckBottomTop(polygon, x, y)
-						-- find neighbors from one hex to the next
-						--[[
-						local directions
-						if pi % 2 == 0 then directions = {1, 2, 5, 6} else directions = {1, 6} end
-						for i, nindex in pairs(self:HexNeighbors(pi), directions) do -- 3 and 4 are are never there yet
-							if nindex ~= pi then
-								local nhex = self.hexes[nindex]
-								if nhex ~= nil then
-									if nhex.polygon ~= polygon then
-										-- EchoDebug(hex.x, hex.y, nhex.x, nhex.y)
-										self:SetNeighborPolygons(polygon, nhex.polygon)
-										if not hex.edgeWith[nindex] then
-											hex.edginess = hex.edginess + 1
-											hex.edgeWith[nindex] = true
-										end
-										if not nhex.edgeWith[pi] then
-											nhex.edginess = nhex.edginess + 1
-											nhex.edgeWith[pi] =true
-										end
-									end
-								end
-							end
-						end
-						]]--
 					end
 				else
 					EchoDebug("WARNING: NIL POLYGON")
@@ -331,7 +335,6 @@ local Space = {
 		end
 	end,
 	CullPolygons = function(self)
-		self.culled = {}
 		for i = #self.polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
 			local polygon = self.polygons[i]
 			if #polygon.hexes == 0 then
@@ -423,6 +426,7 @@ local Space = {
 					end
 				end
 				--[[
+				-- makes oceans really wide
 				for i, neighbor in pairs(polygon.neighbors) do
 					if not chosen[neighbor] and not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
 						chosen[neighbor] = true
@@ -573,6 +577,7 @@ local Space = {
 				self.plotTypes[pi] = PlotTypes.PLOT_LAND
 			until #self.mountainPlots <= perscribedArea
 		elseif #self.mountainPlots < perscribedArea then
+			local noNeighbors = 0
 			repeat
 				local pi = self.mountainPlots[mRandom(1, #self.mountainPlots)]
 				local neighbors = self:HexNeighbors(pi)
@@ -580,7 +585,7 @@ local Space = {
 				repeat
 					npi = tRemoveRandom(neighbors)
 				until self.plotTypes[npi] == PlotTypes.PLOT_LAND or #neighbors == 0
-				if npi ~= nil then
+				if npi ~= nil and self.plotTypes[npi] == PlotTypes.PLOT_LAND then
 					if Map.Rand(10, "hill dice") < self.hillChance then
 						self.plotTypes[npi] = PlotTypes.PLOT_HILLS
 						tInsert(self.hillPlots, npi)
@@ -588,8 +593,11 @@ local Space = {
 						self.plotTypes[npi] = PlotTypes.PLOT_MOUNTAIN
 						tInsert(self.mountainPlots, npi)
 					end
+					noNeighbors = 0
+				else
+					noNeighbors = noNeighbors + 1
 				end
-			until #self.mountainPlots >= perscribedArea
+			until #self.mountainPlots >= perscribedArea or noNeighbors > 20
 		end
 	end,
 	AdjustMountains = function(self)
@@ -952,4 +960,89 @@ function AddLakes()
 		Map.CalculateAreas();
 	end
 	]]--
+end
+
+function AssignStartingPlots:CanBeReef(x, y)
+	-- Checks a candidate plot for eligibility to be the Great Barrier Reef.
+	local iW, iH = Map.GetGridSize();
+	local plotIndex = y * iW + x + 1;
+	-- We don't care about the center plot for this wonder. It can be forced. It's the surrounding plots that matter.
+	-- This is also the only natural wonder type with a footprint larger than seven tiles.
+	-- So first we'll check the extra tiles, make sure they are there, are ocean water, and have no Ice.
+	local iNumCoast = 0;
+	local extra_direction_types = {
+		DirectionTypes.DIRECTION_EAST,
+		DirectionTypes.DIRECTION_SOUTHEAST,
+		DirectionTypes.DIRECTION_SOUTHWEST};
+	local SEPlot = Map.PlotDirection(x, y, DirectionTypes.DIRECTION_SOUTHEAST)
+	local southeastX = SEPlot:GetX();
+	local southeastY = SEPlot:GetY();
+	for loop, direction in ipairs(extra_direction_types) do -- The three plots extending another plot past the SE plot.
+		local adjPlot = Map.PlotDirection(southeastX, southeastY, direction)
+		if adjPlot == nil then
+			return
+		end
+		if adjPlot:IsWater() == false or adjPlot:IsLake() == true then
+			return
+		end
+		local featureType = adjPlot:GetFeatureType()
+		if featureType == FeatureTypes.FEATURE_ICE then
+			return
+		end
+		local hex = Space.hexes[plotIndex+1]
+		if hex.oceanIndex then
+			return
+		end
+		local terrainType = adjPlot:GetTerrainType()
+		if terrainType == TerrainTypes.TERRAIN_COAST then
+			iNumCoast = iNumCoast + 1;
+		end
+	end
+	-- Now check the rest of the adjacent plots.
+	local direction_types = { -- Not checking to southeast.
+		DirectionTypes.DIRECTION_NORTHEAST,
+		DirectionTypes.DIRECTION_EAST,
+		DirectionTypes.DIRECTION_SOUTHWEST,
+		DirectionTypes.DIRECTION_WEST,
+		DirectionTypes.DIRECTION_NORTHWEST
+		};
+	for loop, direction in ipairs(direction_types) do
+		local adjPlot = Map.PlotDirection(x, y, direction)
+		if adjPlot:IsWater() == false then
+			return
+		end
+		local hex = Space.hexes[plotIndex+1]
+		if hex.oceanIndex then
+			return
+		end
+		local terrainType = adjPlot:GetTerrainType()
+		if terrainType == TerrainTypes.TERRAIN_COAST then
+			iNumCoast = iNumCoast + 1;
+		end
+	end
+	-- If not enough coasts, reject this site.
+	if iNumCoast < 4 then
+		return
+	end
+	-- This site is in the water, with at least some of the water plots being coast, so it's good.
+	table.insert(self.reef_list, plotIndex);
+end
+
+function AssignStartingPlots:CanBeKrakatoa(x, y)
+	-- Checks a candidate plot for eligibility to be Krakatoa the volcano.
+	local plot = Map.GetPlot(x, y);
+	-- Check the center plot, which must be land surrounded on all sides by ocean. (edited for fantastical)
+	if plot:IsWater() then return end
+
+	for loop, direction in ipairs(self.direction_types) do
+		local adjPlot = Map.PlotDirection(x, y, direction)
+		if adjPlot:IsWater() == false then
+			return
+		end
+	end
+	
+	-- Surrounding tiles are all ocean water, not lake, and free of Feature Ice, so it's good.
+	local iW, iH = Map.GetGridSize();
+	local plotIndex = y * iW + x + 1;
+	table.insert(self.krakatoa_list, plotIndex);
 end
