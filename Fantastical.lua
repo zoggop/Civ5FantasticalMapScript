@@ -68,15 +68,15 @@ local oneOverOrder = {}
 local Space = {
 	-- CONFIGURATION: --
 	polygonCount = 140, -- how many polygons (map scale)
-	minkowskiOrder = 3,
+	minkowskiOrder = 3, -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	relaxations = 1, -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	liminalTolerance = 0.5, -- within this much, distances to other polygons are considered "equal"
 	oceanNumber = 2, -- how many large ocean basins
 	majorContinentNumber = 2, -- how many large continents, more or less
 	islandRatio = 0.1, -- what part of the continent polygons are taken up by 1-3 polygon continents
 	polarContinentChance = 3, -- out of ten chances
-	hillThreshold = 3, -- how much edginess + liminality makes a hill
-	hillChance = 6, -- how many possible mountains out of ten become a hill when expanding
+	hillThreshold = 5, -- how much edginess + liminality makes a hill
+	hillChance = 5, -- how many possible mountains out of ten become a hill when expanding
 	mountainThreshold = 7, -- how much edginess + liminality makes a mountain
 	mountainRatio = 0.04, -- how much of the land to be mountain tiles
 	coastalPolygonChance = 2, -- out of ten, how often do possible coastal polygons become coastal?
@@ -138,7 +138,7 @@ local Space = {
         self:PickOceans()
         self:FindAstronomyBasins()
         self:PickContinents()
-    	self:PickCoasts()
+    	-- self:PickCoasts()
     end,
     ComputePlots = function(self)
 		for pi, hex in pairs(self.hexes) do
@@ -168,11 +168,12 @@ local Space = {
 					--end
 				end
 			else
-				-- near ocean trench?
+				-- near other astrnomy basin?
 				for npi, yes in pairs(hex.edgeWith) do
 					local polygon = self.hexes[npi].polygon
-					if polygon.oceanIndex then
+					if polygon.astronomyIndex ~= hex.polygon.astronomyIndex then
 						hex.nearOceanTrench = true
+						break
 					end
 				end
 				if hex.nearOceanTrench then
@@ -254,20 +255,20 @@ local Space = {
 		]]--
 		-- testing ocean rifts
 		for i, hex in pairs(self.hexes) do
+			--[[
 			if hex.polygon.oceanIndex then
 				local plot = Map.GetPlotByIndex(hex.index-1)
 				if plot ~= nil then
 					plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
 				end
 			end
-			--[[
+			]]--
 			if hex.nearOceanTrench then
 				local plot = Map.GetPlotByIndex(hex.index-1)
 				if plot ~= nil then
 					plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
 				end
 			end
-			]]--
 		end
     	return self.featureTypes
     end,
@@ -537,7 +538,7 @@ local Space = {
 				end
 				local neighbor = polygon.neighbors[rn]
 				local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
-				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil and polarOkay then
+				if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil and neighbor.astronomyIndex == polygon.astronomyIndex and polarOkay then
 					neighbor.continentIndex = continentIndex
 					self.filledArea = self.filledArea + neighbor.area
 					filledContinentArea = filledContinentArea + neighbor.area
@@ -644,7 +645,7 @@ local Space = {
 					for n, npi in pairs(self:HexNeighbors(pi)) do
 						local nhex = self.hexes[npi]
 						if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
-							local thiscoast = makeCoast[npi] or nhex.coastAstroIndex
+							local thiscoast = nhex.coastAstroIndex
 							if thiscoast ~= nil then
 								if thiscoast == 0 then
 									nearcoast = nil
@@ -659,9 +660,14 @@ local Space = {
 							else
 								EchoDebug("nil coast astronomy")
 							end
+						elseif makeCoast[npi] then
+							if nearcoast ~= nil and makeCoast[npi] ~= nearcoast then
+								nearcoast = nil
+								break
+							end
 						end
 					end
-					if nearcoast and Map.Rand(dice, "expand coast?") == 0 then
+					if nearcoast then -- and Map.Rand(dice, "expand coast?") == 0 then
 						makeCoast[pi] = nearcoast
 					end
 				end
