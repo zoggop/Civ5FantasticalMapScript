@@ -29,7 +29,19 @@ end
 
 ------------------------------------------------------------------------------
 
+local mCeil = math.ceil
+local mFloor = math.floor
+local mMin = math.min
+local mMax = math.max
+local mAbs = math.abs
+local mSqrt = math.sqrt
+local tInsert = table.insert
+local tRemove = table.remove
+
+------------------------------------------------------------------------------
+
 local randomNumbers = 0
+
 local function mRandom(lower, upper)
 	local divide = false
 	if lower == nil then lower = 0 end
@@ -47,21 +59,10 @@ local function mRandom(lower, upper)
 	if divide then number = number / upper end
 	return number
 end
-local mCeil = math.ceil
-local mFloor = math.floor
-local mMin = math.min
-local mMax = math.max
-local mAbs = math.abs
-local mSqrt = math.sqrt
-local tInsert = table.insert
-local tRemove = table.remove
-
-------------------------------------------------------------------------------
 
 local function tRemoveRandom(fromTable)
 	return tRemove(fromTable, mRandom(1, #fromTable))
 end
-local oneOverOrder = {}
 
 ------------------------------------------------------------------------------
 
@@ -98,7 +99,6 @@ local Space = {
     plotTypes = {}, -- map generation result
     terrainTypes = {}, -- map generation result
     featureTypes = {}, -- map generation result
-    polygonType = {},
     mountainPlots = {},
     tinyIslandPlots = {},
     hillPlots = {},
