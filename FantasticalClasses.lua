@@ -200,6 +200,24 @@ function Hex:ClosestPolygon(relax)
 	return closest_polygon, liminality
 end
 
+function Hex:SetPlot()
+	local plot = Map.GetPlotByIndex(self.index-1)
+	if plot == nil then return end
+	plot:SetPlotType(hex.plotType)
+end
+
+function Hex:SetTerrain()
+	local plot = Map.GetPlotByIndex(self.index-1)
+	if plot == nil then return end
+	plot:SetTerrainType(hex.terrainType)
+end
+
+function Hex:SetFeature()
+	local plot = Map.GetPlotByIndex(self.index-1)
+	if plot == nil then return end
+	plot:SetFeatureType(hex.featureType)
+end
+
 ------------------------------------------------------------------------------
 
 Polygon = class(function(a)
@@ -229,6 +247,69 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 		neighbor:FloodFillAstronomy(astronomyIndex)
 	end
 	return true
+end
+
+function Polygon:SetNeighbor(polygon2)
+	self.isNeighbor[polygon2] = true
+	polygon2.isNeighbor[self] = true
+end
+
+function Polygon:RelaxToCentroid()
+	local space = self.space
+	if #self.hexes ~= 0 then
+		local totalX, totalY = 0, 0
+		for i, hex in pairs(self.hexes) do
+			local x, y = hex.x, hex.y
+			if space.wrapX then
+				local xdist = mAbs(x - self.minX)
+				if xdist > space.halfWidth then x = x - space.w end
+			end
+			if space.wrapY then
+				local ydist = mAbs(y - self.minY)
+				if ydist > space.halfHeight then y = y - space.h end
+			end
+			totalX = totalX + x
+			totalY = totalY + y
+		end
+		local centroidX = mCeil(totalX / #self.hexes)
+		if centroidX < 0 then centroidX = space.w + centroidX end
+		local centroidY = mCeil(totalY / #self.hexes)
+		if centroidY < 0 then centroidY = space.h + centroidY end
+		self.x, self.y = centroidX, centroidY
+	end
+	self.area = 0
+	self.minX, self.minY, maxX, maxY = space.w, space.h, 0, 0
+	self.hexes = {}
+end
+
+function Polygon:CheckBottomTop(x, y)
+	local space = self.space
+	if y == 0 and self.y < space.halfHeight then
+		self.bottomY = true
+		tInsert(space.bottomYPolygons, self)
+	end
+	if x == 0 and self.x < space.halfWidth then
+		self.bottomX = true
+		tInsert(space.bottomXPolygons, self)
+	end
+	if y == space.h and self.y >= space.halfHeight then
+		self.topY = true
+		tInsert(space.topYPolygons, self)
+	end
+	if x == space.w and self.x >= space.halfWidth then
+		self.topX = true
+		tInsert(space.topXPolygons, self)
+	end
+end
+
+function Polygon:NearOther(value, key)
+	if key == nil then key = "continentIndex" end
+	for ni, neighbor in pairs (self.neighbors) do
+		if neighbor[key] ~= nil and neighbor[key] ~= value then
+			return true
+		end
+	end
+	return false
 end
 
 ------------------------------------------------------------------------------
@@ -439,6 +520,24 @@ function Space:ComputeFeatures()
 		end
 	end
 	return self.featureTypes
+end
+
+function Space:SetPlots()
+	for i, hex in pairs(self.hexes) do
+		hex:SetPlot()
+	end
+end
+
+function Space:SetTerrains()
+	for i, hex in pairs(self.hexes) do
+		hex:SetTerrain()
+	end
+end
+
+function Space:SetFeatures()
+	for i, hex in pairs(self.hexes) do
+		hex:SetFeature()
+	end
 end
 
 
@@ -858,6 +957,7 @@ end
 
 ----------------------------------
 -- INTERNAL FUNCTIONS: --
+
 function Space:WrapDistance(x1, y1, x2, y2)
 	local xdist = mAbs(x1 - x2)
 	local ydist = mAbs(y1 - y2)
@@ -918,126 +1018,14 @@ function Space:Minkowski(x1, y1, x2, y2)
 	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
 end
 
-    NewPolygon = function(self, x, y)
-		return {
-			x = x or Map.Rand(self.iW, "random x"),
-			y = y or Map.Rand(self.iH, "random y"),
-			hexes = {},
-			isNeighbor = {},
-			area = 0,
-			minX = self.w, maxX = 0, minY = self.h, maxY = 0,
-		}
-	end,
-	SetNeighborPolygons = function(self, polygon1, polygon2)
-		polygon1.isNeighbor[polygon2] = true
-		polygon2.isNeighbor[polygon1] = true
-	end,
-	RelaxToCentroid = function(self, polygon)
-		if #polygon.hexes ~= 0 then
-			local totalX, totalY = 0, 0
-			for i, hex in pairs(polygon.hexes) do
-				local x, y = hex.x, hex.y
-				if self.wrapX then
-					local xdist = mAbs(x - polygon.minX)
-					if xdist > self.halfWidth then x = x - self.w end
-				end
-				if self.wrapY then
-					local ydist = mAbs(y - polygon.minY)
-					if ydist > self.halfHeight then y = y - self.h end
-				end
-				totalX = totalX + x
-				totalY = totalY + y
-			end
-			local centroidX = mCeil(totalX / #polygon.hexes)
-			if centroidX < 0 then centroidX = self.w + centroidX end
-			local centroidY = mCeil(totalY / #polygon.hexes)
-			if centroidY < 0 then centroidY = self.h + centroidY end
-			-- EchoDebug(polygon.x .. ", " .. polygon.y .. "  to  " .. centroidX .. ", " .. centroidY, polygon.index, #polygon.hexes)
-			polygon.x, polygon.y = centroidX, centroidY
-		end
-		polygon.area = 0
-		polygon.minX, polygon.minY, maxX, maxY = self.w, self.h, 0, 0
-		polygon.hexes = {}
-	end,
-	CheckBottomTop = function(self, polygon, x, y)
-		if y == 0 and polygon.y < self.halfHeight then
-			polygon.bottomY = true
-			tInsert(self.bottomYPolygons, polygon)
-		end
-		if x == 0 and polygon.x < self.halfWidth then
-			polygon.bottomX = true
-			tInsert(self.bottomXPolygons, polygon)
-		end
-		if y == self.h and polygon.y >= self.halfHeight then
-			polygon.topY = true
-			tInsert(self.topYPolygons, polygon)
-		end
-		if x == self.w and polygon.x >= self.halfWidth then
-			polygon.topX = true
-			tInsert(self.topXPolygons, polygon)
-		end
-	end,
-	NearOther = function(self, polygon, value, key)
-		if key == nil then key = "continentIndex" end
-		for ni, neighbor in pairs (polygon.neighbors) do
-			if neighbor[key] ~= nil and neighbor[key] ~= value then
-				return true
-			end
-		end
-		return false
-	end,
-	HexNeighbors = function(self, index, directions)
-		if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
-		local neighbors = {}
-		local thisX, thisY = self:GetXY(index)
-		for i, direction in pairs(directions) do
-			local x, y = self:HexMove(thisX, thisY, direction)
-			tInsert(neighbors, self:GetIndex(x, y))
-		end
-		return neighbors
-	end,
-	HexMove = function(self, x, y, direction)
-		if direction == 0 or direction == nil then return x, y end
-		local nx = x
-		local ny = y
-		local odd = y % 2
-		if direction == 1 then
-			nx = x - 1
-		elseif direction == 2 then
-			nx = x - 1 + odd
-			ny = y + 1
-		elseif direction == 3 then
-			nx = x + odd
-			ny = y + 1
-		elseif direction == 4 then
-			nx = x + 1
-		elseif direction == 5 then
-			nx = x + odd
-			ny = y - 1
-		elseif direction == 6 then
-			nx = x - 1 + odd
-			ny = y - 1
-		end
-		if self.wrapX then
-			if nx > self.w then nx = 0 elseif nx < 0 then nx = self.w end
-		else
-			if nx > self.w then nx = self.w elseif nx < 0 then nx = 0 end
-		end
-		if self.wrapY then
-			if ny > self.h then ny = 0 elseif ny < 0 then ny = self.h end
-		else
-			if ny > self.h then ny = self.h elseif ny < 0 then ny = 0 end
-		end
-		return nx, ny
-	end,
-	GetXY = function(self, index)
-		index = index - 1
-		return index % self.iW, mFloor(index / self.iW)
-	end,
-	GetIndex = function(self, x, y)
-		return (y * self.iW) + x + 1
-	end,
-}
+function Space:GetXY(index)
+	index = index - 1
+	return index % self.iW, mFloor(index / self.iW)
+end
+
+function Space:GetIndex(x, y)
+	return (y * self.iW) + x + 1
+end
 
 ------------------------------------------------------------------------------
 
@@ -1056,21 +1044,22 @@ function GetMapInitData(worldSize)
 end
 ]]--
 
+local space
+
 function GeneratePlotTypes()
     print("Setting Plot Types (Fantastical) ...")
-
-	Space:Create()
-    local plotTypes = Space:ComputePlots()
-    SetPlotTypes(plotTypes)
+    space = Space:Init()
+    space:Compute()
+    space:ComputePlots()
+    space:SetPlots()
     local args = { bExpandCoasts = false }
     -- GenerateCoasts(args)
-
 end
 
 function GenerateTerrain()
     print("Generating Terrain (Fantastical) ...")
-	local terrainTypes = Space:ComputeTerrain()
-	SetTerrainTypes(terrainTypes)
+    space:ComputeTerrain()
+	space:SetTerrains()
 end
 
 function SetTerrainTypes(terrainTypes)
@@ -1082,6 +1071,8 @@ function SetTerrainTypes(terrainTypes)
 end
 
 function AddFeatures()
+	space:ComputeFeatures()
+	space:SetFeatures()
 	-- Space:ComputeFeatures()
 	--[[
     print("Adding Features (using default implementation) ...")
