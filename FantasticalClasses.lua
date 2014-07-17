@@ -113,19 +113,31 @@ end
 
 ------------------------------------------------------------------------------
 
-Hex = class(function(a)
+Hex = class(function(a, space, x, y, index)
+	a.space = space
+	a.index = index
+	a.x, a.y = x, y
+	a.liminality = 0
+	a.edginess = 0
+	a.coastAstroIndex = 0
+	a.edgeWith = {}
 end)
 
-function Hex:Init(space, index, relax)
-	self.space = space
-	self.index = index
-	self.x = (index-1) % self.space.iW
-	self.y = mFloor( (index-1) / self.space.iW )
-	self.polygon, self.limiality = self:ClosestPolygon(relax)
-	self.liminality = 0
-	self.edginess = 0
-	self.coastAstroIndex = 0
-	self.edgeWith = {}
+function Hex:Place(relax)
+	self.polygon, self.liminality = self:ClosestPolygon(relax)
+	self.space.hexes[self.index] = self
+	tInsert(self.polygon.hexes, self)
+	self.polygon.area = self.polygon.area + 1
+	if self.x < self.polygon.minX then self.polygon.minX = self.x end
+	if self.y < self.polygon.minY then self.polygon.minY = self.y end
+	if self.x > self.polygon.maxX then self.polygon.maxX = self.x end
+	if self.y > self.polygon.maxY then self.polygon.maxY = self.y end
+	if not relax then
+		if self.liminality ~= 0 then
+			self.space.liminalTileCount = self.space.liminalTileCount + 1
+		end
+		self.polygon:CheckBottomTop(self.x, self.y)
+	end
 end
 
 function Hex:Adjacent(direction)
@@ -151,24 +163,26 @@ function Hex:Adjacent(direction)
 		nx = x - 1 + odd
 		ny = y - 1
 	end
-	if self.wrapX then
-		if nx > self.w then nx = 0 elseif nx < 0 then nx = self.w end
+	if self.space.wrapX then
+		if nx > self.space.w then nx = 0 elseif nx < 0 then nx = self.space.w end
 	else
-		if nx > self.w then nx = self.w elseif nx < 0 then nx = 0 end
+		if nx > self.space.w then nx = self.space.w elseif nx < 0 then nx = 0 end
 	end
-	if self.wrapY then
+	if self.space.wrapY then
 		if ny > self.space.h then ny = 0 elseif ny < 0 then ny = self.space.h end
 	else
 		if ny > self.space.h then ny = self.space.h elseif ny < 0 then ny = 0 end
 	end
-	return self.space:GetHexXY(nx, ny)
+	local nhex = self.space:GetHexByXY(nx, ny)
+	if nhex ~= self then return nhex end
 end
 
 function Hex:Neighbors(directions)
 	if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
 	local neighbors = {}
 	for i, direction in pairs(directions) do
-		tInsert(neighbors, self:Adjacent(direction))
+		local nhex = self:Adjacent(direction)
+		if nhex ~= nil then tInsert(neighbors, nhex) end
 	end
 	return neighbors
 end
@@ -180,7 +194,7 @@ function Hex:ClosestPolygon(relax)
 	-- find the closest point to this point
 	for i = 1, #self.space.polygons do
 		local polygon = self.space.polygons[i]
-		dists[i] = self:EucDistance(polygon.x, polygon.y, self.x, self.y)
+		dists[i] = self.space:EucDistance(polygon.x, polygon.y, self.x, self.y)
 		if i == 1 or dists[i] < closest_distance then
 			closest_distance = dists[i]
 			closest_polygon = polygon
@@ -203,37 +217,39 @@ end
 function Hex:SetPlot()
 	local plot = Map.GetPlotByIndex(self.index-1)
 	if plot == nil then return end
-	plot:SetPlotType(hex.plotType)
+	plot:SetPlotType(self.plotType)
 end
 
 function Hex:SetTerrain()
 	local plot = Map.GetPlotByIndex(self.index-1)
 	if plot == nil then return end
-	plot:SetTerrainType(hex.terrainType)
+	plot:SetTerrainType(self.terrainType)
 end
 
 function Hex:SetFeature()
+	if self.featureType == nil then return end
 	local plot = Map.GetPlotByIndex(self.index-1)
 	if plot == nil then return end
-	plot:SetFeatureType(hex.featureType)
+	plot:SetFeatureType(self.featureType)
 end
 
 ------------------------------------------------------------------------------
 
-Polygon = class(function(a)
+Polygon = class(function(a, space, x, y)
+	a.space = space
+	a.x = x or Map.Rand(space.iW, "random x")
+	a.y = y or Map.Rand(space.iH, "random y")
+	a.hexes = {}
+	a.isNeighbor = {}
+	a.area = 0
+	a.minX = space.w
+	a.maxX = 0
+	a.minY = space.h
+	a.maxY = 0
 end)
 
-function Polygon:Init(space, x, y)
-	self.space = space
-	self.x = x or Map.Rand(self.space.iW, "random x")
-	self.y = y or Map.Rand(self.space.iH, "random y")
-	self.hexes = {}
-	self.isNeighbor = {}
-	self.area = 0
-	self.minX = self.space.w
-	self.maxX = 0
-	self.minY = self.space.h
-	self.maxY = 0
+function Polygon:SetXY(x, y)
+
 end
 
 function Polygon:FloodFillAstronomy(astronomyIndex)
@@ -243,7 +259,7 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 	end
 	if self.astronomyIndex then return nil end
 	self.astronomyIndex = astronomyIndex
-	for i, neighbor in pairs(polygon.neighbors) do
+	for i, neighbor in pairs(self.neighbors) do
 		neighbor:FloodFillAstronomy(astronomyIndex)
 	end
 	return true
@@ -278,7 +294,7 @@ function Polygon:RelaxToCentroid()
 		self.x, self.y = centroidX, centroidY
 	end
 	self.area = 0
-	self.minX, self.minY, maxX, maxY = space.w, space.h, 0, 0
+	self.minX, self.minY, self.maxX, self.maxY = space.w, space.h, 0, 0
 	self.hexes = {}
 end
 
@@ -315,46 +331,43 @@ end
 ------------------------------------------------------------------------------
 
 Space = class(function(a)
-end)
-
-function Space:Init()
 	-- CONFIGURATION: --
-	polygonCount = 140 -- how many polygons (map scale)
-	minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
-	relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
-	oceanNumber = 2 -- how many large ocean basins
-	majorContinentNumber = 2 -- how many large continents, more or less
-	islandRatio = 0.1 -- what part of the continent polygons are taken up by 1-3 polygon continents
-	polarContinentChance = 3 -- out of ten chances
-	hillThreshold = 5 -- how much edginess + liminality makes a hill
-	hillChance = 5 -- how many possible mountains out of ten become a hill when expanding
-	mountainThreshold = 7 -- how much edginess + liminality makes a mountain
-	mountainRatio = 0.04 -- how much of the land to be mountain tiles
-	coastalPolygonChance = 2 -- out of ten, how often do possible coastal polygons become coastal?
-	tinyIslandChance = 5 -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
-	coastExpansionDice = {3, 4}
-	wrapX = true
-	wrapY = false
+	a.polygonCount = 140 -- how many polygons (map scale)
+	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
+	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	a.liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
+	a.oceanNumber = 2 -- how many large ocean basins
+	a.majorContinentNumber = 2 -- how many large continents, more or less
+	a.islandRatio = 0.1 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.polarContinentChance = 3 -- out of ten chances
+	a.hillThreshold = 5 -- how much edginess + liminality makes a hill
+	a.hillChance = 5 -- how many possible mountains out of ten become a hill when expanding
+	a.mountainThreshold = 7 -- how much edginess + liminality makes a mountain
+	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
+	a.coastalPolygonChance = 2 -- out of ten, how often do possible coastal polygons become coastal?
+	a.tinyIslandChance = 5 -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
+	a.coastExpansionDice = {3, 4}
+	a.wrapX = true
+	a.wrapY = false
 	----------------------------------
 	-- DEFINITIONS: --
-	oceans = {}
-	continents = {}
-	regions = {}
-	polygons = {}
-	bottomYPolygons = {}
-	bottomXPolygons = {}
-	topYPolygons = {}
-	topXPolygons = {}
-	hexes = {}
-    mountainPlots = {}
-    tinyIslandPlots = {}
-    hillPlots = {}
-    deepTiles = {}
-    maxLiminality = 0
-    liminalTileCount = 0
-    culledPolygons = 0
-end
+	a.oceans = {}
+	a.continents = {}
+	a.regions = {}
+	a.polygons = {}
+	a.bottomYPolygons = {}
+	a.bottomXPolygons = {}
+	a.topYPolygons = {}
+	a.topXPolygons = {}
+	a.hexes = {}
+    a.mountainPlots = {}
+    a.tinyIslandPlots = {}
+    a.hillPlots = {}
+    a.deepTiles = {}
+    a.maxLiminality = 0
+    a.liminalTileCount = 0
+    a.culledPolygons = 0
+end)
 
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
@@ -372,19 +385,27 @@ function Space:Compute()
 	self.inverseMinkowskiOrder = 1 / self.minkowskiOrder
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     self:InitPolygons()
+    EchoDebug("polygons initialized")
     if self.relaxations > 0 then
     	for i = 1, self.relaxations do
+    		EchoDebug("filling polygons pre-relaxation...")
         	self:FillPolygons(true)
     		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
         	self:RelaxPolygons()
         end
     end
     self:FillPolygons()
+    EchoDebug("culling polygons...")
     self:CullPolygons()
+    EchoDebug("computing polygon neighbors...")
     self:ComputePolygonNeighbors()
+    EchoDebug("post-processing polygons...")
     self:PostProcessPolygons()
+    EchoDebug("picking oceans...")
     self:PickOceans()
+    EchoDebug("finding astronomy basins...")
     self:FindAstronomyBasins()
+    EchoDebug("picking continents...")
     self:PickContinents()
 	-- self:PickCoasts()
 end
@@ -394,15 +415,14 @@ function Space:ComputePlots()
 		if hex.polygon.continentIndex == nil then
 			if hex.polygon.coastal then
 				local nearOcean = false
-				for npi, yes in pairs(hex.edgeWith) do
-					local polygon = self.hexes[npi].polygon
-					if not polygon.coastal then
+				for nhex, yes in pairs(hex.edgeWith) do
+					if not nhex.polygon.coastal then
 						nearOcean = true
 					end
 				end
 				if not nearOcean and Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
 					hex.plotType = PlotTypes.PLOT_LAND
-					tInsert(self.tinyIslandPlots, hex.index)
+					tInsert(self.tinyIslandPlots, hex)
 				else
 					hex.plotType = PlotTypes.PLOT_OCEAN
 				end
@@ -410,7 +430,7 @@ function Space:ComputePlots()
 				--[[
 				if Map.Rand(1500, "tiny ocean island chance") <= self.tinyIslandChance then
 					hex.plotType = PlotTypes.PLOT_LAND
-					tInsert(self.tinyIslandPlots, hex.index)
+					tInsert(self.tinyIslandPlots, hex)
 				else
 				]]--
 					hex.plotType = PlotTypes.PLOT_OCEAN
@@ -418,9 +438,8 @@ function Space:ComputePlots()
 			end
 		else
 			-- near other astrnomy basin?
-			for npi, yes in pairs(hex.edgeWith) do
-				local polygon = self.hexes[npi].polygon
-				if polygon.astronomyIndex ~= hex.polygon.astronomyIndex then
+			for nhex, yes in pairs(hex.edgeWith) do
+				if nhex.polygon.astronomyIndex ~= hex.polygon.astronomyIndex then
 					hex.nearOceanTrench = true
 					break
 				end
@@ -433,10 +452,10 @@ function Space:ComputePlots()
 					hex.plotType = PlotTypes.PLOT_LAND
 				elseif edgeLim < self.mountainThreshold and Map.Rand(10, "hill dice primary") < self.hillChance then
 					hex.plotType = PlotTypes.PLOT_HILLS
-					tInsert(self.hillPlots, hex.index)
+					tInsert(self.hillPlots, hex)
 				else
 					hex.plotType = PlotTypes.PLOT_MOUNTAIN
-					tInsert(self.mountainPlots, hex.index)
+					tInsert(self.mountainPlots, hex)
 				end
 			end
 		end
@@ -450,9 +469,8 @@ function Space:ComputeTerrain()
 		if hex.plotType == PlotTypes.PLOT_OCEAN then
 			local coast
 			-- near land?
-			for i, npi in pairs(self:HexNeighbors(hex.index)) do
-				if self.plotTypes[npi] ~= PlotTypes.PLOT_OCEAN then
-					local nhex = self.hexes[npi]
+			for i, nhex in pairs(hex:Neighbors()) do
+				if nhex.plotType ~= PlotTypes.PLOT_OCEAN then
 					if coast and coast ~= nhex.polygon.astronomyIndex then
 						coast = 0
 						EchoDebug("do not expand this coastal tile")
@@ -471,7 +489,7 @@ function Space:ComputeTerrain()
 					hex.coastAstroIndex = hex.polygon.astronomyIndex
 				else
 					hex.terrainType = GameInfoTypes["TERRAIN_OCEAN"]
-					tInsert(self.deepTiles, hex.index)
+					tInsert(self.deepTiles, hex)
 				end
 			end
 		elseif hex.plotType == PlotTypes.PLOT_LAND then
@@ -512,14 +530,12 @@ function Space:ComputeFeatures()
 			end
 		end
 		]]--
+		--[[
 		if hex.nearOceanTrench then
-			local plot = Map.GetPlotByIndex(hex.index-1)
-			if plot ~= nil then
-				plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
-			end
+			hex.featureType = FeatureTypes.FEATURE_ICE
 		end
+		]]--
 	end
-	return self.featureTypes
 end
 
 function Space:SetPlots()
@@ -546,8 +562,7 @@ end
 
 function Space:InitPolygons()
 	for i = 1, self.polygonCount do
-		local polygon = Polygon()
-		polygon:Init()
+		local polygon = Polygon(self)
 		tInsert(self.polygons, polygon)
 	end
 end
@@ -556,26 +571,8 @@ end
 function Space:FillPolygons(relax)
 	for x = 0, self.w do
 		for y = 0, self.h do
-			local polygon, liminality = self:ClosestPolygon(x, y, relax)
-			if polygon ~= nil then
-				local pi = self:GetIndex(x, y)
-				local hex = { polygon = polygon, liminality = liminality, edginess = 0, coastAstroIndex = 0, edgeWith = {}, index = pi, x = x, y = y }
-				self.hexes[pi] = hex
-				tInsert(polygon.hexes, hex)
-				polygon.area = polygon.area + 1
-				if x < polygon.minX then polygon.minX = x end
-				if y < polygon.minY then polygon.minY = y end
-				if x > polygon.maxX then polygon.maxX = x end
-				if y > polygon.maxY then polygon.maxY = y end
-				if not relax then
-					if liminality ~= 0 then
-						self.liminalTileCount = self.liminalTileCount + 1
-					end
-					self:CheckBottomTop(polygon, x, y)
-				end
-			else
-				EchoDebug("WARNING: NIL POLYGON")
-			end
+			local hex = Hex(self, x, y, self:GetIndex(x, y))
+			hex:Place(relax)
 		end
 	end
 	if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total liminal tiles") end
@@ -583,23 +580,16 @@ end
 
 function Space:ComputePolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
-		local pi = hex.index
-		local polygon = hex.polygon
-		for ni, nindex in pairs(self:HexNeighbors(pi)) do -- 3 and 4 are are never there yet
-			if nindex ~= pi then
-				local nhex = self.hexes[nindex]
-				if nhex ~= nil then
-					if nhex.polygon ~= polygon then
-						self:SetNeighborPolygons(polygon, nhex.polygon)
-						if not hex.edgeWith[nindex] then
-							hex.edginess = hex.edginess + 1
-							hex.edgeWith[nindex] = true
-						end
-						if not nhex.edgeWith[pi] then
-							nhex.edginess = nhex.edginess + 1
-							nhex.edgeWith[pi] =true
-						end
-					end
+		for ni, nhex in pairs(hex:Neighbors()) do -- 3 and 4 are are never there yet
+			if nhex.polygon ~= hex.polygon then
+				hex.polygon:SetNeighbor(nhex.polygon)
+				if not hex.edgeWith[nhex] then
+					hex.edginess = hex.edginess + 1
+					hex.edgeWith[nhex] = true
+				end
+				if not nhex.edgeWith[hex] then
+					nhex.edginess = nhex.edginess + 1
+					nhex.edgeWith[hex] = true
 				end
 			end
 		end
@@ -608,7 +598,7 @@ end
 
 function Space:RelaxPolygons()
 	for i, polygon in pairs(self.polygons) do
-		self:RelaxToCentroid(polygon)
+		polygon:RelaxToCentroid()
 	end
 end
 
@@ -676,7 +666,7 @@ function Space:PickOceansCylinder()
 			local upNeighbors = {}
 			local downNeighbors = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
-				if not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
+				if not neighbor:NearOther(oceanIndex, "oceanIndex") then
 					if not chosen[neighbor] then
 						if neighbor.maxY > polygon.maxY then
 							tInsert(upNeighbors, neighbor)
@@ -709,7 +699,7 @@ function Space:PickOceansCylinder()
 			--[[
 			-- makes oceans really wide
 			for i, neighbor in pairs(polygon.neighbors) do
-				if not chosen[neighbor] and not self:NearOther(neighbor, oceanIndex, "oceanIndex") then
+				if not chosen[neighbor] and not neighbor:NearOther(oceanIndex, "oceanIndex") then
 					chosen[neighbor] = true
 					neighbor.oceanIndex = oceanIndex
 					tInsert(ocean, neighbor)
@@ -788,7 +778,7 @@ function Space:PickContinents()
 		repeat
 			if #polygonBuffer == 1 then break end
 			polygon = tRemoveRandom(polygonBuffer)
-		until polygon.continentIndex == nil and not self:NearOther(polygon, nil) and not self:NearOther(polygon, nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
+		until polygon.continentIndex == nil and not polygon:NearOther(nil) and not polygon:NearOther(nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
 		polygon.continentIndex = continentIndex
 		self.filledArea = self.filledArea + polygon.area
 		filledPolygons = filledPolygons + 1
@@ -809,7 +799,7 @@ function Space:PickContinents()
 			end
 			local neighbor = polygon.neighbors[rn]
 			local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
-			if neighbor ~= nil and not self:NearOther(neighbor, continentIndex) and neighbor.oceanIndex == nil and neighbor.astronomyIndex == polygon.astronomyIndex and polarOkay then
+			if neighbor ~= nil and not neighbor:NearOther(continentIndex) and neighbor.oceanIndex == nil and neighbor.astronomyIndex == polygon.astronomyIndex and polarOkay then
 				neighbor.continentIndex = continentIndex
 				self.filledArea = self.filledArea + neighbor.area
 				filledContinentArea = filledContinentArea + neighbor.area
@@ -833,7 +823,7 @@ end
 function Space:PickCoasts()
 	self.coastalPolygonCount = 0
 	for i, polygon in pairs(self.polygons) do
-		if polygon.continentIndex == nil and not self:NearOther(polygon, polygon.astronomyIndex, "astronomyIndex") then
+		if polygon.continentIndex == nil and not polygon:NearOther(polygon.astronomyIndex, "astronomyIndex") then
 			if Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
@@ -847,25 +837,25 @@ function Space:ResizeMountains(perscribedArea)
 	if #self.mountainPlots == perscribedArea then return end
 	if #self.mountainPlots > perscribedArea then
 		repeat
-			local pi = tRemoveRandom(self.mountainPlots)
-			self.plotTypes[pi] = PlotTypes.PLOT_LAND
+			local hex = tRemoveRandom(self.mountainPlots)
+			hex.plotType = PlotTypes.PLOT_LAND
 		until #self.mountainPlots <= perscribedArea
 	elseif #self.mountainPlots < perscribedArea then
 		local noNeighbors = 0
 		repeat
-			local pi = self.mountainPlots[mRandom(1, #self.mountainPlots)]
-			local neighbors = self:HexNeighbors(pi)
-			local npi
+			local hex = self.mountainPlots[mRandom(1, #self.mountainPlots)]
+			local neighbors = hex:Neighbors()
+			local nhex
 			repeat
-				npi = tRemoveRandom(neighbors)
-			until self.plotTypes[npi] == PlotTypes.PLOT_LAND or #neighbors == 0
-			if npi ~= nil and self.plotTypes[npi] == PlotTypes.PLOT_LAND then
+				nhex = tRemoveRandom(neighbors)
+			until nhex.plotType == PlotTypes.PLOT_LAND or #neighbors == 0
+			if nhex ~= nil and nhex.plotType == PlotTypes.PLOT_LAND then
 				if Map.Rand(10, "hill dice") < self.hillChance then
-					self.plotTypes[npi] = PlotTypes.PLOT_HILLS
-					tInsert(self.hillPlots, npi)
+					nhex.plotType = PlotTypes.PLOT_HILLS
+					tInsert(self.hillPlots, nhex)
 				else
-					self.plotTypes[npi] = PlotTypes.PLOT_MOUNTAIN
-					tInsert(self.mountainPlots, npi)
+					nhex.plotType = PlotTypes.PLOT_MOUNTAIN
+					tInsert(self.mountainPlots, nhex)
 				end
 				noNeighbors = 0
 			else
@@ -887,26 +877,25 @@ function Space:ExpandTinyIslands()
 	local chance = mCeil(60 / self.tinyIslandChance)
 	local toExpand = {}
 	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
-	for i, pi in pairs(self.tinyIslandPlots) do
-		local neighbors = self:HexNeighbors(pi)
-		for i, npi in pairs(neighbors) do
-			if self.plotTypes[npi] == PlotTypes.PLOT_OCEAN then
+	for i, hex in pairs(self.tinyIslandPlots) do
+		for ni, nhex in pairs(hex:Neighbors()) do
+			if nhex.plotType == PlotTypes.PLOT_OCEAN then
 				local okay = true
-				for i, nnpi in pairs(self:HexNeighbors(npi)) do
-					if nnpi ~= pi and self.plotTypes[nnpi] ~= PlotTypes.PLOT_OCEAN then
+				for nni, nnhex in pairs(nhex:Neighbors()) do
+					if nnhex ~= hex and nnhex.plotType ~= PlotTypes.PLOT_OCEAN then
 						okay = false
 						break
 					end
 				end
 				if okay and Map.Rand(100, "tiny island expansion") < chance then
-					tInsert(toExpand, npi)
+					tInsert(toExpand, nhex)
 				end
 			end
 		end
 	end
-	for i, pi in pairs(toExpand) do
-		self.plotTypes[pi] = PlotTypes.PLOT_LAND
-		tInsert(self.tinyIslandPlots, pi)
+	for i, hex in pairs(toExpand) do
+		hex.plotType = PlotTypes.PLOT_LAND
+		tInsert(self.tinyIslandPlots, hex)
 	end
 	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
 end
@@ -914,13 +903,11 @@ end
 function Space:ExpandCoasts()
 	for d, dice in ipairs(self.coastExpansionDice) do
 		local makeCoast = {}
-		for i, pi in pairs(self.deepTiles) do
-			if self.terrainTypes[pi] == GameInfoTypes["TERRAIN_OCEAN"] then
-				local hex = self.hexes[pi]
+		for i, hex in pairs(self.deepTiles) do
+			if hex.terrainType == GameInfoTypes["TERRAIN_OCEAN"] then
 				local nearcoast
-				for n, npi in pairs(self:HexNeighbors(pi)) do
-					local nhex = self.hexes[npi]
-					if self.terrainTypes[npi] == GameInfoTypes["TERRAIN_COAST"] then
+				for n, nhex in pairs(hex:Neighbors()) do
+					if nhex.terrainType == GameInfoTypes["TERRAIN_COAST"] then
 						local thiscoast = nhex.coastAstroIndex
 						if thiscoast ~= nil then
 							if thiscoast == 0 then
@@ -936,21 +923,21 @@ function Space:ExpandCoasts()
 						else
 							EchoDebug("nil coast astronomy")
 						end
-					elseif makeCoast[npi] then
-						if nearcoast ~= nil and makeCoast[npi] ~= nearcoast then
+					elseif makeCoast[nhex] then
+						if nearcoast ~= nil and makeCoast[nhex] ~= nearcoast then
 							nearcoast = nil
 							break
 						end
 					end
 				end
 				if nearcoast then -- and Map.Rand(dice, "expand coast?") == 0 then
-					makeCoast[pi] = nearcoast
+					makeCoast[hex] = nearcoast
 				end
 			end
 		end
-		for pi, nearcoast in pairs(makeCoast) do
-			self.terrainTypes[pi] = GameInfoTypes["TERRAIN_COAST"]
-			self.hexes[pi].coastAstroIndex = nearcoast
+		for hex, nearcoast in pairs(makeCoast) do
+			hex.terrainType = GameInfoTypes["TERRAIN_COAST"]
+			hex.coastAstroIndex = nearcoast
 		end
 	end
 end
@@ -1018,12 +1005,18 @@ function Space:Minkowski(x1, y1, x2, y2)
 	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
 end
 
+function Space:GetHexByXY(x, y)
+	return self.hexes[self:GetIndex(x, y)]
+end
+
 function Space:GetXY(index)
+	if index == nil then return nil end
 	index = index - 1
 	return index % self.iW, mFloor(index / self.iW)
 end
 
 function Space:GetIndex(x, y)
+	if x == nil or y == nil then return nil end
 	return (y * self.iW) + x + 1
 end
 
@@ -1044,22 +1037,34 @@ function GetMapInitData(worldSize)
 end
 ]]--
 
-local space
+local mySpace
 
 function GeneratePlotTypes()
     print("Setting Plot Types (Fantastical) ...")
-    space = Space:Init()
-    space:Compute()
-    space:ComputePlots()
-    space:SetPlots()
-    local args = { bExpandCoasts = false }
+    mySpace = Space()
+    mySpace:Compute()
+    mySpace:ComputePlots()
+    mySpace:SetPlots()
+    -- local args = { bExpandCoasts = false }
     -- GenerateCoasts(args)
 end
 
 function GenerateTerrain()
     print("Generating Terrain (Fantastical) ...")
-    space:ComputeTerrain()
-	space:SetTerrains()
+    mySpace:ComputeTerrain()
+	mySpace:SetTerrains()
+end
+
+function AddFeatures()
+	mySpace:ComputeFeatures()
+	mySpace:SetFeatures()
+	-- Space:ComputeFeatures()
+	--[[
+    print("Adding Features (using default implementation) ...")
+    
+    local featuregen = FeatureGenerator.Create()
+    featuregen:AddFeatures()
+    ]]--
 end
 
 function SetTerrainTypes(terrainTypes)
@@ -1068,18 +1073,6 @@ function SetTerrainTypes(terrainTypes)
 		plot:SetTerrainType(terrainTypes[i+1], false, false)
 		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.
 	end
-end
-
-function AddFeatures()
-	space:ComputeFeatures()
-	space:SetFeatures()
-	-- Space:ComputeFeatures()
-	--[[
-    print("Adding Features (using default implementation) ...")
-    
-    local featuregen = FeatureGenerator.Create()
-    featuregen:AddFeatures()
-    ]]--
 end
 
 function AddLakes()
