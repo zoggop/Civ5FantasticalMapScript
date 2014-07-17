@@ -253,12 +253,16 @@ Polygon = class(function(a, space, x, y)
 end)
 
 function Polygon:FloodFillAstronomy(astronomyIndex)
-	if self.oceanIndex then
-		self.astronomyIndex = self.oceanIndex + 10
+	if self.oceanIndex or self.nearOcean then
+		self.astronomyIndex = (self.oceanIndex or 100) + 10
+		-- if self.space.astronomyBasins[self.astronomyIndex] == nil then self.space.astronomyBasins[self.astronomyIndex] = {} end
+		-- tInsert(self.space.astronomyBasins[self.astronomyIndex], self)
 		return nil
 	end
 	if self.astronomyIndex then return nil end
 	self.astronomyIndex = astronomyIndex
+	if self.space.astronomyBasins[astronomyIndex] == nil then self.space.astronomyBasins[astronomyIndex] = {} end
+	tInsert(self.space.astronomyBasins[astronomyIndex], self)
 	for i, neighbor in pairs(self.neighbors) do
 		neighbor:FloodFillAstronomy(astronomyIndex)
 	end
@@ -337,8 +341,8 @@ Space = class(function(a)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
 	a.oceanNumber = 2 -- how many large ocean basins
-	a.majorContinentNumber = 2 -- how many large continents, more or less
-	a.islandRatio = 0.1 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.pangaea = false -- one big continent (except for a few large islands)
+	a.islandRatio = 0.4 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
 	a.hillThreshold = 5 -- how much edginess + liminality makes a hill
 	a.hillChance = 5 -- how many possible mountains out of ten become a hill when expanding
@@ -349,7 +353,6 @@ Space = class(function(a)
 	a.coastDiceAmount = 2
 	a.coastDiceMin = 2
 	a.coastDiceMax = 8
-	a.coastExpansionDice = {3, 4}
 	a.coastAreaRatio = 0.25
 	a.wrapX = true
 	a.wrapY = false
@@ -408,6 +411,8 @@ function Space:Compute()
     self:PostProcessPolygons()
     EchoDebug("picking oceans...")
     self:PickOceans()
+    EchoDebug("flooding astronomy basins...")
+    self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
 	self:PickCoasts()
@@ -439,7 +444,7 @@ function Space:ComputePlots()
 			for nhex, yes in pairs(hex.edgeWith) do
 				if nhex.polygon.oceanIndex ~= nil then
 					hex.nearOceanTrench = true
-					if hex.polygon:NearOther(nil, "oceanIndex") then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
+					if hex.polygon.nearOcean then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
 					break
 				end
 			end
@@ -748,75 +753,95 @@ function Space:PickOceansDoughnut()
 end
 
 function Space:FindAstronomyBasins()
+	for i, polygon in pairs(self.polygons) do
+		if polygon.oceanIndex == nil and polygon:NearOther(nil, "oceanIndex") then
+			polygon.nearOcean = true
+		end
+	end
 	local astronomyIndex = 1
+	self.astronomyBasins = {}
 	for i, polygon in pairs(self.polygons) do
 		if polygon:FloodFillAstronomy(astronomyIndex) then
 			astronomyIndex = astronomyIndex + 1
+			EchoDebug("astronomy basin #" .. astronomyIndex-1 .. " has " .. #self.astronomyBasins[astronomyIndex-1] .. " polygons")
 		end
 	end
-	EchoDebug(astronomyIndex-1 .. " astronomy basins")
+	self.totalAstronomyBasins = astronomyIndex - 1
+	EchoDebug(self.totalAstronomyBasins .. " astronomy basins")
+end
+
+function Polygon:FloodFillContinent(continentIndex)
+
 end
 
 function Space:PickContinents()
-	local polygonBuffer = {}
-	for i, polygon in pairs(self.polygons) do
-		tInsert(polygonBuffer, polygon)
+	local polygonBuffers = {}
+	for astronomyIndex, basin in pairs(self.astronomyBasins) do
+		polygonBuffers[astronomyIndex] = {}
+		for i, polygon in pairs(basin) do
+			tInsert(polygonBuffers[astronomyIndex], polygon)
+		end
 	end
 	self.filledArea = 0
 	local filledPolygons = 0
 	local continentIndex = 1
-	local islandPolygons = mCeil(self.nonOceanPolygons * self.islandRatio)
-	local nonIslandPolygons = mMax(2, self.nonOceanPolygons - islandPolygons)
-	local continentSize = mCeil(nonIslandPolygons / self.majorContinentNumber)
-	EchoDebug(islandPolygons .. " island polygons", nonIslandPolygons .. " non-island polygons", continentSize .. " continent size in polygons")
-	while #polygonBuffer > 1 do
-		local polygon
-		repeat
-			polygon = tRemoveRandom(polygonBuffer)
-			if polygon.continentIndex == nil and not polygon:NearOther(nil) and polygon.oceanIndex == nil and not polygon:NearOther(nil, "oceanIndex") and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then
-				break
-			else
-				polygon = nil
+	for astronomyIndex, polygonBuffer in pairs(polygonBuffers) do
+		EchoDebug(astronomyIndex)
+		local islandPolygons = mCeil(#polygonBuffer * self.islandRatio)
+		local nonIslandPolygons = mMax(1, #polygonBuffer - islandPolygons)
+		EchoDebug(islandPolygons .. " island polygons", nonIslandPolygons .. " non-island polygons")
+		local filledPolygonsThisBasin = 0
+		while #polygonBuffer > 0 do
+			local size = nonIslandPolygons
+			if filledPolygonsThisBasin >= nonIslandPolygons then size = mRandom(1, 3) end
+			local polygon
+			repeat
+				polygon = tRemoveRandom(polygonBuffer)
+				if polygon.continentIndex == nil and (not polygon:NearOther(nil, "continentIndex") or (self.pangaea and size > 3)) and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then -- and polygon.oceanIndex == nil and not polygon.nearOcean
+					break
+				else
+					polygon = nil
+				end
+			until #polygonBuffer == 0
+			if polygon == nil then break end
+			polygon.continentIndex = continentIndex
+			self.filledArea = self.filledArea + polygon.area
+			filledPolygons = filledPolygons + 1
+			filledPolygonsThisBasin = filledPolygonsThisBasin + 1
+			local filledContinentArea = polygon.area
+			local continent = { polygons = { polygon }, index = continentIndex }
+			local n = 1
+			local iterations = 0
+			local lastRN
+			while n < size and iterations < #polygonBuffer * 2 do
+				local rn
+				if lastRN ~= nil then
+					rn = (lastRN + 1) % #polygon.neighbors
+					if rn == 0 then rn = 1 end
+				else
+					rn = mRandom(1, #polygon.neighbors)
+				end
+				local neighbor = polygon.neighbors[rn]
+				local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
+				if neighbor ~= nil and neighbor.continentIndex == nil and (not neighbor:NearOther(continentIndex, "continentIndex") or (self.pangaea and size > 3)) and polarOkay and neighbor.astronomyIndex < 10 then -- and neighbor.oceanIndex == nil and not neighbor.nearOcean then
+					neighbor.continentIndex = continentIndex
+					self.filledArea = self.filledArea + neighbor.area
+					filledContinentArea = filledContinentArea + neighbor.area
+					filledPolygons = filledPolygons + 1
+					filledPolygonsThisBasin = filledPolygonsThisBasin + 1
+					n = n + 1
+					tInsert(continent.polygons, neighbor)
+					polygon = neighbor
+					lastRN = nil
+				else
+					lastRN = rn
+				end
+				iterations = iterations + 1
 			end
-		until #polygonBuffer == 0
-		if polygon == nil then break end
-		polygon.continentIndex = continentIndex
-		self.filledArea = self.filledArea + polygon.area
-		filledPolygons = filledPolygons + 1
-		local size = continentSize
-		if filledPolygons >= nonIslandPolygons then size = mRandom(1, 3) end
-		local filledContinentArea = polygon.area
-		local continent = { polygons = { polygon }, index = continentIndex }
-		local n = 1
-		local iterations = 0
-		local lastRN
-		while n < size and iterations < #polygonBuffer do
-			local rn
-			if lastRN ~= nil then
-				rn = (lastRN + 1) % #polygon.neighbors
-				if rn == 0 then rn = 1 end
-			else
-				rn = mRandom(1, #polygon.neighbors)
-			end
-			local neighbor = polygon.neighbors[rn]
-			local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
-			if neighbor ~= nil and neighbor.continentIndex == nil and not neighbor:NearOther(continentIndex) and neighbor.oceanIndex == nil and not neighbor:NearOther(nil, "oceanIndex") and polarOkay then
-				neighbor.continentIndex = continentIndex
-				self.filledArea = self.filledArea + neighbor.area
-				filledContinentArea = filledContinentArea + neighbor.area
-				filledPolygons = filledPolygons + 1
-				n = n + 1
-				tInsert(continent.polygons, neighbor)
-				polygon = neighbor
-				lastRN = nil
-			else
-				lastRN = rn
-			end
-			iterations = iterations + 1
+			EchoDebug(n, size, iterations, filledContinentArea, #continent.polygons)
+			tInsert(self.continents, continent)
+			continentIndex = continentIndex + 1
 		end
-		EchoDebug(n, size, iterations, filledContinentArea)
-		tInsert(self.continents, continent)
-		continentIndex = continentIndex + 1
 	end
 	EchoDebug(continentIndex-1 .. " continents", filledPolygons .. " filled polygons", self.filledArea .. " filled hexes")
 end
