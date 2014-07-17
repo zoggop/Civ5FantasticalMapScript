@@ -1,13 +1,11 @@
-- tiny island generation and expansion should be based on perscribed amount (the same for any map size) and perscribed area (goes up with map area)
-- need better mountain generation
-	- either more like the old one, using edge tiles + add mountain regions
-	- or by finding particularly skinny voronoi
+- new region terrain algo, based on each region having temperature, rainfall, temperature deviation, rainfall deviation, hilliness, and dictionary size (this avoids having to include lengthy tile dictionaries)
 - put atolls in coastal polygons whose neighbors are a warm terrain region
-- add simplified fantasy region terrain/feature generation
 - add doughnut ocean algo
 
 
 DONE
+- mountain ranges by edge
+- improve control over continent size by keeping a backlog of polygon candidates to pick form when no neighbors available
 - fix neighbor issues by culling polygons with zero hexes
 - fix astronomy basin fill
 - constrain coasts to astronomy barriers (coasts can expand into oceans but not across oceans)

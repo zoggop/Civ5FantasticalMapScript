@@ -239,6 +239,7 @@ Polygon = class(function(a, space, x, y)
 	a.x = x or Map.Rand(space.iW, "random x")
 	a.y = y or Map.Rand(space.iH, "random y")
 	a.hexes = {}
+	a.edges = {}
 	a.isNeighbor = {}
 	a.area = 0
 	a.minX = space.w
@@ -272,6 +273,10 @@ end
 function Polygon:SetNeighbor(polygon2)
 	self.isNeighbor[polygon2] = true
 	polygon2.isNeighbor[self] = true
+end
+
+function Polygon:EdgeAddress(polygon2)
+	return self.x .. " " .. self.y .. " " .. polygon2.x .. " " .. polygon2.y
 end
 
 function Polygon:RelaxToCentroid()
@@ -345,10 +350,10 @@ Space = class(function(a)
 	a.pangaea = false -- one big continent (except for a few large islands)
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
-	a.hillThreshold = 5 -- how much edginess + liminality makes a hill
-	a.hillChance = 5 -- how many possible mountains out of ten become a hill when expanding
-	a.mountainThreshold = 7 -- how much edginess + liminality makes a mountain
+	a.hillChance = 4 -- how many possible mountains out of ten become a hill when expanding
+	a.mountainRangeMaxEdges = 5 -- how many polygon edges long can a mountain range be
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
+	a.mountainRangeMult = 1.4 -- higher mult means more scattered mountains
 	a.coastalPolygonChance = 2 -- out of ten, how often do possible coastal polygons become coastal?
 	a.tinyIslandChance = 5 -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
 	a.coastDiceAmount = 2
@@ -363,6 +368,8 @@ Space = class(function(a)
 	a.continents = {}
 	a.regions = {}
 	a.polygons = {}
+	a.edges = {}
+	a.mountainRanges = {}
 	a.bottomYPolygons = {}
 	a.bottomXPolygons = {}
 	a.topYPolygons = {}
@@ -416,6 +423,8 @@ function Space:Compute()
     self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
+    EchoDebug("picking mountain ranges...")
+    self:PickMountainRanges()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 end
@@ -454,15 +463,11 @@ function Space:ComputePlots()
 				EchoDebug("continent plot near ocean trench")
 				hex.plotType = PlotTypes.PLOT_OCEAN
 			else
-				local edgeLim = hex.liminality + hex.edginess
-				if edgeLim < self.hillThreshold then
-					hex.plotType = PlotTypes.PLOT_LAND
-				elseif edgeLim < self.mountainThreshold and Map.Rand(10, "hill dice primary") < self.hillChance then
-					hex.plotType = PlotTypes.PLOT_HILLS
-					tInsert(self.hillPlots, hex)
-				else
+				if hex.mountainRange then
 					hex.plotType = PlotTypes.PLOT_MOUNTAIN
 					tInsert(self.mountainPlots, hex)
+				else
+					hex.plotType = PlotTypes.PLOT_LAND
 				end
 			end
 		end
@@ -570,10 +575,20 @@ function Space:ComputePolygonNeighbors()
 					hex.edginess = hex.edginess + 1
 					hex.edgeWith[nhex] = true
 				end
+				if hex.polygon.edges[nhex.polygon] then
+					tInsert(hex.polygon.edges[nhex.polygon].hexes, hex)
+				else
+					local edge = { polygons = { hex.polygon, nhex.polygon }, hexes = { hex } }
+					hex.polygon.edges[nhex.polygon] = edge
+					nhex.polygon.edges[hex.polygon] = edge
+					tInsert(self.edges, edge)
+				end
+				--[[
 				if not nhex.edgeWith[hex] then
 					nhex.edginess = nhex.edginess + 1
 					nhex.edgeWith[hex] = true
 				end
+				]]--
 			end
 		end
 	end
@@ -837,6 +852,54 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		EchoDebug(size, #continent.polygons, filledContinentArea)
 		tInsert(self.continents, continent)
 		continentIndex = continentIndex + 1
+	end
+end
+
+function Space:PickMountainRanges()
+	local edgeBuffer = {}
+	for i, edge in pairs(self.edges) do
+		tInsert(edgeBuffer, edge)
+	end
+	local mountainRangeRatio = self.mountainRatio * self.mountainRangeMult
+	local prescribedEdges = mountainRangeRatio * #self.edges
+	EchoDebug("prescribed mountain range edges: " .. prescribedEdges .. " of " .. #self.edges)
+	local edgeCount = 0
+	while #edgeBuffer > 0 and edgeCount < prescribedEdges do
+		local edge
+		repeat
+			edge = tRemoveRandom(edgeBuffer)
+			if (edge.polygons[1].continentIndex or edge.polygons[2].continentIndex) and not edge.mountains then
+				break
+			else
+				edge = nil
+			end
+		until #edgeBuffer == 0
+		if edge == nil then break end
+		edge.mountains = true
+		local range = { edge }
+		edgeCount = edgeCount + 1
+		repeat
+			local nextPolygon = edge.polygons[mRandom(1, 2)]
+			local nextEdges = {}
+			for neighborPolygon, nextEdge in pairs(nextPolygon.edges) do
+				if (nextEdge.polygons[1].continentIndex or nextEdge.polygons[2].continentIndex) and not nextEdge.mountains then
+					tInsert(nextEdges, nextEdge)
+				end
+			end
+			if #nextEdges == 0 then break end
+			local nextEdge = nextEdges[mRandom(1, #nextEdges)]
+			nextEdge.mountains = true
+			tInsert(range, nextEdge)
+			edgeCount = edgeCount + 1
+			edge = nextEdge
+		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges
+		EchoDebug(#range)
+		for i, e in pairs(range) do
+			for hi, hex in pairs(e.hexes) do
+				hex.mountainRange = true
+			end
+		end
+		tInsert(self.mountainRanges, range)
 	end
 end
 
