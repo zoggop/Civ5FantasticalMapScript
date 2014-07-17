@@ -119,7 +119,6 @@ Hex = class(function(a, space, x, y, index)
 	a.x, a.y = x, y
 	a.liminality = 0
 	a.edginess = 0
-	a.coastAstroIndex = 0
 	a.edgeWith = {}
 end)
 
@@ -246,11 +245,12 @@ Polygon = class(function(a, space, x, y)
 	a.maxX = 0
 	a.minY = space.h
 	a.maxY = 0
+	-- randomize coastal expansion dice a bit
+	a.coastExpansionDice = {}
+	for i = 1, space.coastDiceAmount do
+		tInsert(a.coastExpansionDice, mRandom(space.coastDiceMin, space.coastDiceMax))
+	end
 end)
-
-function Polygon:SetXY(x, y)
-
-end
 
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex then
@@ -346,7 +346,11 @@ Space = class(function(a)
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.coastalPolygonChance = 2 -- out of ten, how often do possible coastal polygons become coastal?
 	a.tinyIslandChance = 5 -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
+	a.coastDiceAmount = 2
+	a.coastDiceMin = 2
+	a.coastDiceMax = 8
 	a.coastExpansionDice = {3, 4}
+	a.coastAreaRatio = 0.25
 	a.wrapX = true
 	a.wrapY = false
 	----------------------------------
@@ -372,6 +376,7 @@ end)
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
+    self.coastalMod = math.floor(math.sqrt(self.iA) / 30)
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
     self.h = self.iH - 1
@@ -403,11 +408,9 @@ function Space:Compute()
     self:PostProcessPolygons()
     EchoDebug("picking oceans...")
     self:PickOceans()
-    EchoDebug("finding astronomy basins...")
-    self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
-	-- self:PickCoasts()
+	self:PickCoasts()
 end
 
 function Space:ComputePlots()
@@ -416,35 +419,32 @@ function Space:ComputePlots()
 			if hex.polygon.coastal then
 				local nearOcean = false
 				for nhex, yes in pairs(hex.edgeWith) do
-					if not nhex.polygon.coastal then
-						nearOcean = true
+					if nhex.polygon.oceanIndex or nhex.polygon.continentIndex then
+						hex.tooCloseForIsland = true
+						break
 					end
 				end
-				if not nearOcean and Map.Rand(100, "tiny island chance") <= self.tinyIslandChance then
+				if not hex.tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= self.tinyIslandChance or (hex.polygon.loneCoastal and not hex.polygon.hasTinyIslands)) then
 					hex.plotType = PlotTypes.PLOT_LAND
 					tInsert(self.tinyIslandPlots, hex)
+					hex.polygon.hasTinyIslands = true
 				else
 					hex.plotType = PlotTypes.PLOT_OCEAN
 				end
 			else
-				--[[
-				if Map.Rand(1500, "tiny ocean island chance") <= self.tinyIslandChance then
-					hex.plotType = PlotTypes.PLOT_LAND
-					tInsert(self.tinyIslandPlots, hex)
-				else
-				]]--
-					hex.plotType = PlotTypes.PLOT_OCEAN
-				--end
+				hex.plotType = PlotTypes.PLOT_OCEAN
 			end
 		else
-			-- near other astrnomy basin?
+			-- near ocean trench?
 			for nhex, yes in pairs(hex.edgeWith) do
-				if nhex.polygon.astronomyIndex ~= hex.polygon.astronomyIndex then
+				if nhex.polygon.oceanIndex ~= nil then
 					hex.nearOceanTrench = true
+					if hex.polygon:NearOther(nil, "oceanIndex") then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
 					break
 				end
 			end
 			if hex.nearOceanTrench then
+				EchoDebug("continent plot near ocean trench")
 				hex.plotType = PlotTypes.PLOT_OCEAN
 			else
 				local edgeLim = hex.liminality + hex.edginess
@@ -467,26 +467,19 @@ end
 function Space:ComputeTerrain()
 	for pi, hex in pairs(self.hexes) do
 		if hex.plotType == PlotTypes.PLOT_OCEAN then
-			local coast
 			-- near land?
 			for i, nhex in pairs(hex:Neighbors()) do
 				if nhex.plotType ~= PlotTypes.PLOT_OCEAN then
-					if coast and coast ~= nhex.polygon.astronomyIndex then
-						coast = 0
-						EchoDebug("do not expand this coastal tile")
-						break
-					end
-					coast = nhex.polygon.astronomyIndex
+					hex.nearLand = true
 				end
 			end
-			if hex.nearOceanTrench then coast = 0 end
-			if coast then
+			if hex.nearLand then
 				hex.terrainType = GameInfoTypes["TERRAIN_COAST"]
-				hex.coastAstroIndex = coast
+				self.coastArea = self.coastArea + 1
 			else
 				if hex.polygon.coastal then
 					hex.terrainType = GameInfoTypes["TERRAIN_COAST"]
-					hex.coastAstroIndex = hex.polygon.astronomyIndex
+					self.coastalPolygonArea = self.coastalPolygonArea + 1
 				else
 					hex.terrainType = GameInfoTypes["TERRAIN_OCEAN"]
 					tInsert(self.deepTiles, hex)
@@ -522,19 +515,22 @@ function Space:ComputeFeatures()
 	]]--
 	-- testing ocean rifts
 	for i, hex in pairs(self.hexes) do
-		--[[
 		if hex.polygon.oceanIndex then
-			local plot = Map.GetPlotByIndex(hex.index-1)
-			if plot ~= nil then
-				plot:SetFeatureType(FeatureTypes.FEATURE_ICE)
+			if hex.terrainType == GameInfoTypes["TERRAIN_OCEAN"] then
+				-- hex.featureType = FeatureTypes.FEATURE_ICE
+			elseif hex.polygon.continentIndex then
+				hex.featureType = FeatureTypes.FEATURE_ICE
+			else
+				hex.featureType = FeatureTypes.FEATURE_JUNGLE
+				for i, nhex in pairs(hex:Neighbors()) do
+					if nhex.plotType ~= PlotTypes.PLOT_OCEAN then
+						EchoDebug("non ocean plot type: " .. nhex.plotType, nhex.tinyIsland)
+					end
+				end
+				EchoDebug(hex.plotType, hex.nearLand)
 			end
 		end
-		]]--
-		--[[
-		if hex.nearOceanTrench then
-			hex.featureType = FeatureTypes.FEATURE_ICE
-		end
-		]]--
+		-- if hex.nearOceanTrench then hex.featureType = FeatureTypes.FEATURE_ICE end
 	end
 end
 
@@ -776,9 +772,14 @@ function Space:PickContinents()
 	while #polygonBuffer > 1 do
 		local polygon
 		repeat
-			if #polygonBuffer == 1 then break end
 			polygon = tRemoveRandom(polygonBuffer)
-		until polygon.continentIndex == nil and not polygon:NearOther(nil) and not polygon:NearOther(nil, "oceanIndex") and polygon.oceanIndex == nil and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX))
+			if polygon.continentIndex == nil and not polygon:NearOther(nil) and polygon.oceanIndex == nil and not polygon:NearOther(nil, "oceanIndex") and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then
+				break
+			else
+				polygon = nil
+			end
+		until #polygonBuffer == 0
+		if polygon == nil then break end
 		polygon.continentIndex = continentIndex
 		self.filledArea = self.filledArea + polygon.area
 		filledPolygons = filledPolygons + 1
@@ -799,7 +800,7 @@ function Space:PickContinents()
 			end
 			local neighbor = polygon.neighbors[rn]
 			local polarOkay = neighbor == nil or self.polarContinentChance >= 10 or self.wrapY or not self.wrapX or (not neighbor.topY and not neighbor.bottomY) or Map.Rand(10, "polar continent chance") < self.polarContinentChance
-			if neighbor ~= nil and not neighbor:NearOther(continentIndex) and neighbor.oceanIndex == nil and neighbor.astronomyIndex == polygon.astronomyIndex and polarOkay then
+			if neighbor ~= nil and neighbor.continentIndex == nil and not neighbor:NearOther(continentIndex) and neighbor.oceanIndex == nil and not neighbor:NearOther(nil, "oceanIndex") and polarOkay then
 				neighbor.continentIndex = continentIndex
 				self.filledArea = self.filledArea + neighbor.area
 				filledContinentArea = filledContinentArea + neighbor.area
@@ -821,26 +822,32 @@ function Space:PickContinents()
 end
 
 function Space:PickCoasts()
+	self.waterArea = self.nonOceanArea - self.filledArea
+	self.prescribedCoastArea = self.waterArea * self.coastAreaRatio
+	EchoDebug(self.prescribedCoastArea .. " coastal tiles prescribed of " .. self.waterArea .. " total water tiles")
+	self.coastArea = 0
+	self.coastalPolygonArea = 0
 	self.coastalPolygonCount = 0
 	for i, polygon in pairs(self.polygons) do
-		if polygon.continentIndex == nil and not polygon:NearOther(polygon.astronomyIndex, "astronomyIndex") then
+		if polygon.continentIndex == nil and polygon.oceanIndex == nil then
 			if Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
+				if not polygon:NearOther(nil, "continentIndex") then polygon.loneCoastal = true end
 			end
 		end
 	end
 	EchoDebug(self.coastalPolygonCount .. " coastal polygons")
 end
 
-function Space:ResizeMountains(perscribedArea)
-	if #self.mountainPlots == perscribedArea then return end
-	if #self.mountainPlots > perscribedArea then
+function Space:ResizeMountains(prescribedArea)
+	if #self.mountainPlots == prescribedArea then return end
+	if #self.mountainPlots > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainPlots)
 			hex.plotType = PlotTypes.PLOT_LAND
-		until #self.mountainPlots <= perscribedArea
-	elseif #self.mountainPlots < perscribedArea then
+		until #self.mountainPlots <= prescribedArea
+	elseif #self.mountainPlots < prescribedArea then
 		local noNeighbors = 0
 		repeat
 			local hex = self.mountainPlots[mRandom(1, #self.mountainPlots)]
@@ -861,7 +868,7 @@ function Space:ResizeMountains(perscribedArea)
 			else
 				noNeighbors = noNeighbors + 1
 			end
-		until #self.mountainPlots >= perscribedArea or noNeighbors > 20
+		until #self.mountainPlots >= prescribedArea or noNeighbors > 20
 	end
 end
 
@@ -879,10 +886,10 @@ function Space:ExpandTinyIslands()
 	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
 	for i, hex in pairs(self.tinyIslandPlots) do
 		for ni, nhex in pairs(hex:Neighbors()) do
-			if nhex.plotType == PlotTypes.PLOT_OCEAN then
+			if nhex.plotType == PlotTypes.PLOT_OCEAN and not nhex.polygon.oceanIndex and not nhex.polygon.continentIndex then
 				local okay = true
 				for nni, nnhex in pairs(nhex:Neighbors()) do
-					if nnhex ~= hex and nnhex.plotType ~= PlotTypes.PLOT_OCEAN then
+					if nnhex ~= hex and (nnhex.polygon.oceanIndex or nnhex.polygon.continentIndex) then
 						okay = false
 						break
 					end
@@ -895,51 +902,44 @@ function Space:ExpandTinyIslands()
 	end
 	for i, hex in pairs(toExpand) do
 		hex.plotType = PlotTypes.PLOT_LAND
+		hex.tinyIsland = true
 		tInsert(self.tinyIslandPlots, hex)
 	end
 	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
 end
 
 function Space:ExpandCoasts()
-	for d, dice in ipairs(self.coastExpansionDice) do
+	EchoDebug(self.coastArea .. " coastal hexes before expansion")
+	local d = 1
+	repeat 
 		local makeCoast = {}
+		local potential = 0
 		for i, hex in pairs(self.deepTiles) do
-			if hex.terrainType == GameInfoTypes["TERRAIN_OCEAN"] then
+			if hex.plotType == PlotTypes.PLOT_OCEAN and hex.terrainType == GameInfoTypes["TERRAIN_OCEAN"] and hex.polygon.oceanIndex == nil then
 				local nearcoast
 				for n, nhex in pairs(hex:Neighbors()) do
 					if nhex.terrainType == GameInfoTypes["TERRAIN_COAST"] then
-						local thiscoast = nhex.coastAstroIndex
-						if thiscoast ~= nil then
-							if thiscoast == 0 then
-								nearcoast = nil
-								break
-							end
-							if nearcoast == nil then
-								nearcoast = thiscoast
-							elseif thiscoast ~= nearcoast then
-								nearcoast = nil
-								break
-							end
-						else
-							EchoDebug("nil coast astronomy")
-						end
-					elseif makeCoast[nhex] then
-						if nearcoast ~= nil and makeCoast[nhex] ~= nearcoast then
-							nearcoast = nil
-							break
-						end
+						nearcoast = true
+						break
 					end
 				end
-				if nearcoast then -- and Map.Rand(dice, "expand coast?") == 0 then
-					makeCoast[hex] = nearcoast
+				if nearcoast then
+					potential = potential + 1
+					if Map.Rand(hex.polygon.coastExpansionDice[d], "expand coast?") == 0 then
+						makeCoast[hex] = nearcoast
+					end
 				end
 			end
 		end
 		for hex, nearcoast in pairs(makeCoast) do
 			hex.terrainType = GameInfoTypes["TERRAIN_COAST"]
-			hex.coastAstroIndex = nearcoast
+			hex.expandedCoast = true
+			self.coastArea = self.coastArea + 1
 		end
-	end
+		d = d + 1
+		if d > self.coastDiceAmount then d = 1 end
+	until self.coastArea >= self.prescribedCoastArea or potential == 0
+	EchoDebug(self.coastArea .. " coastal hexes after expansion")
 end
 
 ----------------------------------
