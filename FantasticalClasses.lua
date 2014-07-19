@@ -157,12 +157,12 @@ local function SetConstants()
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
 	TerrainDictionary = {
-		[terrainGrass] = { terrainType = terrainGrass, temperature = 55, rainfall = 60, features = { featureNone, featureForest, featureMarsh, featureFallout } },
-		[terrainPlains] = { terrainType = terrainPlains, temperature = 45, rainfall = 40, features = { featureNone, featureForest, featureFallout } },
+		[terrainGrass] = { terrainType = terrainGrass, temperature = 55, rainfall = 141, features = { featureNone, featureForest, featureMarsh, featureFallout } },
+		[terrainPlains] = { terrainType = terrainPlains, temperature = 45, rainfall = 131, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { terrainType = terrainDesert, temperature = 131, rainfall = 0, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { terrainType = terrainTundra, temperature = 10, rainfall = 111, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { terrainType = terrainSnow, temperature = -10, rainfall = 121, features = { featureNone, featureFallout } },
-		[99] = { terrainType = terrainPlains, temperature = 100, rainfall = 100, features = { featureJungle, featureFallout } },
+		[terrainTundra] = { terrainType = terrainTundra, temperature = 10, rainfall = 121, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { terrainType = terrainSnow, temperature = -9, rainfall = 121, features = { featureNone, featureFallout } },
+		[99] = { terrainType = terrainPlains, temperature = 99, rainfall = 99, features = { featureJungle, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection
@@ -170,8 +170,8 @@ local function SetConstants()
 
 	FeatureDictionary = {
 		[featureNone] = { featureType = featureNone, temperature = 101, rainfall = 101, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { featureType = featureForest, temperature = 121, rainfall = 170, percent = 100, limitRatio = -1, hill = true },
-		[featureJungle] = { featureType = featureJungle, temperature = 100, rainfall = 100, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { featureType = featureForest, temperature = 50, rainfall = 175, percent = 65, limitRatio = -1, hill = true },
+		[featureJungle] = { featureType = featureJungle, temperature = 99, rainfall = 99, percent = 100, limitRatio = -1, hill = true },
 		[featureMarsh] = { featureType = featureMarsh, temperature = 50, rainfall = 90, percent = 40, limitRatio = 0.5, hill = false },
 		[featureOasis] = { featureType = featureOasis, temperature = 75, rainfall = 101, percent = 25, limitRatio = 0.03, hill = false },
 		[featureFallout] = { featureType = featureFallout, temperature = 101, rainfall = 101, percent = 10, limitRatio = -1, hill = true },
@@ -447,14 +447,13 @@ function Region:CreateCollection()
 end
 
 function Region:TemperatureRainfallDistance(thing, temperature, rainfall)
-	local tdist = mAbs(thing.temperature - temperature)
+	local tdist = mAbs( (mAbs(thing.temperature) % 100) - temperature )
 	if thing.temperature < 0 and temperature <= -thing.temperature then tdist = 0 end
 	if thing.temperature > 100 and temperature >= thing.temperature - 100 then tdist = 0 end
-	local rdist = mAbs(thing.rainfall - rainfall)
+	local rdist = mAbs( (mAbs(thing.rainfall) % 100) - rainfall )
 	if thing.rainfall < 0 and rainfall <= -thing.rainfall then rdist = 0 end
 	if thing.rainfall > 100 and rainfall >= thing.rainfall - 100 then rdist = 0 end
-	local dist = tdist + rdist
-	return dist
+	return tdist + rdist
 end
 
 function Region:CreateElement()
@@ -463,7 +462,7 @@ function Region:CreateElement()
 	local mountain = mRandom(1, 100) < self.mountainousness
 	local lake = mRandom(1, 100) < self.lakeyness
 	local hill = mRandom(1, 100) < self.hillyness
-	local bestDist = 100
+	local bestDist = 200
 	local bestTerrain
 	for i, terrain in pairs(TerrainDictionary) do
 		local dist = self:TemperatureRainfallDistance(terrain, temperature, rainfall)
@@ -472,7 +471,7 @@ function Region:CreateElement()
 			bestTerrain = terrain
 		end
 	end
-	bestDist = 100
+	bestDist = 200
 	local bestFeature
 	for i, featureType in pairs(bestTerrain.features) do
 		if featureType ~= featureNone and (featureType ~= featureFallout or self.space.falloutEnabled) then
