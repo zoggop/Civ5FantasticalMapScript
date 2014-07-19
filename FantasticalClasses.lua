@@ -156,22 +156,22 @@ local function SetConstants()
 	featureAtoll = FeatureTypes.FEATURE_ATOLL
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
-	FeatureDictionary = {
-		[featureNone] = { featureType = featureNone, temperature = 50, rainfall = 25, percent = 50, hill = true },
-		[featureForest] = { featureType = featureForest, temperature = 50, rainfall = 70, percent = 50, hill = true },
-		[featureJungle] = { featureType = featureJungle, temperature = 100, rainfall = 100, percent = 50, hill = true },
-		[featureMarsh] = { featureType = featureMarsh, temperature = 50, rainfall = 90, percent = 8, hill = false },
-		[featureOasis] = { featureType = featureOasis, temperature = 50, rainfall = 75, percent = 8, hill = false },
-		[featureFallout] = { featureType = featureFallout, temperature = 50, rainfall = 50, percent = 1, hill = true },
-	}
-
 	TerrainDictionary = {
 		[terrainGrass] = { terrainType = terrainGrass, temperature = 50, rainfall = 60, features = { featureNone, featureForest, featureMarsh, featureFallout } },
-		[terrainPlains] = { terrainType = terrainPlains, temperature = 60, rainfall = 40, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { terrainType = terrainDesert, temperature = 50, rainfall = 10, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { terrainType = terrainTundra, temperature = 20, rainfall = 20, features = { featureNone, featureForest, featureFallout } },
+		[terrainPlains] = { terrainType = terrainPlains, temperature = 55, rainfall = 40, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { terrainType = terrainDesert, temperature = 50, rainfall = 0, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { terrainType = terrainTundra, temperature = 20, rainfall = 25, features = { featureNone, featureForest, featureFallout } },
 		[terrainSnow] = { terrainType = terrainSnow, temperature = 0, rainfall = 50, features = { featureNone, featureFallout } },
 		[99] = { terrainType = terrainPlains, temperature = 100, rainfall = 100, features = { featureJungle, featureFallout } },
+	}
+
+	FeatureDictionary = {
+		[featureNone] = { featureType = featureNone, temperature = 50, rainfall = 25, percent = 100, hill = true },
+		[featureForest] = { featureType = featureForest, temperature = 50, rainfall = 80, percent = 100, hill = true },
+		[featureJungle] = { featureType = featureJungle, temperature = 100, rainfall = 100, percent = 100, hill = true },
+		[featureMarsh] = { featureType = featureMarsh, temperature = 50, rainfall = 90, percent = 30, hill = false },
+		[featureOasis] = { featureType = featureOasis, temperature = 50, rainfall = 75, percent = 20, hill = false },
+		[featureFallout] = { featureType = featureFallout, temperature = 50, rainfall = 50, percent = 10, hill = true },
 	}
 end
 
@@ -197,7 +197,7 @@ function Hex:Place(relax)
 	if self.y > self.polygon.maxY then self.polygon.maxY = self.y end
 	if not relax then
 		if self.liminality ~= 0 then
-			self.space.liminalTileCount = self.space.liminalTileCount + 1
+			self.space.liminalHexCount = self.space.liminalHexCount + 1
 		end
 		self.polygon:CheckBottomTop(self.x, self.y)
 	end
@@ -405,22 +405,28 @@ end
 
 Region = class(function(a, space, latitude)
 	a.space = space
-	tempA, tempB = space:GetTemperature(latitude), space:GetTemperature(latitude)
+	tempA, tempB = space:GetTemperature(latitude)
 	if tempA > tempB then
 		a.temperatureMin, a.temperatureMax = tempB, tempA
 	else
 		a.temperatureMin, a.temperatureMax = tempA, tempB
 	end
-	rainA, rainB = space:GetRainfall(latitude), space:GetRainfall(latitude)
+	rainA, rainB = space:GetRainfall(latitude)
 	if rainA > rainB then
 		a.rainfallMin, a.rainfallMax = rainB, rainA
 	else
 		a.rainfallMin, a.rainfallMax = rainA, rainB
 	end
 	a.hillyness = space:GetHillyness()
+	a.mountainous = mRandom(1, 100) < space.mountainousRegionPercent
+	a.mountainousness = 0
+	if a.mountainous then a.mountainousness = mRandom(33, 67) end
 	EchoDebug(a.temperatureMin, a.temperatureMax, a.rainfallMin, a.rainfallMax, a.hillyness)
 	a.collection = {}
 	a.polygons = {}
+	a.area = 0
+	a.hillCount = 0
+	a.mountainCount = 0
 end)
 
 function Region:CreateCollection()
@@ -433,13 +439,13 @@ function Region:CreateElement()
 	local temperature = mRandom(self.temperatureMin, self.temperatureMax)
 	local rainfall = mRandom(self.rainfallMin, self.rainfallMax)
 	local hill = mRandom(1, 100) < self.hillyness
+	local mountain = mRandom(1, 100) < self.mountainousness
 	local bestDist = 100
 	local bestTerrain
 	for i, terrain in pairs(TerrainDictionary) do
 		local tdist = mAbs(terrain.temperature - temperature)
 		local rdist = mAbs(terrain.rainfall - rainfall)
 		local dist = tdist + rdist
-		dist = dist - mRandom(1, 100)
 		if dist < bestDist then
 			bestDist = dist
 			bestTerrain = terrain
@@ -459,33 +465,31 @@ function Region:CreateElement()
 			end
 		end
 	end
-	if bestFeature == nil or mRandom(1, 200) < bestDist then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
-	local landOrHillsPlot = plotLand
-	if hill and bestFeature.hill then landOrHillsPlot = plotHills end
-	return { plotType = landOrHillsPlot, terrainType = bestTerrain.terrainType, featureType = bestFeature.featureType }
+	if bestFeature == nil or mRandom(1, 100) < bestDist + (100 - bestFeature.percent) then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
+	-- EchoDebug(mRandom(1, 200), bestDist, bestFeature.percent, bestDist + (100 - bestFeature.percent))
+	local plotType = plotLand
+	local terrainType = bestTerrain.terrainType
+	local featureType = bestFeature.featureType
+	if mountain and self.mountainCount < mCeil(#self.collection * (self.mountainousness / 100)) then
+		plotType = plotMountain
+		featureType = featureNone
+		self.mountainCount = self.mountainCount + 1
+	elseif hill and bestFeature.hill and self.hillCount < mCeil(#self.collection * (self.hillyness / 100)) then
+		plotType = plotHills
+		self.hillCount = self.hillCount + 1
+	end
+	return { plotType = plotType, terrainType = terrainType, featureType = featureType }
 end
 
 function Region:Fill()
 	for i, polygon in pairs(self.polygons) do
 		for hi, hex in pairs(polygon.hexes) do
-			if hex.plotType ~= plotMountain and hex.plotType ~= plotOcean then
-				local element
-				local tried = {}
-				local elementsTried = 0
-				repeat
-					local ei = mRandom(1, #self.collection)
-					if tried[ei] == nil then
-						elementsTried = elementsTried + 1
-						tried[ei] = true
-						element = self.collection[ei]
-						if hex.plotType == plotHills and element.plotType ~= plotHills then element = nil end
-					end
-				until element ~= nil or elementsTried == #self.collection
-				if element ~= nil then
-					hex.plotType = element.plotType
-					hex.terrainType = element.terrainType
-					hex.featureType = element.featureType
-				end
+			if hex.plotType ~= plotOcean then
+				local element = self.collection[mRandom(1, #self.collection)]
+				hex.plotType = element.plotType
+				if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
+				hex.terrainType = element.terrainType
+				hex.featureType = element.featureType
 			end
 		end
 	end
@@ -518,12 +522,14 @@ Space = class(function(a)
 	a.wrapY = false
 	a.temperatureBase = 0
 	a.temperatureRise = 100
-	a.temperatureDice = 3
+	a.temperatureDice = 1
+	a.intraregionTemperatureDeviation = 30
 	a.rainfallBase = 0
-	a.rainfallRise = 80
-	a.rainfallDice = 3
-	a.hillynessMin = 0
-	a.hillynessMax = 20
+	a.rainfallRise = 100
+	a.rainfallDice = 1
+	a.intraregionRainfallDeviation = 30
+	a.hillynessMax = 40
+	a.mountainousRegionPercent = 3
 	a.collectionSizeMin = 3
 	a.collectionSizeMax = 12
 	a.regionSizeMin = 1
@@ -542,19 +548,22 @@ Space = class(function(a)
 	a.topYPolygons = {}
 	a.topXPolygons = {}
 	a.hexes = {}
-    a.mountainPlots = {}
-    a.tinyIslandPlots = {}
-    a.hillPlots = {}
-    a.deepTiles = {}
+    a.mountainHexes = {}
+    a.tinyIslandHexes = {}
+    a.tinyIslandPolygons = {}
+    a.deepHexes = {}
     a.maxLiminality = 0
-    a.liminalTileCount = 0
+    a.liminalHexCount = 0
     a.culledPolygons = 0
 end)
 
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
-    self.coastalMod = math.floor(math.sqrt(self.iA) / 30)
+    self.areaMod = math.floor(math.sqrt(self.iA) / 30)
+    self.coastalMod = self.areaMod
+    self.collectionSizeMin = self.collectionSizeMin + self.areaMod
+    self.collectionSizeMax = self.collectionSizeMax + self.areaMod
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
     self.h = self.iH - 1
@@ -594,11 +603,43 @@ function Space:Compute()
     self:PickMountainRanges()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
+	EchoDebug("computing seas...")
+	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
+	EchoDebug("filling regions...")
+	self:FillRegions()
+	EchoDebug("computing landforms...")
+	self:ComputeLandforms()
 end
 
-function Space:ComputePlots()
+function Space:ComputeLandforms()
+	for pi, hex in pairs(self.hexes) do
+		if hex.polygon.continentIndex ~= nil then
+			-- near ocean trench?
+			for nhex, yes in pairs(hex.edgeWith) do
+				if nhex.polygon.oceanIndex ~= nil then
+					hex.nearOceanTrench = true
+					if hex.polygon.nearOcean then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
+					break
+				end
+			end
+			if hex.nearOceanTrench then
+				EchoDebug("CONTINENT PLOT NEAR OCEAN TRENCH")
+				hex.plotType = plotOcean
+			else
+				if hex.mountainRange then
+					hex.plotType = plotMountain
+					tInsert(self.mountainHexes, hex)
+				end
+			end
+		end
+	end
+	self:AdjustMountains()
+end
+
+function Space:ComputeSeas()
+	-- ocean plots and tiny islands:
 	for pi, hex in pairs(self.hexes) do
 		if hex.polygon.continentIndex == nil then
 			if hex.polygon.coastal then
@@ -611,41 +652,19 @@ function Space:ComputePlots()
 				end
 				if not hex.tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= self.tinyIslandChance or (hex.polygon.loneCoastal and not hex.polygon.hasTinyIslands)) then
 					hex.plotType = plotLand
-					tInsert(self.tinyIslandPlots, hex)
+					tInsert(self.tinyIslandHexes, hex)
 					hex.polygon.hasTinyIslands = true
+					self.tinyIslandPolygons[hex.polygon] = true
 				else
 					hex.plotType = plotOcean
 				end
 			else
 				hex.plotType = plotOcean
 			end
-		else
-			-- near ocean trench?
-			for nhex, yes in pairs(hex.edgeWith) do
-				if nhex.polygon.oceanIndex ~= nil then
-					hex.nearOceanTrench = true
-					if hex.polygon.nearOcean then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
-					break
-				end
-			end
-			if hex.nearOceanTrench then
-				EchoDebug("continent plot near ocean trench")
-				hex.plotType = plotOcean
-			else
-				if hex.mountainRange then
-					hex.plotType = plotMountain
-					tInsert(self.mountainPlots, hex)
-				else
-					hex.plotType = plotLand
-				end
-			end
 		end
 	end
 	self:ExpandTinyIslands()
-	self:AdjustMountains()
-end
-
-function Space:ComputeTerrain()
+	-- coastlines:
 	for pi, hex in pairs(self.hexes) do
 		if hex.plotType == plotOcean then
 			-- near land?
@@ -663,36 +682,12 @@ function Space:ComputeTerrain()
 					self.coastalPolygonArea = self.coastalPolygonArea + 1
 				else
 					hex.terrainType = terrainOcean
-					tInsert(self.deepTiles, hex)
+					tInsert(self.deepHexes, hex)
 				end
 			end
-		elseif hex.plotType == plotLand then
-			hex.terrainType = terrainGrass
 		end
 	end
 	self:ExpandCoasts()
-end
-
-function Space:ComputeFeatures()
-	-- testing ocean rifts
-	for i, hex in pairs(self.hexes) do
-		if hex.polygon.oceanIndex then
-			if hex.terrainType == terrainOcean then
-				-- hex.featureType = featureIce
-			elseif hex.polygon.continentIndex then
-				hex.featureType = featureIce
-			else
-				hex.featureType = featureJungle
-				for i, nhex in pairs(hex:Neighbors()) do
-					if nhex.plotType ~= plotOcean then
-						EchoDebug("non ocean plot type: " .. nhex.plotType, nhex.tinyIsland)
-					end
-				end
-				EchoDebug(hex.plotType, hex.nearLand)
-			end
-		end
-		-- if hex.nearOceanTrench then hex.featureType = featureIce end
-	end
 end
 
 function Space:SetPlots()
@@ -732,7 +727,7 @@ function Space:FillPolygons(relax)
 			hex:Place(relax)
 		end
 	end
-	if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalTileCount .. " total liminal tiles") end
+	if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalHexCount .. " total liminal tiles") end
 end
 
 function Space:ComputePolygonNeighbors()
@@ -1101,6 +1096,7 @@ function Space:PickRegions()
 				region = Region(self)
 				polygon.region = region
 				tInsert(region.polygons, polygon)
+				region.area = region.area + polygon.area
 				repeat
 					if #polygon.neighbors == 0 then break end
 					local candidates = {}
@@ -1125,14 +1121,22 @@ function Space:PickRegions()
 					if candidate == nil then break end
 					candidate.region = region
 					tInsert(region.polygons, candidate)
+					region.area = region.area + candidate.area
 					polygon = candidate
 					for candi, c in pairs(candidates) do
 						tInsert(backlog, c)
 					end
-				until #region.polygons == size or #region.polygons == #continent.polygons
+				until #region.polygons == size or region.area > self.polygonMaxArea / 2 or #region.polygons == #continent.polygons
 			end
 			tInsert(self.regions, region)
 		end
+	end
+	for polygon, yes in pairs(self.tinyIslandPolygons) do
+		polygon.region = Region(self)
+		tInsert(polygon.region.polygons, polygon)
+		polygon.region.area = polygon.area
+		polygon.region.archipelago = true
+		tInsert(self.regions, polygon.region)
 	end
 end
 
@@ -1163,16 +1167,23 @@ function Space:PickCoasts()
 end
 
 function Space:ResizeMountains(prescribedArea)
-	if #self.mountainPlots == prescribedArea then return end
-	if #self.mountainPlots > prescribedArea then
+	if #self.mountainHexes == prescribedArea then return end
+	if #self.mountainHexes > prescribedArea then
 		repeat
-			local hex = tRemoveRandom(self.mountainPlots)
-			hex.plotType = plotLand
-		until #self.mountainPlots <= prescribedArea
-	elseif #self.mountainPlots < prescribedArea then
+			local hex = tRemoveRandom(self.mountainHexes)
+			if Map.Rand(10, "hill dice") < self.hillChance then
+				hex.plotType = plotHills
+				if hex.featureType and not FeatureDictionary[hex.featureType].hill then
+					hex.featureType = featureNone
+				end
+			else
+				hex.plotType = plotLand
+			end
+		until #self.mountainHexes <= prescribedArea
+	elseif #self.mountainHexes < prescribedArea then
 		local noNeighbors = 0
 		repeat
-			local hex = self.mountainPlots[mRandom(1, #self.mountainPlots)]
+			local hex = self.mountainHexes[mRandom(1, #self.mountainHexes)]
 			local neighbors = hex:Neighbors()
 			local nhex
 			repeat
@@ -1181,32 +1192,40 @@ function Space:ResizeMountains(prescribedArea)
 			if nhex ~= nil and nhex.plotType == plotLand then
 				if Map.Rand(10, "hill dice") < self.hillChance then
 					nhex.plotType = plotHills
-					tInsert(self.hillPlots, nhex)
+					if not FeatureDictionary[hex.featureType].hill then
+						hex.featureType = featureNone
+					end
 				else
 					nhex.plotType = plotMountain
-					tInsert(self.mountainPlots, nhex)
+					tInsert(self.mountainHexes, nhex)
 				end
 				noNeighbors = 0
 			else
 				noNeighbors = noNeighbors + 1
 			end
-		until #self.mountainPlots >= prescribedArea or noNeighbors > 20
+		until #self.mountainHexes >= prescribedArea or noNeighbors > 20
 	end
 end
 
 function Space:AdjustMountains()
-	-- first expand them 1.5 times their size
-	self:ResizeMountains(#self.mountainPlots * 1.5)
-	-- then adjust to the right amount
 	self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
+	EchoDebug(#self.mountainHexes, self.mountainArea)
+	-- first expand them 1.1 times their size
+	self:ResizeMountains(#self.mountainHexes * 1.1)
+	EchoDebug("post expansion")
+	-- then adjust to the right amount
 	self:ResizeMountains(self.mountainArea)
+	EchoDebug("post reduction")
+	for i, hex in pairs(self.mountainHexes) do
+		hex.featureType = featureNone
+	end
 end
 
 function Space:ExpandTinyIslands()
 	local chance = mCeil(60 / self.tinyIslandChance)
 	local toExpand = {}
-	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
-	for i, hex in pairs(self.tinyIslandPlots) do
+	EchoDebug(#self.tinyIslandHexes .. " tiny islands")
+	for i, hex in pairs(self.tinyIslandHexes) do
 		for ni, nhex in pairs(hex:Neighbors()) do
 			if nhex.plotType == plotOcean and not nhex.polygon.oceanIndex and not nhex.polygon.continentIndex then
 				local okay = true
@@ -1225,9 +1244,9 @@ function Space:ExpandTinyIslands()
 	for i, hex in pairs(toExpand) do
 		hex.plotType = plotLand
 		hex.tinyIsland = true
-		tInsert(self.tinyIslandPlots, hex)
+		tInsert(self.tinyIslandHexes, hex)
 	end
-	EchoDebug(#self.tinyIslandPlots .. " tiny islands")
+	EchoDebug(#self.tinyIslandHexes .. " tiny islands")
 end
 
 function Space:ExpandCoasts()
@@ -1236,7 +1255,7 @@ function Space:ExpandCoasts()
 	repeat 
 		local makeCoast = {}
 		local potential = 0
-		for i, hex in pairs(self.deepTiles) do
+		for i, hex in pairs(self.deepHexes) do
 			if hex.plotType == plotOcean and hex.terrainType == terrainOcean and hex.polygon.oceanIndex == nil then
 				local nearcoast
 				for n, nhex in pairs(hex:Neighbors()) do
@@ -1268,17 +1287,21 @@ end
 -- INTERNAL FUNCTIONS: --
 
 function Space:GetTemperature(latitude)
+	local diff = self.intraregionTemperatureDeviation / 2
 	local temp = diceRoll(self.temperatureDice, false, self.temperatureRise) + self.temperatureBase
-	return mFloor(temp)
+	local temp2 = mRandom(mMax(temp-diff, 0), mMin(temp+diff, 100))
+	return mFloor(temp), mFloor(temp2)
 end
 
 function Space:GetRainfall(latitude)
+	local diff = self.intraregionRainfallDeviation / 2
 	local rain = diceRoll(self.rainfallDice, false, self.rainfallRise) + self.rainfallBase
-	return mFloor(rain)
+	local rain2 = mRandom(mMax(rain-diff, 0), mMin(rain+diff, 100))
+	return mFloor(rain), mFloor(rain2)
 end
 
 function Space:GetHillyness()
-	return mRandom(self.hillynessMin, self.hillynessMax)
+	return mRandom(0, self.hillynessMax)
 end
 
 function Space:GetCollectionSize()
@@ -1380,14 +1403,11 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+    print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
-    print("Setting Plot Types (Fantastical) ...")
     mySpace = Space()
     mySpace:Compute()
-    mySpace:ComputePlots()
-    mySpace:ComputeTerrain()
-	mySpace:ComputeFeatures()
-	mySpace:FillRegions()
+    print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
     -- local args = { bExpandCoasts = false }
     -- GenerateCoasts(args)
@@ -1404,7 +1424,7 @@ function AddFeatures()
 end
 
 function SetTerrainTypes(terrainTypes)
-	print("DON'T USE THIS Terrain Types (Fantastical)");
+	print("DON'T USE THIS Setting Terrain Types (Fantastical)");
 	for i, plot in Plots() do
 		plot:SetTerrainType(self.hexes[i+1].terrainType, false, false)
 		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.

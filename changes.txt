@@ -1,9 +1,11 @@
-- new region terrain algo, based on each region having temperature, rainfall, temperature deviation, rainfall deviation, hilliness, and dictionary size (this avoids having to include lengthy tile dictionaries)
-- put atolls in coastal polygons whose neighbors are a warm terrain region
+- put atolls in coastal polygons and hexes whose neighbors are a warm terrain region, and ice near cool
 - add doughnut ocean algo
 
 
 DONE
+- give each tiny island polygon a region
+- reorganize Calculate/Set/Fill procedures (too confusing right now)
+- new region terrain algo, based on each region having temperature, rainfall, temperature deviation, rainfall deviation, hilliness, and dictionary size (this avoids having to include lengthy tile dictionaries)
 - mountain ranges by edge
 - improve control over continent size by keeping a backlog of polygon candidates to pick form when no neighbors available
 - fix neighbor issues by culling polygons with zero hexes

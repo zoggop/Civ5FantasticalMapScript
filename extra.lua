@@ -36,3 +36,25 @@ GetIndicesInLine = function(self, x1, y1, x2, y2)
 		end
 		return plots
 	end,
+
+	function Space:ComputeFeatures()
+	-- testing ocean rifts
+	for i, hex in pairs(self.hexes) do
+		if hex.polygon.oceanIndex then
+			if hex.terrainType == terrainOcean then
+				-- hex.featureType = featureIce
+			elseif hex.polygon.continentIndex then
+				hex.featureType = featureIce
+			else
+				hex.featureType = featureJungle
+				for i, nhex in pairs(hex:Neighbors()) do
+					if nhex.plotType ~= plotOcean then
+						EchoDebug("non ocean plot type: " .. nhex.plotType, nhex.tinyIsland)
+					end
+				end
+				EchoDebug(hex.plotType, hex.nearLand)
+			end
+		end
+		-- if hex.nearOceanTrench then hex.featureType = featureIce end
+	end
+end
