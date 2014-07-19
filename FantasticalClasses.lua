@@ -153,14 +153,18 @@ local function SetConstants()
 	featureIce = FeatureTypes.FEATURE_ICE
 	featureMarsh = FeatureTypes.FEATURE_MARSH
 	featureOasis = FeatureTypes.FEATURE_OASIS
-	featureAtoll = FeatureTypes.FEATURE_ATOLL
+	for thisFeature in GameInfo.Features() do
+		if thisFeature.Type == "FEATURE_ATOLL" then
+			featureAtoll = thisFeature.ID
+		end
+	end
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
 	TerrainDictionary = {
 		[terrainGrass] = { terrainType = terrainGrass, temperature = 50, rainfall = 60, features = { featureNone, featureForest, featureMarsh, featureFallout } },
-		[terrainPlains] = { terrainType = terrainPlains, temperature = 55, rainfall = 40, features = { featureNone, featureForest, featureFallout } },
+		[terrainPlains] = { terrainType = terrainPlains, temperature = 50, rainfall = 40, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { terrainType = terrainDesert, temperature = 50, rainfall = 0, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { terrainType = terrainTundra, temperature = 20, rainfall = 25, features = { featureNone, featureForest, featureFallout } },
+		[terrainTundra] = { terrainType = terrainTundra, temperature = 20, rainfall = 30, features = { featureNone, featureForest, featureFallout } },
 		[terrainSnow] = { terrainType = terrainSnow, temperature = 0, rainfall = 50, features = { featureNone, featureFallout } },
 		[99] = { terrainType = terrainPlains, temperature = 100, rainfall = 100, features = { featureJungle, featureFallout } },
 	}
@@ -518,6 +522,10 @@ Space = class(function(a)
 	a.coastDiceMin = 2
 	a.coastDiceMax = 8
 	a.coastAreaRatio = 0.25
+	a.freezingTemperature = 25
+	a.icePercent = 25
+	a.atollTemperature = 80
+	a.atollPercent = 1
 	a.wrapX = true
 	a.wrapY = false
 	a.temperatureBase = 0
@@ -611,6 +619,10 @@ function Space:Compute()
 	self:FillRegions()
 	EchoDebug("computing landforms...")
 	self:ComputeLandforms()
+	EchoDebug("computing coasts...")
+	self:ComputeCoasts()
+	EchoDebug("adding ocean ice...")
+	self:AddOceanIce()
 end
 
 function Space:ComputeLandforms()
@@ -664,21 +676,40 @@ function Space:ComputeSeas()
 		end
 	end
 	self:ExpandTinyIslands()
-	-- coastlines:
+end
+
+function Space:ComputeCoasts()
 	for pi, hex in pairs(self.hexes) do
 		if hex.plotType == plotOcean then
 			-- near land?
 			for i, nhex in pairs(hex:Neighbors()) do
 				if nhex.plotType ~= plotOcean then
-					hex.nearLand = true
+					-- EchoDebug(nhex.plotType, nhex.polygon.continentIndex)
+					hex.coastalTemperature = 50
+					if nhex.polygon.region then hex.coastalTemperature = nhex.polygon.region.temperatureMin end
+					if hex.coastalTemperature <= self.freezingTemperature and mRandom(1, 100) < self.icePercent then
+						hex.featureType = featureIce
+					elseif hex.coastalTemperature >= self.atollTemperature and mRandom(1, 100) < self.atollPercent then
+						hex.featureType = featureAtoll
+					end
+					break
 				end
 			end
-			if hex.nearLand then
+			if hex.coastalTemperature then
 				hex.terrainType = terrainCoast
 				self.coastArea = self.coastArea + 1
 			else
 				if hex.polygon.coastal then
 					hex.terrainType = terrainCoast
+					hex.coastalTemperature = 50
+					if hex.polygon.region then
+						hex.coastalTemperature = hex.polygon.region.temperatureMin
+						if hex.coastalTemperature <= self.freezingTemperature and mRandom(1, 100) < self.icePercent then
+							hex.featureType = featureIce
+						elseif hex.coastalTemperature >= self.atollTemperature and mRandom(1, 100) < self.atollPercent then
+							hex.featureType = featureAtoll
+						end
+					end
 					self.coastalPolygonArea = self.coastalPolygonArea + 1
 				else
 					hex.terrainType = terrainOcean
@@ -688,6 +719,21 @@ function Space:ComputeSeas()
 		end
 	end
 	self:ExpandCoasts()
+end
+
+function Space:AddOceanIce()
+	for o, ocean in pairs(self.oceans) do
+		for p, polygon in pairs(ocean) do
+			polygon.oceanTemperature = self:GetTemperature()
+			if polygon.oceanTemperature < self.freezingTemperature then
+				for h, hex in pairs(polygon.hexes) do
+					if mRandom(1, 100) < self.icePercent then
+						hex.featureType = featureIce
+					end
+				end
+			end
+		end
+	end
 end
 
 function Space:SetPlots()
@@ -1212,10 +1258,8 @@ function Space:AdjustMountains()
 	EchoDebug(#self.mountainHexes, self.mountainArea)
 	-- first expand them 1.1 times their size
 	self:ResizeMountains(#self.mountainHexes * 1.1)
-	EchoDebug("post expansion")
 	-- then adjust to the right amount
 	self:ResizeMountains(self.mountainArea)
-	EchoDebug("post reduction")
 	for i, hex in pairs(self.mountainHexes) do
 		hex.featureType = featureNone
 	end
@@ -1260,13 +1304,13 @@ function Space:ExpandCoasts()
 				local nearcoast
 				for n, nhex in pairs(hex:Neighbors()) do
 					if nhex.terrainType == terrainCoast then
-						nearcoast = true
+						nearcoast = nhex
 						break
 					end
 				end
 				if nearcoast then
 					potential = potential + 1
-					if Map.Rand(hex.polygon.coastExpansionDice[d], "expand coast?") == 0 then
+					if Map.Rand(hex.polygon.coastExpansionDice[d], "expand coast?") == 0 or nearcoast.featureType == featureIce then
 						makeCoast[hex] = nearcoast
 					end
 				end
@@ -1274,7 +1318,13 @@ function Space:ExpandCoasts()
 		end
 		for hex, nearcoast in pairs(makeCoast) do
 			hex.terrainType = terrainCoast
+			if nearcoast.coastalTemperature <= self.freezingTemperature then
+				nearcoast.featureType = featureIce
+			elseif nearcoast.coastalTemperature >= self.atollTemperature then
+				nearcoast.featureType = featureAtoll
+			end
 			hex.expandedCoast = true
+			hex.coastalTemperature = nearcoast.coastalTemperature
 			self.coastArea = self.coastArea + 1
 		end
 		d = d + 1
