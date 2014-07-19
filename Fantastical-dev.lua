@@ -526,51 +526,50 @@ end
 
 Space = class(function(a)
 	-- CONFIGURATION: --
+	a.wrapX = true -- globe wraps horizontally?
+	a.wrapY = false -- globe wraps vertically?
 	a.polygonCount = 140 -- how many polygons (map scale)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
-	a.oceanNumber = 2 -- how many large ocean basins
+	a.oceanNumber = 1 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.pangaea = false -- one big continent (except for a few large islands)
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
-	a.hillChance = 4 -- how many possible mountains out of ten become a hill when expanding
+	a.collectionSizeMin = 3 -- of how many kinds of tiles does a region consist, at minimum (modified by map size)
+	a.collectionSizeMax = 12 -- of how many kinds of tiles does a region consist, at maximum (modified by map size)
+	a.regionSizeMin = 1 -- least number of polygons a region can have
+	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
+	a.hillChance = 4 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 5 -- how many polygon edges long can a mountain range be
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.mountainRangeMult = 1.4 -- higher mult means more scattered mountains
-	a.coastalPolygonChance = 2 -- out of ten, how often do possible coastal polygons become coastal?
-	a.tinyIslandChance = 5 -- out of 100 tiles, how often do coastal shelves produce tiny islands (1-7 hexes)
-	a.coastDiceAmount = 2
-	a.coastDiceMin = 2
-	a.coastDiceMax = 8
-	a.coastAreaRatio = 0.25
-	a.freezingTemperature = 32
-	a.icePercent = 15
-	a.atollTemperature = 80
-	a.atollPercent = 1
-	a.wrapX = true
-	a.wrapY = false
-	a.temperatureMin = 0
-	a.temperatureMax = 100
-	a.temperatureDice = 2
-	a.intraregionTemperatureDeviation = 20
-	a.rainfallMax = 0
-	a.rainfallMin = 100
-	a.rainfallDice = 1
-	a.intraregionRainfallDeviation = 30
-	a.hillynessMax = 40
-	a.mountainousRegionPercent = 3
-	a.mountainousnessMin = 33
-	a.mountainousnessMax = 66
-	a.lakeRegionPercent = 8
-	a.lakeynessMin = 10
-	a.lakeynessMax = 40
-	a.collectionSizeMin = 3
-	a.collectionSizeMax = 12
-	a.regionSizeMin = 1
-	a.regionSizeMax = 3
-	a.falloutEnabled = false
+	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
+	a.tinyIslandChance = 5 -- out of 100 hexes, how often do coastal shelves produce tiny islands (this is modified by the map size)
+	a.coastDiceAmount = 2 -- how many dice does each polygon get for coastal expansion
+	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
+	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
+	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
+	a.freezingTemperature = 32 -- this temperature and below creates ice. temperature is 1 to 100
+	a.icePercent = 15 -- of 100 hexes, how often does freezing produce ice
+	a.atollTemperature = 80 -- this temperature and above creates atolls
+	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
+	a.temperatureMin = 1 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
+	a.temperatureMax = 100 -- highest temprature possible (plus or minus intraregionTemperatureDeviation)
+	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
+	a.intraregionTemperatureDeviation = 20 -- how much at maximum can a region's temperature vary within itself
+	a.rainfallMax = 0 -- just like temperature above
+	a.rainfallMin = 100 -- just like temperature above
+	a.rainfallDice = 1 -- just like temperature above
+	a.intraregionRainfallDeviation = 30 -- just like temperature above
+	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
+	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
+	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
+	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
+	a.lakeRegionPercent = 8 -- of 100 how many regions will have little lakes
+	a.lakeynessMin = 10 -- in those lake regions, what's the minimum percentage of water in their collection
+	a.lakeynessMax = 40 -- in those lake regions, what's the maximum percentage of water in their collection
+	a.falloutEnabled = false -- place fallout on the map?
 	----------------------------------
 	-- DEFINITIONS: --
 	a.oceans = {}
@@ -1471,8 +1470,8 @@ end
 function GetMapScriptInfo()
 	local world_age, temperature, rainfall, sea_level, resources = GetCoreMapOptions()
 	return {
-		Name = "Fantastical classes-dev",
-		Description = "Draws voronoi.",
+		Name = "Fantastical (dev)",
+		Description = "Scribbles fantastical lands onto the world.",
 		IconIndex = 5,
 	}
 end
