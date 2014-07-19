@@ -595,7 +595,7 @@ end)
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
-    self.areaMod = math.floor(math.sqrt(self.iA) / 30)
+    self.areaMod = mFloor(mSqrt(self.iA) / 30)
     self.coastalMod = self.areaMod
     self.collectionSizeMin = self.collectionSizeMin + self.areaMod
     self.collectionSizeMax = self.collectionSizeMax + self.areaMod
@@ -823,12 +823,6 @@ function Space:ComputePolygonNeighbors()
 					nhex.polygon.edges[hex.polygon] = edge
 					tInsert(self.edges, edge)
 				end
-				--[[
-				if not nhex.edgeWith[hex] then
-					nhex.edginess = nhex.edginess + 1
-					nhex.edgeWith[hex] = true
-				end
-				]]--
 			end
 		end
 	end
@@ -934,18 +928,6 @@ function Space:PickOceansCylinder()
 					highestNeigh = neighbor
 				end
 			end
-			--[[
-			-- makes oceans really wide
-			for i, neighbor in pairs(polygon.neighbors) do
-				if not chosen[neighbor] and not neighbor:NearOther(oceanIndex, "oceanIndex") then
-					chosen[neighbor] = true
-					neighbor.oceanIndex = oceanIndex
-					tInsert(ocean, neighbor)
-					self.nonOceanArea = self.nonOceanArea - neighbor.area
-					self.nonOceanPolygons = self.nonOceanPolygons - 1
-				end
-			end
-			]]--
 			polygon = highestNeigh or upNeighbors[mRandom(1, #upNeighbors)]
 			iterations = iterations + 1
 		end
@@ -1491,8 +1473,6 @@ function GeneratePlotTypes()
     mySpace:Compute()
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
-    -- local args = { bExpandCoasts = false }
-    -- GenerateCoasts(args)
 end
 
 function GenerateTerrain()
@@ -1505,53 +1485,11 @@ function AddFeatures()
 	mySpace:SetFeatures()
 end
 
-function SetTerrainTypes(terrainTypes)
-	print("DON'T USE THIS Setting Terrain Types (Fantastical)");
-	for i, plot in Plots() do
-		plot:SetTerrainType(self.hexes[i+1].terrainType, false, false)
-		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.
-	end
-end
-
 function AddLakes()
 	print("Adding No Lakes (lakes have already been added) (Fantastical)")
 end
 
 -------------------------------------------------------------------------------
-
-function StartPlotSystem()
-	-- Divide the map in to Regions, choose starting locations, place civs, 
-	-- place city states, Normalize locations, and place Resources.
-	--
-	-- The code for these operations resides in AssignStartingPlots.lua and MapmakerUtilities.lua
-	-- They are all interwoven and interdependent. Do not change this order of operations.
-	--
-	-- GenerateRegions() and ChooseLocations() allow for some parameters. Refer to
-	-- these functions, or to examples used in map scripts, for more details. Also,
-	-- there is a detailed Reference section at the end of AssignStartingPlots.lua
-	--
-	-- Map scripts can execute enormous power over this operation via replacing
-	-- specific pieces of it with modified or custom methods.
-
-	print("Creating start plot database.");
-	local start_plot_database = AssignStartingPlots.Create()
-	
-	print("Dividing the map in to Regions.");
-	start_plot_database:GenerateRegions();
-	
-	print("Choosing start locations for civilizations.");
-	start_plot_database:ChooseLocations()
-	
-	print("Normalizing start locations and assigning them to Players.");
-	start_plot_database:BalanceAndAssign()
-	
-	print("Placing Natural Wonders.");
-	start_plot_database:PlaceNaturalWonders()
-
-	print("Placing Resources and City States.");
-	start_plot_database:PlaceResourcesAndCityStates()
-end
-
 
 -- THE STUFF BELOW DOESN'T ACTUALLY DO ANYTHING IN WORLD BUILDER (AND IN GAME?)
 
@@ -1630,11 +1568,9 @@ function AssignStartingPlots:CanBeKrakatoa(x, y)
 	for loop, direction in ipairs(self.direction_types) do
 		local adjPlot = Map.PlotDirection(x, y, direction)
 		if not adjPlot:IsWater() or adjPlot:GetTerrainType() ~= terrainCoast or adjPlot:GetFeatureType() == featureIce then
-			print("DID NOT FIND KRAKATOA")
 			return
 		end
 	end
-	EchoDebug("FOUND KRAKATOA")
 	
 	-- Surrounding tiles are all ocean water, not lake, and free of Feature Ice, so it's good.
 	local iW, iH = Map.GetGridSize();

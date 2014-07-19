@@ -37,7 +37,7 @@ GetIndicesInLine = function(self, x1, y1, x2, y2)
 		return plots
 	end,
 
-	function Space:ComputeFeatures()
+function Space:ComputeFeatures()
 	-- testing ocean rifts
 	for i, hex in pairs(self.hexes) do
 		if hex.polygon.oceanIndex then
@@ -56,5 +56,13 @@ GetIndicesInLine = function(self, x1, y1, x2, y2)
 			end
 		end
 		-- if hex.nearOceanTrench then hex.featureType = featureIce end
+	end
+end
+
+function SetTerrainTypes(terrainTypes)
+	print("DON'T USE THIS Setting Terrain Types (Fantastical)");
+	for i, plot in Plots() do
+		plot:SetTerrainType(self.hexes[i+1].terrainType, false, false)
+		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.
 	end
 end
