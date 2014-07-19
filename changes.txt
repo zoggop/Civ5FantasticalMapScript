@@ -1,8 +1,11 @@
-- put atolls in coastal polygons and hexes whose neighbors are a warm terrain region, and ice near cool
+- fix water wonder placement
+- alotted distribution of region temperature/rainfall/hillyness instead of completely random?
+- add latitude
 - add doughnut ocean algo
 
 
 DONE
+- put atolls in coastal polygons and hexes whose neighbors are a warm terrain region, and ice near cool
 - give each tiny island polygon a region
 - reorganize Calculate/Set/Fill procedures (too confusing right now)
 - new region terrain algo, based on each region having temperature, rainfall, temperature deviation, rainfall deviation, hilliness, and dictionary size (this avoids having to include lengthy tile dictionaries)
