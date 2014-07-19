@@ -10,10 +10,6 @@ end
 include("math")
 include("bit")
 include("MapGenerator")
-include("FeatureGenerator")
-include("TerrainGenerator")
-include("AssignStartingPlots")
-
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
@@ -427,13 +423,17 @@ Region = class(function(a, space, latitude)
 	a.hillyness = space:GetHillyness()
 	a.mountainous = mRandom(1, 100) < space.mountainousRegionPercent
 	a.mountainousness = 0
-	if a.mountainous then a.mountainousness = mRandom(33, 67) end
-	EchoDebug(a.temperatureMin, a.temperatureMax, a.rainfallMin, a.rainfallMax, a.hillyness)
+	if a.mountainous then a.mountainousness = mRandom(space.mountainousnessMin, space.mountainousnessMax) end
+	a.lakey = mRandom(1, 100) < space.lakeRegionPercent
+	a.lakeyness = 0
+	if a.lakey then a.lakeyness = mRandom(space.lakeynessMin, space.lakeynessMax) end
+	EchoDebug(a.temperatureMin, a.temperatureMax, a.rainfallMin, a.rainfallMax, a.mountainousness, a.lakeyness, a.hillyness)
 	a.collection = {}
 	a.polygons = {}
 	a.area = 0
 	a.hillCount = 0
 	a.mountainCount = 0
+	a.lakeCount = 0
 	a.featureFillCounts = {}
 	for featureType, feature in pairs(FeatureDictionary) do
 		a.featureFillCounts[featureType] = 0
@@ -460,8 +460,9 @@ end
 function Region:CreateElement()
 	local temperature = mRandom(self.temperatureMin, self.temperatureMax)
 	local rainfall = mRandom(self.rainfallMin, self.rainfallMax)
-	local hill = mRandom(1, 100) < self.hillyness
 	local mountain = mRandom(1, 100) < self.mountainousness
+	local lake = mRandom(1, 100) < self.lakeyness
+	local hill = mRandom(1, 100) < self.hillyness
 	local bestDist = 100
 	local bestTerrain
 	for i, terrain in pairs(TerrainDictionary) do
@@ -484,7 +485,6 @@ function Region:CreateElement()
 		end
 	end
 	if bestFeature == nil or mRandom(1, 100) < bestDist + (100 - bestFeature.percent) then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
-	-- EchoDebug(mRandom(1, 200), bestDist, bestFeature.percent, bestDist + (100 - bestFeature.percent))
 	local plotType = plotLand
 	local terrainType = bestTerrain.terrainType
 	local featureType = bestFeature.featureType
@@ -492,6 +492,11 @@ function Region:CreateElement()
 		plotType = plotMountain
 		featureType = featureNone
 		self.mountainCount = self.mountainCount + 1
+	elseif lake and self.lakeCount < mCeil(#self.collection * (self.lakeyness / 100)) then
+		plotType = plotOcean
+		terrainType = terrainCoast -- will become coast later
+		featureType = featureNone
+		self.lakeCount = self.lakeCount + 1
 	elseif hill and bestFeature.hill and self.hillCount < mCeil(#self.collection * (self.hillyness / 100)) then
 		plotType = plotHills
 		self.hillCount = self.hillCount + 1
@@ -557,6 +562,11 @@ Space = class(function(a)
 	a.intraregionRainfallDeviation = 30
 	a.hillynessMax = 40
 	a.mountainousRegionPercent = 3
+	a.mountainousnessMin = 33
+	a.mountainousnessMax = 66
+	a.lakeRegionPercent = 8
+	a.lakeynessMin = 10
+	a.lakeynessMax = 40
 	a.collectionSizeMin = 3
 	a.collectionSizeMax = 12
 	a.regionSizeMin = 1
@@ -1506,34 +1516,46 @@ function SetTerrainTypes(terrainTypes)
 end
 
 function AddLakes()
-	print("Adding Lakes (Fantastical)")
-	--[[
-	
-	local numLakesAdded = 0;
-	local lakePlotRand = GameDefines.LAKE_PLOT_RAND;
-	lakePlotRand = lakePlotRand + (lakePlotRand * ismuthChance)
-	for i, plot in Plots() do
-		if not plot:IsWater() then
-			if not plot:IsCoastalLand() then
-				if not plot:IsRiver() then
-					local r = Map.Rand(lakePlotRand, "Fantasy AddLakes");
-					if r == 0 then
-						plot:SetArea(-1);
-						plot:SetPlotType(plotOcean);
-						numLakesAdded = numLakesAdded + 1;
-					end
-				end
-			end
-		end
-	end
-	
-	-- this is a minimalist update because lakes have been added
-	if numLakesAdded > 0 then
-		print(tostring(numLakesAdded).." lakes added")
-		Map.CalculateAreas();
-	end
-	]]--
+	print("Adding No Lakes (lakes have already been added) (Fantastical)")
 end
+
+-------------------------------------------------------------------------------
+
+function StartPlotSystem()
+	-- Divide the map in to Regions, choose starting locations, place civs, 
+	-- place city states, Normalize locations, and place Resources.
+	--
+	-- The code for these operations resides in AssignStartingPlots.lua and MapmakerUtilities.lua
+	-- They are all interwoven and interdependent. Do not change this order of operations.
+	--
+	-- GenerateRegions() and ChooseLocations() allow for some parameters. Refer to
+	-- these functions, or to examples used in map scripts, for more details. Also,
+	-- there is a detailed Reference section at the end of AssignStartingPlots.lua
+	--
+	-- Map scripts can execute enormous power over this operation via replacing
+	-- specific pieces of it with modified or custom methods.
+
+	print("Creating start plot database.");
+	local start_plot_database = AssignStartingPlots.Create()
+	
+	print("Dividing the map in to Regions.");
+	start_plot_database:GenerateRegions();
+	
+	print("Choosing start locations for civilizations.");
+	start_plot_database:ChooseLocations()
+	
+	print("Normalizing start locations and assigning them to Players.");
+	start_plot_database:BalanceAndAssign()
+	
+	print("Placing Natural Wonders.");
+	start_plot_database:PlaceNaturalWonders()
+
+	print("Placing Resources and City States.");
+	start_plot_database:PlaceResourcesAndCityStates()
+end
+
+
+-- THE STUFF BELOW DOESN'T ACTUALLY DO ANYTHING IN WORLD BUILDER (AND IN GAME?)
 
 function AssignStartingPlots:CanBeReef(x, y)
 	-- Checks a candidate plot for eligibility to be the Great Barrier Reef.
@@ -1594,7 +1616,7 @@ function AssignStartingPlots:CanBeReef(x, y)
 		end
 	end
 	-- If not enough coasts, reject this site.
-	if iNumCoast < 4 then
+	if iNumCoast < 6 then
 		return
 	end
 	-- This site is in the water, with at least some of the water plots being coast, so it's good.
@@ -1603,16 +1625,18 @@ end
 
 function AssignStartingPlots:CanBeKrakatoa(x, y)
 	-- Checks a candidate plot for eligibility to be Krakatoa the volcano.
-	local plot = Map.GetPlot(x, y);
-	-- Check the center plot, which must be land surrounded on all sides by ocean. (edited for fantastical)
+	local plot = Map.GetPlot(x, y)
+	-- Check the center plot, which must be land surrounded on all sides by coast. (edited for fantastical)
 	if plot:IsWater() then return end
 
 	for loop, direction in ipairs(self.direction_types) do
 		local adjPlot = Map.PlotDirection(x, y, direction)
-		if adjPlot:IsWater() == false then
+		if not adjPlot:IsWater() or adjPlot:GetTerrainType() ~= terrainCoast or adjPlot:GetFeatureType() == featureIce then
+			print("DID NOT FIND KRAKATOA")
 			return
 		end
 	end
+	EchoDebug("FOUND KRAKATOA")
 	
 	-- Surrounding tiles are all ocean water, not lake, and free of Feature Ice, so it's good.
 	local iW, iH = Map.GetGridSize();
