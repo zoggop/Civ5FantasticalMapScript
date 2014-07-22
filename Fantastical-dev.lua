@@ -156,6 +156,9 @@ local function SetConstants()
 	end
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
+	-- temperature/rainfall below 0 count as no distance as long as < -temperature, otherwise counts distance away from -temperature
+	-- temperature/rainfall above 100 count as no distance as long as > (temperature-100), otherwise counts distance away from (temperature-100)
+
 	TerrainDictionary = {
 		[terrainGrass] = { terrainType = terrainGrass, temperature = 55, rainfall = 141, features = { featureNone, featureForest, featureMarsh, featureFallout } },
 		[terrainPlains] = { terrainType = terrainPlains, temperature = 45, rainfall = 131, features = { featureNone, featureForest, featureFallout } },
@@ -199,6 +202,8 @@ function Hex:Place(relax)
 	if self.x > self.polygon.maxX then self.polygon.maxX = self.x end
 	if self.y > self.polygon.maxY then self.polygon.maxY = self.y end
 	if not relax then
+		self.plot = Map.GetPlotByIndex(self.index-1)
+		self.latitude = self.plot:GetLatitude()
 		if self.liminality ~= 0 then
 			self.space.liminalHexCount = self.space.liminalHexCount + 1
 		end
@@ -281,22 +286,19 @@ function Hex:ClosestPolygon(relax)
 end
 
 function Hex:SetPlot()
-	local plot = Map.GetPlotByIndex(self.index-1)
-	if plot == nil then return end
-	plot:SetPlotType(self.plotType)
+	if self.plot == nil then return end
+	self.plot:SetPlotType(self.plotType)
 end
 
 function Hex:SetTerrain()
-	local plot = Map.GetPlotByIndex(self.index-1)
-	if plot == nil then return end
-	plot:SetTerrainType(self.terrainType, false, false)
+	if self.plot == nil then return end
+	self.plot:SetTerrainType(self.terrainType, false, false)
 end
 
 function Hex:SetFeature()
 	if self.featureType == nil then return end
-	local plot = Map.GetPlotByIndex(self.index-1)
-	if plot == nil then return end
-	plot:SetFeatureType(self.featureType)
+	if self.plot == nil then return end
+	self.plot:SetFeatureType(self.featureType)
 end
 
 ------------------------------------------------------------------------------
@@ -305,6 +307,12 @@ Polygon = class(function(a, space, x, y)
 	a.space = space
 	a.x = x or Map.Rand(space.iW, "random x")
 	a.y = y or Map.Rand(space.iH, "random y")
+	if space.useMapLatitudes then
+		local plot = Map.GetPlot(x, y)
+		a.latitude = plot:GetLatitude()
+	else
+		a.latitude = space:GetFakeLatitude()
+	end
 	a.hexes = {}
 	a.edges = {}
 	a.isNeighbor = {}
@@ -368,6 +376,7 @@ function Polygon:RelaxToCentroid()
 		local centroidY = mCeil(totalY / #self.hexes)
 		if centroidY < 0 then centroidY = space.h + centroidY end
 		self.x, self.y = centroidX, centroidY
+		if self.space.useMapLatitudes then self.latitude = Map.GetPlot(self.x, self.y):GetLatitude() end
 	end
 	self.area = 0
 	self.minX, self.minY, self.maxX, self.maxY = space.w, space.h, 0, 0
@@ -406,28 +415,8 @@ end
 
 ------------------------------------------------------------------------------
 
-Region = class(function(a, space, latitude)
+Region = class(function(a, space)
 	a.space = space
-	tempA, tempB = space:GetTemperature(latitude)
-	if tempA > tempB then
-		a.temperatureMin, a.temperatureMax = tempB, tempA
-	else
-		a.temperatureMin, a.temperatureMax = tempA, tempB
-	end
-	rainA, rainB = space:GetRainfall(latitude)
-	if rainA > rainB then
-		a.rainfallMin, a.rainfallMax = rainB, rainA
-	else
-		a.rainfallMin, a.rainfallMax = rainA, rainB
-	end
-	a.hillyness = space:GetHillyness()
-	a.mountainous = mRandom(1, 100) < space.mountainousRegionPercent
-	a.mountainousness = 0
-	if a.mountainous then a.mountainousness = mRandom(space.mountainousnessMin, space.mountainousnessMax) end
-	a.lakey = mRandom(1, 100) < space.lakeRegionPercent
-	a.lakeyness = 0
-	if a.lakey then a.lakeyness = mRandom(space.lakeynessMin, space.lakeynessMax) end
-	EchoDebug(a.temperatureMin, a.temperatureMax, a.rainfallMin, a.rainfallMax, a.mountainousness, a.lakeyness, a.hillyness)
 	a.collection = {}
 	a.polygons = {}
 	a.area = 0
@@ -441,9 +430,40 @@ Region = class(function(a, space, latitude)
 end)
 
 function Region:CreateCollection()
+	-- get latitude (real or fake)
+	self.latitude = self:GetLatitude()
+	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
+	tempA, tempB = self.space:GetTemperature(self.latitude)
+	if tempA > tempB then
+		self.temperatureMin, self.temperatureMax = tempB, tempA
+	else
+		self.temperatureMin, self.temperatureMax = tempA, tempB
+	end
+	rainA, rainB = self.space:GetRainfall(self.latitude)
+	if rainA > rainB then
+		self.rainfallMin, self.rainfallMax = rainB, rainA
+	else
+		self.rainfallMin, self.rainfallMax = rainA, rainB
+	end
+	self.hillyness = self.space:GetHillyness()
+	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
+	self.mountainousness = 0
+	if self.mountainous then self.mountainousness = mRandom(self.space.mountainousnessMin, self.space.mountainousnessMax) end
+	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent
+	self.lakeyness = 0
+	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
+	EchoDebug(self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	for i = 1, self.space:GetCollectionSize() do
 		tInsert(self.collection, self:CreateElement())
 	end
+end
+
+function Region:GetLatitude()
+	local latSum = 0
+	for i, polygon in pairs(self.polygons) do
+		latSum = latSum + polygon.latitude
+	end
+	return mFloor(latSum / #self.polygons)
 end
 
 function Region:TemperatureRainfallDistance(thing, temperature, rainfall)
@@ -532,10 +552,11 @@ Space = class(function(a)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
-	a.oceanNumber = 1 -- how many large ocean basins
+	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
+	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 3 -- of how many kinds of tiles does a region consist, at minimum (modified by map size)
 	a.collectionSizeMax = 12 -- of how many kinds of tiles does a region consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
@@ -550,16 +571,18 @@ Space = class(function(a)
 	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
 	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
-	a.freezingTemperature = 32 -- this temperature and below creates ice. temperature is 1 to 100
+	a.freezingTemperature = 32 -- this temperature and below creates ice. temperature is 0 to 100
 	a.icePercent = 15 -- of 100 hexes, how often does freezing produce ice
 	a.atollTemperature = 80 -- this temperature and above creates atolls
 	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
-	a.temperatureMin = 1 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
+	a.polarFalloff = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
+	a.desertFalloff = 0.4 -- exponent. lower exponent = less desert (somewhere between 0 and 2 is advisable)
+	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureMax = 100 -- highest temprature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.intraregionTemperatureDeviation = 20 -- how much at maximum can a region's temperature vary within itself
-	a.rainfallMax = 0 -- just like temperature above
-	a.rainfallMin = 100 -- just like temperature above
+	a.intraregionTemperatureDeviation = 15 -- how much at maximum can a region's temperature vary within itself
+	a.rainfallMin = 0 -- just like temperature above
+	a.rainfallMax = 100 -- just like temperature above
 	a.rainfallDice = 1 -- just like temperature above
 	a.intraregionRainfallDeviation = 30 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
@@ -587,6 +610,7 @@ Space = class(function(a)
     a.tinyIslandHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
+    a.fakeLatitudes = {}
     a.maxLiminality = 0
     a.liminalHexCount = 0
     a.culledPolygons = 0
@@ -604,6 +628,16 @@ function Space:Compute()
     self.h = self.iH - 1
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
+    -- generate fake latitudes
+    if not self.useMapLatitudes then
+    	local increment = 90 / self.polygonCount
+	    for i = 1, self.polygonCount do
+	    	tInsert(self.fakeLatitudes, increment * i)
+	    end
+	end
+	self.polarFalloffMax = 90 ^ self.polarFalloff
+	self.desertFalloffMax = 60 ^ self.desertFalloff
+	EchoDebug(self.polarFalloffMax, self.desertFalloffMax)
     -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
     self.tinyIslandChance = mCeil(20000 / self.iA)
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
@@ -753,7 +787,7 @@ end
 function Space:AddOceanIce()
 	for o, ocean in pairs(self.oceans) do
 		for p, polygon in pairs(ocean) do
-			polygon.oceanTemperature = self:GetTemperature()
+			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
 			if polygon.oceanTemperature < self.freezingTemperature then
 				local below = self.freezingTemperature - polygon.oceanTemperature
 				for h, hex in pairs(polygon.hexes) do
@@ -803,7 +837,9 @@ function Space:FillPolygons(relax)
 			hex:Place(relax)
 		end
 	end
-	if not relax then EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalHexCount .. " total liminal tiles") end
+	if not relax then
+		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalHexCount .. " total liminal tiles")
+	end
 end
 
 function Space:ComputePolygonNeighbors()
@@ -1348,19 +1384,39 @@ end
 ----------------------------------
 -- INTERNAL FUNCTIONS: --
 
+function Space:GetFakeLatitude()
+	return tRemoveRandom(self.fakeLatitudes)
+end
+
 function Space:GetTemperature(latitude)
 	local rise = self.temperatureMax - self.temperatureMin
 	local diff = self.intraregionTemperatureDeviation
-	local temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
-	local temp2 = mRandom(mMax(temp-diff, 0), mMin(temp+diff, 100))
+	local temp, temp2
+	if latitude then
+		local distFromPole = (90 - latitude) ^ self.polarFalloff
+		temp = (rise / self.polarFalloffMax) * distFromPole + self.temperatureMin
+		-- EchoDebug("temp calcs", temp, latitude)
+	else
+		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
+	end
+	temp2 = mRandom(mMax(temp-diff, 0), mMin(temp+diff, 100))
 	return mFloor(temp), mFloor(temp2)
 end
 
 function Space:GetRainfall(latitude)
 	local rise = self.rainfallMax - self.rainfallMin
 	local diff = self.intraregionRainfallDeviation
-	local rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
-	local rain2 = mRandom(mMax(rain-diff, 0), mMin(rain+diff, 100))
+	local rain, rain2
+	if latitude then
+		local distFromDesert = latitude - 30
+		if distFromDesert < 0 then distFromDesert = mAbs(2 * (distFromDesert)) end
+		distFromDesert = mFloor(distFromDesert ^ self.desertFalloff)
+		rain = ((rise / self.desertFalloffMax) * distFromDesert) + self.rainfallMin
+		-- EchoDebug("rain calcs", rain, distFromDesert, latitude)
+	else
+		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
+	end
+	rain2 = mRandom(mMax(rain-diff, 0), mMin(rain+diff, 100))
 	return mFloor(rain), mFloor(rain2)
 end
 
