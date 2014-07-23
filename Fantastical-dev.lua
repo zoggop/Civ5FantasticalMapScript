@@ -31,6 +31,9 @@ local mMin = math.min
 local mMax = math.max
 local mAbs = math.abs
 local mSqrt = math.sqrt
+local mSin = math.sin
+local mCos = math.cos
+local mPi = math.pi
 local tInsert = table.insert
 local tRemove = table.remove
 
@@ -160,12 +163,12 @@ local function SetConstants()
 	-- temperature/rainfall above 100 count as no distance as long as > (temperature-100), otherwise counts distance away from (temperature-100)
 
 	TerrainDictionary = {
-		[terrainGrass] = { terrainType = terrainGrass, temperature = 55, rainfall = 141, features = { featureNone, featureForest, featureMarsh, featureFallout } },
+		[terrainGrass] = { terrainType = terrainGrass, temperature = 55, rainfall = 131, features = { featureNone, featureForest, featureMarsh, featureFallout } },
 		[terrainPlains] = { terrainType = terrainPlains, temperature = 45, rainfall = 131, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { terrainType = terrainDesert, temperature = 131, rainfall = 0, features = { featureNone, featureOasis, featureFallout } },
 		[terrainTundra] = { terrainType = terrainTundra, temperature = 10, rainfall = 121, features = { featureNone, featureForest, featureFallout } },
 		[terrainSnow] = { terrainType = terrainSnow, temperature = -9, rainfall = 121, features = { featureNone, featureFallout } },
-		[99] = { terrainType = terrainPlains, temperature = 99, rainfall = 99, features = { featureJungle, featureFallout } },
+		[99] = { terrainType = terrainPlains, temperature = 95, rainfall = 85, features = { featureJungle, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection
@@ -174,7 +177,7 @@ local function SetConstants()
 	FeatureDictionary = {
 		[featureNone] = { featureType = featureNone, temperature = 101, rainfall = 101, percent = 100, limitRatio = -1, hill = true },
 		[featureForest] = { featureType = featureForest, temperature = 50, rainfall = 175, percent = 65, limitRatio = -1, hill = true },
-		[featureJungle] = { featureType = featureJungle, temperature = 99, rainfall = 99, percent = 100, limitRatio = -1, hill = true },
+		[featureJungle] = { featureType = featureJungle, temperature = 85, rainfall = 85, percent = 100, limitRatio = -1, hill = true },
 		[featureMarsh] = { featureType = featureMarsh, temperature = 50, rainfall = 90, percent = 40, limitRatio = 0.5, hill = false },
 		[featureOasis] = { featureType = featureOasis, temperature = 75, rainfall = 101, percent = 25, limitRatio = 0.03, hill = false },
 		[featureFallout] = { featureType = featureFallout, temperature = 101, rainfall = 101, percent = 10, limitRatio = -1, hill = true },
@@ -571,20 +574,21 @@ Space = class(function(a)
 	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
 	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
-	a.freezingTemperature = 32 -- this temperature and below creates ice. temperature is 0 to 100
+	a.freezingTemperature = 25 -- this temperature and below creates ice. temperature is 0 to 100
 	a.icePercent = 15 -- of 100 hexes, how often does freezing produce ice
 	a.atollTemperature = 80 -- this temperature and above creates atolls
 	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
-	a.polarFalloff = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
-	a.desertFalloff = 0.4 -- exponent. lower exponent = less desert (somewhere between 0 and 2 is advisable)
+	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
+	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
+	a.rainfallExponent = 1 -- higher exponent = wetter climate. anything above 0 is okay
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureMax = 100 -- highest temprature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.intraregionTemperatureDeviation = 15 -- how much at maximum can a region's temperature vary within itself
+	a.intraregionTemperatureDeviation = 20 -- how much at maximum can a region's temperature vary within itself
 	a.rainfallMin = 0 -- just like temperature above
 	a.rainfallMax = 100 -- just like temperature above
 	a.rainfallDice = 1 -- just like temperature above
-	a.intraregionRainfallDeviation = 30 -- just like temperature above
+	a.intraregionRainfallDeviation = 25 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
@@ -635,9 +639,14 @@ function Space:Compute()
 	    	tInsert(self.fakeLatitudes, increment * i)
 	    end
 	end
-	self.polarFalloffMax = 90 ^ self.polarFalloff
-	self.desertFalloffMax = 60 ^ self.desertFalloff
-	EchoDebug(self.polarFalloffMax, self.desertFalloffMax)
+	self.polarExponentMultiplier = 90 ^ self.polarExponent
+	if self.rainfallMidpoint > 50 then
+		self.rainfallPlusMinus = 100 - self.rainfallMidpoint
+	else
+		self.rainfallPlusMinus = self.rainfallMidpoint
+	end
+	self.rainfallMax = self.rainfallMidpoint + self.rainfallPlusMinus
+	self.rainfallExponentMultiplier = (self.rainfallMax / (self.rainfallMax ^ self.rainfallExponent))
     -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
     self.tinyIslandChance = mCeil(20000 / self.iA)
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
@@ -785,19 +794,22 @@ function Space:ComputeCoasts()
 end
 
 function Space:AddOceanIce()
-	for o, ocean in pairs(self.oceans) do
-		for p, polygon in pairs(ocean) do
-			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
-			if polygon.oceanTemperature < self.freezingTemperature then
-				local below = self.freezingTemperature - polygon.oceanTemperature
-				for h, hex in pairs(polygon.hexes) do
-					if mRandom(1, 100) - below < self.icePercent then
-						hex.featureType = featureIce
+	-- for o, ocean in pairs(self.oceans) do
+		--for p, polygon in pairs(ocean) do
+		for p, polygon in pairs(self.polygons) do
+			if polygon.continentIndex == nil then
+				polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
+				if polygon.oceanTemperature < self.freezingTemperature then
+					local below = self.freezingTemperature - polygon.oceanTemperature
+					for h, hex in pairs(polygon.hexes) do
+						if mRandom(1, 100) - below < self.icePercent then
+							hex.featureType = featureIce
+						end
 					end
 				end
 			end
 		end
-	end
+	-- end
 end
 
 function Space:SetPlots()
@@ -1393,8 +1405,8 @@ function Space:GetTemperature(latitude)
 	local diff = self.intraregionTemperatureDeviation
 	local temp, temp2
 	if latitude then
-		local distFromPole = (90 - latitude) ^ self.polarFalloff
-		temp = (rise / self.polarFalloffMax) * distFromPole + self.temperatureMin
+		local distFromPole = (90 - latitude) ^ self.polarExponent
+		temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
 		-- EchoDebug("temp calcs", temp, latitude)
 	else
 		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
@@ -1404,16 +1416,19 @@ function Space:GetTemperature(latitude)
 end
 
 function Space:GetRainfall(latitude)
-	local rise = self.rainfallMax - self.rainfallMin
 	local diff = self.intraregionRainfallDeviation
 	local rain, rain2
 	if latitude then
-		local distFromDesert = latitude - 30
-		if distFromDesert < 0 then distFromDesert = mAbs(2 * (distFromDesert)) end
-		distFromDesert = mFloor(distFromDesert ^ self.desertFalloff)
-		rain = ((rise / self.desertFalloffMax) * distFromDesert) + self.rainfallMin
+		if latitude > 75 then -- polar
+			rain = self.rainfallMidpoint - (self.rainfallPlusMinus / 2)
+		elseif latitude > 37.5 then -- temperate
+			rain = self.rainfallMidpoint + ((self.rainfallPlusMinus/2) * mCos(latitude * (mPi/25)))
+		else -- tropics and desert
+			rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/25)))
+		end
 		-- EchoDebug("rain calcs", rain, distFromDesert, latitude)
 	else
+		local rise = self.rainfallMax - self.rainfallMin
 		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
 	end
 	rain2 = mRandom(mMax(rain-diff, 0), mMin(rain+diff, 100))
@@ -1527,6 +1542,9 @@ function GeneratePlotTypes()
 	SetConstants()
     mySpace = Space()
     mySpace:Compute()
+    for l = 0, 90, 5 do
+		EchoDebug(l, "temperature: " .. mySpace:GetTemperature(l), "rainfall: " .. mySpace:GetRainfall(l))
+	end
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
 end

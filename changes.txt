@@ -1,11 +1,16 @@
-- alot distribution of region temperature/rainfall/hillyness instead of completely random?
-- add latitude
 - add map options
 - does wonder placement fix work in game?
 - add doughnut ocean algo
 
+$50+\left(50-0.667\left(x-15\right)\right)\sin \left(\frac{\pi }{15}\left(x-7.5\right)\right)$
+
+$50+50\sin \left(\frac{\pi }{30}\left(x+15\right)\right)$
+
 
 DONE
+- sine-based rainfall
+- alot distribution of region temperature/rainfall/hillyness instead of completely random
+- add latitude
 - add tiny lakes as a possible region collection element
 - put atolls in coastal polygons and hexes whose neighbors are a warm terrain region, and ice near cool
 - give each tiny island polygon a region
