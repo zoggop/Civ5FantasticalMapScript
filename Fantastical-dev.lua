@@ -129,7 +129,7 @@ end
 -- so that these constants can be shorter to access and consistent
 local plotOcean, plotLand, plotHills, plotMountain
 local terrainOcean, terrainCoast, terrainGrass, terrainPlains, terrainDesert, terrainTundra, terrainSnow
-local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, featureAtoll, featureFallout
+local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, featureFallout, featureAtoll
 local TerrainDictionary, FeatureDictionary
 
 local function SetConstants()
@@ -152,36 +152,44 @@ local function SetConstants()
 	featureIce = FeatureTypes.FEATURE_ICE
 	featureMarsh = FeatureTypes.FEATURE_MARSH
 	featureOasis = FeatureTypes.FEATURE_OASIS
+	featureFallout = FeatureTypes.FEATURE_FALLOUT
+
 	for thisFeature in GameInfo.Features() do
 		if thisFeature.Type == "FEATURE_ATOLL" then
 			featureAtoll = thisFeature.ID
 		end
 	end
-	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
-	-- temperature/rainfall below 0 count as no distance as long as < -temperature, otherwise counts distance away from -temperature
-	-- temperature/rainfall above 100 count as no distance as long as > (temperature-100), otherwise counts distance away from (temperature-100)
+	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 	TerrainDictionary = {
-		[terrainGrass] = { terrainType = terrainGrass, temperature = {60, 100}, rainfall = {20, 100}, features = { featureNone, featureForest, featureMarsh, featureFallout } },
-		[terrainPlains] = { terrainType = terrainPlains, temperature = {25, 60}, rainfall = {20, 100}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { terrainType = terrainDesert, temperature = {25, 100}, rainfall = {0, 20}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { terrainType = terrainTundra, temperature = {0, 25}, rainfall = {20, 100}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { terrainType = terrainSnow, temperature = {0, 25}, rainfall = {0, 20}, features = { featureNone, featureFallout } },
-		[99] = { terrainType = terrainPlains, temperature = {80, 100}, rainfall = {80, 100}, features = { featureJungle, featureFallout } },
+		[terrainGrass] = { temperature = {40, 100}, rainfall = {20, 100, 60}, features = { featureNone, featureForest, featureMarsh, featureFallout } },
+		[terrainPlains] = { temperature = {30, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { temperature = {25, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { temperature = {0, 30}, rainfall = {20, 100, 25}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { temperature = {0, 30, 0}, rainfall = {0, 20, 0}, features = { featureNone, featureFallout } },
+		[99] = { terrainType = terrainPlains, temperature = {80, 100}, rainfall = {75, 100}, features = { featureJungle, featureFallout } },
 	}
 
-	-- percent is how likely it is to show up in a region's collection
+	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { featureType = featureNone, temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { featureType = featureForest, temperature = {10, 80}, rainfall = {65, 100}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { featureType = featureJungle, temperature = {80, 100}, rainfall = {80, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureMarsh] = { featureType = featureMarsh, temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
-		[featureOasis] = { featureType = featureOasis, temperature = {50, 100}, rainfall = {0, 100}, percent = 25, limitRatio = 0.02, hill = false },
-		[featureFallout] = { featureType = featureFallout, temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.5, hill = true },
+		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { temperature = {15, 100}, rainfall = {70, 100}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
+		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
+		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 25, limitRatio = 0.02, hill = false },
+		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.5, hill = true },
 	}
+
+	-- doing it this way just so the declarations above are shorter
+	for terrainType, terrain in pairs(TerrainDictionary) do
+		if terrain.terrainType == nil then terrain.terrainType = terrainType end
+	end
+	for featureType, feature in pairs(FeatureDictionary) do
+		if feature.featureType == nil then feature.featureType = featureType end
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -486,9 +494,9 @@ function Region:WithinBounds(thing, temperature, rainfall)
 end
 
 function Region:BoundsDistance(bounds, value)
-	local min, max = bounds[1], bounds[2]
+	local min, max, mid = bounds[1], bounds[2], bounds[3]
 	if value >= min and value <= max then
-		local mid = (min + max) / 2
+		mid = mid or (min + max) / 2
 		return mAbs(value - mid)
 	else
 		if value > max then return 100 + (value - max) end
@@ -595,15 +603,16 @@ Space = class(function(a)
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
-	a.useMapLatitudes = true -- should the climate have anything to do with latitude?
+	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 3 -- of how many kinds of tiles does a region consist, at minimum (modified by map size)
 	a.collectionSizeMax = 12 -- of how many kinds of tiles does a region consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.hillChance = 4 -- how many possible mountains out of ten become a hill when expanding and reducing
+	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 5 -- how many polygon edges long can a mountain range be
+	a.coastRangeRatio = 0.33
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
-	a.mountainRangeMult = 1.4 -- higher mult means more scattered mountains
+	a.mountainRangeMult = 1.3 -- higher mult means more scattered mountains
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 5 -- out of 100 hexes, how often do coastal shelves produce tiny islands (this is modified by the map size)
 	a.coastDiceAmount = 2 -- how many dice does each polygon get for coastal expansion
@@ -1175,14 +1184,25 @@ function Space:PickMountainRanges()
 	end
 	local mountainRangeRatio = self.mountainRatio * self.mountainRangeMult
 	local prescribedEdges = mountainRangeRatio * #self.edges
+	local coastPrescription = mFloor(prescribedEdges * self.coastRangeRatio)
+	local interiorPrescription = prescribedEdges - coastPrescription
 	EchoDebug("prescribed mountain range edges: " .. prescribedEdges .. " of " .. #self.edges)
 	local edgeCount = 0
+	local coastCount = 0
+	local interiorCount = 0
 	while #edgeBuffer > 0 and edgeCount < prescribedEdges do
 		local edge
+		local coastRange
 		repeat
 			edge = tRemoveRandom(edgeBuffer)
 			if (edge.polygons[1].continentIndex or edge.polygons[2].continentIndex) and not edge.mountains then
-				break
+				if edge.polygons[1].continentIndex and edge.polygons[2].continentIndex and interiorCount < interiorPrescription then
+					coastRange = false
+					break
+				elseif coastCount < coastPrescription then
+					coastRange = true
+					break
+				end
 			else
 				edge = nil
 			end
@@ -1191,12 +1211,17 @@ function Space:PickMountainRanges()
 		edge.mountains = true
 		local range = { edge }
 		edgeCount = edgeCount + 1
+		if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
 		repeat
 			local nextPolygon = edge.polygons[mRandom(1, 2)]
 			local nextEdges = {}
 			for neighborPolygon, nextEdge in pairs(nextPolygon.edges) do
 				if (nextEdge.polygons[1].continentIndex or nextEdge.polygons[2].continentIndex) and not nextEdge.mountains then
-					tInsert(nextEdges, nextEdge)
+					if coastRange and (not nextEdge.polygons[1].continentIndex or not nextEdge.polygons[2].continentIndex) then
+						tInsert(nextEdges, nextEdge)
+					elseif not coastRange and nextEdge.polygons[1].continentIndex and nextEdge.polygons[2].continentIndex then
+						tInsert(nextEdges, nextEdge)
+					end
 				end
 			end
 			if #nextEdges == 0 then break end
@@ -1204,8 +1229,9 @@ function Space:PickMountainRanges()
 			nextEdge.mountains = true
 			tInsert(range, nextEdge)
 			edgeCount = edgeCount + 1
+			if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
 			edge = nextEdge
-		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges
+		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges or coastCount > coastPrescription or interiorCount > interiorPrescription
 		for i, e in pairs(range) do
 			for hi, hex in pairs(e.hexes) do
 				hex.mountainRange = true

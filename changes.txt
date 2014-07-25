@@ -1,13 +1,11 @@
+- base water polygon temperature on neighboring continent polygon
+- adjust terrain and feature dictionaries
 - add map options
 - does wonder placement fix work in game?
 - add doughnut ocean algo
 
-$50+\left(50-0.667\left(x-15\right)\right)\sin \left(\frac{\pi }{15}\left(x-7.5\right)\right)$
-
-$50+50\sin \left(\frac{\pi }{30}\left(x+15\right)\right)$
-
-
 DONE
+- allow control over coastal vs interior mountain range ratios
 - sine-based rainfall
 - alot distribution of region temperature/rainfall/hillyness instead of completely random
 - add latitude
