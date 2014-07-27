@@ -361,10 +361,6 @@ function Polygon:SetNeighbor(polygon2)
 	polygon2.isNeighbor[self] = true
 end
 
-function Polygon:EdgeAddress(polygon2)
-	return self.x .. " " .. self.y .. " " .. polygon2.x .. " " .. polygon2.y
-end
-
 function Polygon:RelaxToCentroid()
 	local space = self.space
 	if #self.hexes ~= 0 then
@@ -609,7 +605,7 @@ Space = class(function(a)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
-	a.mountainRangeMaxEdges = 5 -- how many polygon edges long can a mountain range be
+	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.mountainRangeMult = 1.3 -- higher mult means more scattered mountains
@@ -620,7 +616,7 @@ Space = class(function(a)
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
 	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
 	a.freezingTemperature = 25 -- this temperature and below creates ice. temperature is 0 to 100
-	a.icePercent = 15 -- of 100 hexes, how often does freezing produce ice
+	a.icePercent = 75 -- of 100 hexes, how often does freezing produce ice
 	a.atollTemperature = 80 -- this temperature and above creates atolls
 	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
@@ -802,8 +798,7 @@ function Space:ComputeCoasts()
 					-- EchoDebug(nhex.plotType, nhex.polygon.continentIndex)
 					hex.coastalTemperature = 50
 					if nhex.polygon.region then hex.coastalTemperature = nhex.polygon.region.temperatureMin end
-					local below = self.freezingTemperature - hex.coastalTemperature
-					if hex.coastalTemperature <= self.freezingTemperature and mRandom(1, 100) - below < self.icePercent then
+					if self:GimmeIce(hex.coastalTemperature) then
 						hex.featureType = featureIce
 					elseif hex.coastalTemperature >= self.atollTemperature and mRandom(1, 100) < self.atollPercent then
 						hex.featureType = featureAtoll
@@ -820,8 +815,7 @@ function Space:ComputeCoasts()
 					hex.coastalTemperature = 50
 					if hex.polygon.region then
 						hex.coastalTemperature = hex.polygon.region.temperatureMin
-						local below = self.freezingTemperature - hex.coastalTemperature
-						if hex.coastalTemperature <= self.freezingTemperature and mRandom(1, 100) - below < self.icePercent then
+						if self:GimmeIce(hex.coastalTemperature) then
 							hex.featureType = featureIce
 						elseif hex.coastalTemperature >= self.atollTemperature and mRandom(1, 100) < self.atollPercent then
 							hex.featureType = featureAtoll
@@ -839,22 +833,36 @@ function Space:ComputeCoasts()
 end
 
 function Space:AddOceanIce()
-	-- for o, ocean in pairs(self.oceans) do
-		--for p, polygon in pairs(ocean) do
-		for p, polygon in pairs(self.polygons) do
-			if polygon.continentIndex == nil then
-				polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
-				if polygon.oceanTemperature < self.freezingTemperature then
-					local below = self.freezingTemperature - polygon.oceanTemperature
-					for h, hex in pairs(polygon.hexes) do
-						if mRandom(1, 100) - below < self.icePercent then
-							hex.featureType = featureIce
-						end
+	for p, polygon in pairs(self.polygons) do
+		if polygon.continentIndex == nil then
+			if not self.useMapLatitudes and polygon.oceanIndex == nil then
+				local latSum = 0
+				local div = 0
+				for n, neighbor in pairs(polygon.neighbors) do
+					if neighbor.continentIndex then
+						latSum = latSum + neighbor.latitude
+						div = div + 1
+					end
+				end
+				if div > 0 then polygon.latitude = latSum / div end
+			end
+			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
+			if polygon.oceanTemperature < self.freezingTemperature then
+				local below = self.freezingTemperature - polygon.oceanTemperature
+				for h, hex in pairs(polygon.hexes) do
+					if self:GimmeIce(polygon.oceanTemperature) or (self.useMapLatitudes and self:GimmeIce(self:GetTemperature(hex.latitude))) then
+						hex.featureType = featureIce
 					end
 				end
 			end
 		end
-	-- end
+	end
+end
+
+function Space:GimmeIce(temperature)
+	-- local below = self.freezingTemperature - hex.coastalTemperature
+	-- if hex.coastalTemperature <= self.freezingTemperature and mRandom(1, 100) - below < self.icePercent then
+	return mRandom(0 - (100 - self.icePercent), self.freezingTemperature) > temperature
 end
 
 function Space:SetPlots()
@@ -1232,6 +1240,7 @@ function Space:PickMountainRanges()
 			if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
 			edge = nextEdge
 		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges or coastCount > coastPrescription or interiorCount > interiorPrescription
+		EchoDebug("new range", #range, tostring(coastRange))
 		for i, e in pairs(range) do
 			for hi, hex in pairs(e.hexes) do
 				hex.mountainRange = true
@@ -1239,6 +1248,7 @@ function Space:PickMountainRanges()
 		end
 		tInsert(self.mountainRanges, range)
 	end
+	EchoDebug(interiorCount, coastCount)
 end
 
 function Space:PickRegions()
@@ -1605,9 +1615,11 @@ function GeneratePlotTypes()
 	SetConstants()
     mySpace = Space()
     mySpace:Compute()
+    --[[
     for l = 0, 90, 5 do
 		EchoDebug(l, "temperature: " .. mySpace:GetTemperature(l), "rainfall: " .. mySpace:GetRainfall(l))
 	end
+	]]--
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
 end
