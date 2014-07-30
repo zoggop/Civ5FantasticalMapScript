@@ -63,6 +63,18 @@ local function tRemoveRandom(fromTable)
 	return tRemove(fromTable, mRandom(1, #fromTable))
 end
 
+local function tGetRandom(fromTable)
+	return fromTable[mRandom(1, #fromTable)]
+end
+
+local function tDuplicate(sourceTable)
+	local duplicate = {}
+	for k, v in pairs(sourceTable) do
+		tInsert(duplicate, v)
+	end
+	return duplicate
+end
+
 local function diceRoll(dice, maximum, invert)
 	if invert == nil then invert = false end
 	if maximum == nil then maximum = 1.0 end
@@ -198,13 +210,14 @@ Hex = class(function(a, space, x, y, index)
 	a.space = space
 	a.index = index
 	a.x, a.y = x, y
-	a.liminality = 0
 	a.edginess = 0
+	a.adjacentPolygons = {}
+	a.adjacentPolyCount = 0
 	a.edgeWith = {}
 end)
 
 function Hex:Place(relax)
-	self.polygon, self.liminality = self:ClosestPolygon(relax)
+	self.polygon = self:ClosestPolygon(relax)
 	self.space.hexes[self.index] = self
 	tInsert(self.polygon.hexes, self)
 	self.polygon.area = self.polygon.area + 1
@@ -215,9 +228,6 @@ function Hex:Place(relax)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
 		self.latitude = self.plot:GetLatitude()
-		if self.liminality ~= 0 then
-			self.space.liminalHexCount = self.space.liminalHexCount + 1
-		end
 		self.polygon:CheckBottomTop(self.x, self.y)
 	end
 end
@@ -282,18 +292,7 @@ function Hex:ClosestPolygon(relax)
 			closest_polygon = polygon
 		end
 	end
-	local liminality = 0
-	if not relax then
-		-- sometimes a point is closer to more than one point
-    	for i = 1, #self.space.polygons do
-    		local polygon = self.space.polygons[i]
-    		if dists[i] < closest_distance + self.space.liminalTolerance and polygon ~= closest_polygon then
-    			liminality = liminality + 1
-    		end
-    	end
-    	if liminality > self.space.maxLiminality then self.space.maxLiminality = liminality end
-    end
-	return closest_polygon, liminality
+	return closest_polygon
 end
 
 function Hex:SetPlot()
@@ -326,6 +325,7 @@ Polygon = class(function(a, space, x, y)
 	end
 	a.hexes = {}
 	a.edges = {}
+	a.vertices = {}
 	a.isNeighbor = {}
 	a.area = 0
 	a.minX = space.w
@@ -418,6 +418,16 @@ function Polygon:NearOther(value, key)
 		end
 	end
 	return false
+end
+
+function Polygon:Subdivide()
+	local hexBuffer = tDuplicate(self.hexes)
+	for n = 1, self.space.subPolygonCount do
+		local hex = tRemoveRandom(hexBuffer)
+		local subPolygon = Polygon(self.space, hex.x, hex.y)
+
+		tInsert(self.subPolygons, subPolygon)
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -570,7 +580,7 @@ function Region:Fill()
 	for i, polygon in pairs(self.polygons) do
 		for hi, hex in pairs(polygon.hexes) do
 			if hex.plotType ~= plotOcean then
-				local element = self.collection[mRandom(1, #self.collection)]
+				local element = tGetRandom(self.collection)
 				hex.plotType = element.plotType
 				if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
 				hex.terrainType = element.terrainType
@@ -594,7 +604,6 @@ Space = class(function(a)
 	a.polygonCount = 140 -- how many polygons (map scale)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.liminalTolerance = 0.5 -- within this much, distances to other polygons are considered "equal"
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -656,8 +665,6 @@ Space = class(function(a)
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
     a.fakeLatitudes = {}
-    a.maxLiminality = 0
-    a.liminalHexCount = 0
     a.culledPolygons = 0
 end)
 
@@ -740,10 +747,10 @@ function Space:ComputeLandforms()
 	for pi, hex in pairs(self.hexes) do
 		if hex.polygon.continentIndex ~= nil then
 			-- near ocean trench?
-			for nhex, yes in pairs(hex.edgeWith) do
-				if nhex.polygon.oceanIndex ~= nil then
+			for neighbor, yes in pairs(hex.adjacentPolygons) do
+				if neighbor.oceanIndex ~= nil then
 					hex.nearOceanTrench = true
-					if hex.polygon.nearOcean then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
+					if neighbor.nearOcean then EchoDebug("CONTINENT NEAR OCEAN TRENCH??") end
 					break
 				end
 			end
@@ -767,8 +774,8 @@ function Space:ComputeSeas()
 		if hex.polygon.continentIndex == nil then
 			if hex.polygon.coastal then
 				local nearOcean = false
-				for nhex, yes in pairs(hex.edgeWith) do
-					if nhex.polygon.oceanIndex or nhex.polygon.continentIndex then
+				for neighbor, yes in pairs(hex.adjacentPolygons) do
+					if neighbor.oceanIndex or neighbor.continentIndex then
 						hex.tooCloseForIsland = true
 						break
 					end
@@ -902,19 +909,21 @@ function Space:FillPolygons(relax)
 			hex:Place(relax)
 		end
 	end
-	if not relax then
-		EchoDebug(self.maxLiminality .. " maximum liminality", self.liminalHexCount .. " total liminal tiles")
-	end
 end
 
 function Space:ComputePolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
-		for ni, nhex in pairs(hex:Neighbors()) do -- 3 and 4 are are never there yet
+		for ni, nhex in pairs(hex:Neighbors({1, 2, 5, 6})) do -- 3 and 4 are are never there yet
 			if nhex.polygon ~= hex.polygon then
 				hex.polygon:SetNeighbor(nhex.polygon)
 				if not hex.edgeWith[nhex] then
 					hex.edginess = hex.edginess + 1
 					hex.edgeWith[nhex] = true
+				end
+				if not hex.adjacentPolygons[nhex.polygon] then
+					hex.adjacentPolyCount = hex.adjacentPolyCount + 1
+					hex.adjacentPolygons[nhex.polygon] = true
+					if hex.adjacentPolyCount == 2 then tInsert(hex.polygon.vertices, hex) end
 				end
 				if hex.polygon.edges[nhex.polygon] then
 					tInsert(hex.polygon.edges[nhex.polygon].hexes, hex)
@@ -1029,7 +1038,7 @@ function Space:PickOceansCylinder()
 					highestNeigh = neighbor
 				end
 			end
-			polygon = highestNeigh or upNeighbors[mRandom(1, #upNeighbors)]
+			polygon = highestNeigh or tGetRandom(upNeighbors)
 			iterations = iterations + 1
 		end
 		tInsert(self.oceans, ocean)
@@ -1063,7 +1072,7 @@ function Space:PickOceansRectangle()
 				self.nonOceanArea = self.nonOceanArea - neighbor.area
 				self.nonOceanPolygons = self.nonOceanPolygons - 1
 			end
-			polygon = upNeighbors[mRandom(1, #upNeighbors)]
+			polygon = tGetRandom(upNeighbors)
 			iterations = iterations + 1
 		end
 	end
@@ -1233,7 +1242,7 @@ function Space:PickMountainRanges()
 				end
 			end
 			if #nextEdges == 0 then break end
-			local nextEdge = nextEdges[mRandom(1, #nextEdges)]
+			local nextEdge = tGetRandom(nextEdges)
 			nextEdge.mountains = true
 			tInsert(range, nextEdge)
 			edgeCount = edgeCount + 1
@@ -1361,7 +1370,7 @@ function Space:ResizeMountains(prescribedArea)
 	elseif #self.mountainHexes < prescribedArea then
 		local noNeighbors = 0
 		repeat
-			local hex = self.mountainHexes[mRandom(1, #self.mountainHexes)]
+			local hex = tGetRandom(self.mountainHexes)
 			local neighbors = hex:Neighbors()
 			local nhex
 			repeat
