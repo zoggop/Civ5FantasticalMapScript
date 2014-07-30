@@ -217,18 +217,23 @@ Hex = class(function(a, space, x, y, index)
 end)
 
 function Hex:Place(relax)
-	self.polygon = self:ClosestPolygon(relax)
+	local polygon = self:ClosestPolygon(relax)
 	self.space.hexes[self.index] = self
-	tInsert(self.polygon.hexes, self)
-	self.polygon.area = self.polygon.area + 1
-	if self.x < self.polygon.minX then self.polygon.minX = self.x end
-	if self.y < self.polygon.minY then self.polygon.minY = self.y end
-	if self.x > self.polygon.maxX then self.polygon.maxX = self.x end
-	if self.y > self.polygon.maxY then self.polygon.maxY = self.y end
+	tInsert(polygon.hexes, self)
+	polygon.area = polygon.area + 1
+	if self.x < polygon.minX then polygon.minX = self.x end
+	if self.y < polygon.minY then polygon.minY = self.y end
+	if self.x > polygon.maxX then polygon.maxX = self.x end
+	if self.y > polygon.maxY then polygon.maxY = self.y end
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
 		self.latitude = self.plot:GetLatitude()
-		self.polygon:CheckBottomTop(self.x, self.y)
+		polygon:CheckBottomTop(self.x, self.y)
+	end
+	if self.polygon and not relax then
+		self.subPolygon = polygon
+	else
+		self.polygon = polygon
 	end
 end
 
@@ -284,8 +289,14 @@ function Hex:ClosestPolygon(relax)
 	local closest_distance = 0
 	local closest_polygon
 	-- find the closest point to this point
-	for i = 1, #self.space.polygons do
-		local polygon = self.space.polygons[i]
+	local somePolygons
+	if self.polygon and not relax then
+		somePolygons = self.polygon.subPolygons
+	else
+		somePolygons = self.space.polygons
+	end
+	for i = 1, #somePolygons do
+		local polygon = somePolygons[i]
 		dists[i] = self.space:EucDistance(polygon.x, polygon.y, self.x, self.y)
 		if i == 1 or dists[i] < closest_distance then
 			closest_distance = dists[i]
@@ -293,6 +304,45 @@ function Hex:ClosestPolygon(relax)
 		end
 	end
 	return closest_polygon
+end
+
+function Hex:ComputeNeighbors()
+	for ni, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet
+		if nhex.polygon ~= self.polygon then
+			self.polygon:SetNeighbor(nhex.polygon)
+			if not self.edgeWith[nhex] then
+				self.edginess = self.edginess + 1
+				self.edgeWith[nhex] = true
+			end
+			if not self.adjacentPolygons[nhex.polygon] then
+				self.adjacentPolyCount = self.adjacentPolyCount + 1
+				self.adjacentPolygons[nhex.polygon] = true
+				if self.adjacentPolyCount == 2 then tInsert(self.polygon.vertices, self) end
+			end
+			if self.polygon.edges[nhex.polygon] then
+				tInsert(self.polygon.edges[nhex.polygon].hexes, self)
+			else
+				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self } }
+				self.polygon.edges[nhex.polygon] = edge
+				nhex.polygon.edges[self.polygon] = edge
+				tInsert(self.space.edges, edge)
+			end
+		end
+	end
+end
+
+function Hex:ComputeSubNeighbors()
+	for ni, nhex in pairs(self:Neighbors()) do
+		if nhex.subPolygon ~= self.subPolygon then
+			if nhex.polygon == self.polygon then
+				self.subPolygon:SetNeighbor(nhex.subPolygon)
+			else
+				if not self.subPolygon.adjacentSuperPolygons[nhex.polygon] then
+					self.subPolygon.adjacentSuperPolygons[nhex.polygon] = true
+				end
+			end
+		end
+	end
 end
 
 function Hex:SetPlot()
@@ -323,6 +373,7 @@ Polygon = class(function(a, space, x, y)
 	else
 		a.latitude = space:GetFakeLatitude()
 	end
+	a.subPolygons = {}
 	a.hexes = {}
 	a.edges = {}
 	a.vertices = {}
@@ -423,10 +474,61 @@ end
 function Polygon:Subdivide()
 	local hexBuffer = tDuplicate(self.hexes)
 	for n = 1, self.space.subPolygonCount do
+		if #hexBuffer == 0 then break end
 		local hex = tRemoveRandom(hexBuffer)
 		local subPolygon = Polygon(self.space, hex.x, hex.y)
-
+		subPolygon.superPolygon = self
+		subPolygon.adjacentSuperPolygons = {}
 		tInsert(self.subPolygons, subPolygon)
+		tInsert(self.space.subPolygons, subPolygon)
+	end
+	for h, hex in pairs(self.hexes) do
+		hex:Place()
+	end
+	-- compute neighbors
+	for h, hex in pairs(self.hexes) do
+		hex:ComputeSubNeighbors()
+	end
+	-- pick off edge subpolygons at random, and populate subpolygon tables
+	-- and create neighbor tables
+	for i = #self.subPolygons, 1, -1 do
+		local subPolygon = self.subPolygons[i]
+		subPolygon:PostProcess()
+		if #subPolygon.hexes > 0 then
+			if #self.subPolygons > 1 and not subPolygon.deserter then
+				local adjacent = {}
+				for polygon, yes in pairs(subPolygon.adjacentSuperPolygons) do
+					tInsert(adjacent, polygon)
+				end
+				if #adjacent > 0 and mRandom(1, 100) < self.space.subPolygonDesertionPercent then
+					subPolygon.superPolygon = tGetRandom(adjacent)
+					subPolygon.deserter = true
+					tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
+					tRemove(self.subPolygons, i)
+				end
+			end
+		else
+			tRemove(self.subPolygons, i)
+		end
+	end
+	-- remove hexes that are no longer inside this pseudopolygon
+	-- and move them to the correct polygon
+	for i = #self.hexes, 1, -1 do
+		local hex = self.hexes[i]
+		if hex.subPolygon.superPolygon ~= self then
+			hex.polygon = hex.subPolygon.superPolygon
+			self.area = self.area - 1
+			hex.polygon.area = hex.polygon.area + 1
+			tInsert(hex.polygon.hexes, hex)
+			tRemove(self.hexes, i)
+		end
+	end
+end
+
+function Polygon:PostProcess()
+	self.neighbors = {}
+	for neighbor, yes in pairs(self.isNeighbor) do
+		tInsert(self.neighbors, neighbor)
 	end
 end
 
@@ -604,6 +706,8 @@ Space = class(function(a)
 	a.polygonCount = 140 -- how many polygons (map scale)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	a.subPolygonCount = 9
+	a.subPolygonDesertionPercent = 10
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -653,6 +757,7 @@ Space = class(function(a)
 	a.continents = {}
 	a.regions = {}
 	a.polygons = {}
+	a.subPolygons = {}
 	a.edges = {}
 	a.mountainRanges = {}
 	a.bottomYPolygons = {}
@@ -715,6 +820,8 @@ function Space:Compute()
     self:FillPolygons()
     EchoDebug("culling polygons...")
     self:CullPolygons()
+    EchoDebug("subdividing polygons...")
+    self:SubdividePolygons()
     EchoDebug("computing polygon neighbors...")
     self:ComputePolygonNeighbors()
     EchoDebug("post-processing polygons...")
@@ -911,33 +1018,6 @@ function Space:FillPolygons(relax)
 	end
 end
 
-function Space:ComputePolygonNeighbors()
-	for i, hex in pairs(self.hexes) do
-		for ni, nhex in pairs(hex:Neighbors({1, 2, 5, 6})) do -- 3 and 4 are are never there yet
-			if nhex.polygon ~= hex.polygon then
-				hex.polygon:SetNeighbor(nhex.polygon)
-				if not hex.edgeWith[nhex] then
-					hex.edginess = hex.edginess + 1
-					hex.edgeWith[nhex] = true
-				end
-				if not hex.adjacentPolygons[nhex.polygon] then
-					hex.adjacentPolyCount = hex.adjacentPolyCount + 1
-					hex.adjacentPolygons[nhex.polygon] = true
-					if hex.adjacentPolyCount == 2 then tInsert(hex.polygon.vertices, hex) end
-				end
-				if hex.polygon.edges[nhex.polygon] then
-					tInsert(hex.polygon.edges[nhex.polygon].hexes, hex)
-				else
-					local edge = { polygons = { hex.polygon, nhex.polygon }, hexes = { hex } }
-					hex.polygon.edges[nhex.polygon] = edge
-					nhex.polygon.edges[hex.polygon] = edge
-					tInsert(self.edges, edge)
-				end
-			end
-		end
-	end
-end
-
 function Space:RelaxPolygons()
 	for i, polygon in pairs(self.polygons) do
 		polygon:RelaxToCentroid()
@@ -955,14 +1035,23 @@ function Space:CullPolygons()
 	EchoDebug(self.culledPolygons .. " polygons culled")
 end
 
+function Space:SubdividePolygons()
+	for i, polygon in pairs(self.polygons) do
+		polygon:Subdivide()
+	end
+end
+
+function Space:ComputePolygonNeighbors()
+	for i, hex in pairs(self.hexes) do
+		hex:ComputeNeighbors()
+	end
+end
+
 function Space:PostProcessPolygons()
 	self.polygonMinArea = self.iA
 	self.polygonMaxArea = 0
 	for i, polygon in pairs(self.polygons) do
-		polygon.neighbors = {}
-		for neighbor, yes in pairs(polygon.isNeighbor) do
-			tInsert(polygon.neighbors, neighbor)
-		end
+		polygon:PostProcess()
 		if polygon.area < self.polygonMinArea and polygon.area > 0 then
 			self.polygonMinArea = polygon.area
 		end
