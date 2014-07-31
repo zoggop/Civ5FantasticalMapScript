@@ -176,10 +176,10 @@ local function SetConstants()
 
 	TerrainDictionary = {
 		[terrainGrass] = { temperature = {40, 100}, rainfall = {20, 100, 60}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { temperature = {30, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { temperature = {25, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { temperature = {0, 30, 5}, rainfall = {20, 100, 25}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { temperature = {0, 30, 0}, rainfall = {0, 20, 0}, features = { featureNone, featureFallout } },
+		[terrainPlains] = { temperature = {20, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { temperature = {20, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { temperature = {0, 30, 10}, rainfall = {20, 100}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { temperature = {0, 20, 0}, rainfall = {0, 20, 0}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
@@ -187,7 +187,7 @@ local function SetConstants()
 
 	FeatureDictionary = {
 		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { temperature = {15, 85, 35}, rainfall = {70, 100}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureForest] = { temperature = {0, 85, 30}, rainfall = {50, 100, 90}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
 		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 25, limitRatio = 0.02, hill = false },
@@ -583,7 +583,7 @@ function Region:CreateCollection()
 	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
-	EchoDebug(self.latitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
+	-- EchoDebug(self.latitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	-- create the collection
 	self.size, self.subSize = self.space:GetCollectionSize()
 	local subPolys = 0
@@ -592,24 +592,44 @@ function Region:CreateCollection()
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
 	self.totalSize = self.size * self.subSize
+	-- EchoDebug(self.size, self.subSize, self.totalSize, subPolys)
+	-- create lists of possible temperature and rainfall
 	local tempList = {}
-	local tInc = (self.temperatureMax - self.temperatureMin) / (self.size - 1)
-	for i = 0, self.size-1 do
-		local temperature = self.temperatureMin + (tInc * i)
-		tInsert(tempList, temperature)
-	end
 	local rainList = {}
-	local rInc = (self.rainfallMax - self.rainfallMin) / (self.size - 1)
-	for i = 0, self.size-1 do
-		local rainfall = self.rainfallMin + (rInc * i)
-		tInsert(rainList, rainfall)
+	local tInc = (self.temperatureMax - self.temperatureMin) / self.size
+	local rInc = (self.rainfallMax - self.rainfallMin) / self.size
+	local tSubInc = tInc / (self.subSize - 1)
+	local rSubInc = rInc / (self.subSize - 1)
+	for i = 1, self.size do
+		local temperature = self.temperatureMin + (tInc * (i-1))
+		local rainfall = self.rainfallMin + (rInc * (i-1))
+		local temps = {}
+		local rains = {}
+		if self.subSize == 1 then
+			temps = { temperature + (tInc / 2) }
+			rains = { rainfall + (rInc / 2) }
+		else
+			for si = 1, self.subSize do
+				local temp = temperature + (tSubInc * (si-1))
+				local rain = rainfall + (rSubInc * (si-1))
+				tInsert(temps, temp)
+				tInsert(rains, rain)
+			end
+		end
+		tInsert(tempList, temps)
+		tInsert(rainList, rains)
 	end
+	-- pick randomly from lists of temperature and rainfall to create elements in the collection
 	for i = 1, self.size do
 		local lake = mRandom(1, 100) < self.lakeyness
-		local temperature = tRemoveRandom(tempList)
-		local rainfall = tRemoveRandom(rainList)
+		local temps = tRemoveRandom(tempList)
+		local rains = tRemoveRandom(rainList)
+		-- EchoDebug("lists", i, self.size, #tempList, #rainList, self.subSize, #temps, #rains)
 		local subCollection = {}
 		for si = 1, self.subSize do
+			-- EchoDebug("sublists", si, #temps, #rains, self.subSize)
+			local temperature = tRemoveRandom(temps)
+			local rainfall = tRemoveRandom(rains)
 			tInsert(subCollection, self:CreateElement(temperature, rainfall, lake))
 		end
 		tInsert(self.collection, subCollection)
@@ -618,7 +638,7 @@ end
 
 function Region:GetLatitude()
 	local polygon = tGetRandom(self.polygons)
-	return polygon.latitude
+	return mFloor(polygon.latitude)
 	--[[
 	local latSum = 0
 	for i, polygon in pairs(self.polygons) do
@@ -785,7 +805,7 @@ Space = class(function(a)
 	a.rainfallMin = 0 -- just like temperature above
 	a.rainfallMax = 100 -- just like temperature above
 	a.rainfallDice = 1 -- just like temperature above
-	a.intraregionRainfallDeviation = 20 -- just like temperature above
+	a.intraregionRainfallDeviation = 30 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
