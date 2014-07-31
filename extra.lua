@@ -66,3 +66,43 @@ function SetTerrainTypes(terrainTypes)
 		-- MapGenerator's SetPlotTypes uses i+1, but MapGenerator's SetTerrainTypes uses just i. wtf.
 	end
 end
+
+function Space:ExpandCoasts()
+	EchoDebug(self.coastArea .. " coastal hexes before expansion")
+	local d = 1
+	repeat 
+		local makeCoast = {}
+		local potential = 0
+		for i, hex in pairs(self.deepHexes) do
+			if hex.plotType == plotOcean and hex.terrainType == terrainOcean and hex.polygon.oceanIndex == nil then
+				local nearcoast
+				for n, nhex in pairs(hex:Neighbors()) do
+					if nhex.terrainType == terrainCoast then
+						nearcoast = nhex
+						break
+					end
+				end
+				if nearcoast then
+					potential = potential + 1
+					if Map.Rand(hex.polygon.coastExpansionDice[d], "expand coast?") == 0 or nearcoast.featureType == featureIce then
+						makeCoast[hex] = nearcoast
+					end
+				end
+			end
+		end
+		for hex, nearcoast in pairs(makeCoast) do
+			hex.terrainType = terrainCoast
+			if nearcoast.coastalTemperature <= self.freezingTemperature then
+				nearcoast.featureType = featureIce
+			elseif nearcoast.coastalTemperature >= self.atollTemperature then
+				nearcoast.featureType = featureAtoll
+			end
+			hex.expandedCoast = true
+			hex.coastalTemperature = nearcoast.coastalTemperature
+			self.coastArea = self.coastArea + 1
+		end
+		d = d + 1
+		if d > self.coastDiceAmount then d = 1 end
+	until self.coastArea >= self.prescribedCoastArea or potential == 0
+	EchoDebug(self.coastArea .. " coastal hexes after expansion")
+end

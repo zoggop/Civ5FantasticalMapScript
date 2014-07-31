@@ -1,4 +1,4 @@
-- use subdivisions for ice
+- don't allow contiguous mountain ranges to self-intersect
 - adjust terrain and feature dictionaries
 - make sure non-wrapping map works
 - make sure coastal ice doesn't interfere with navigation?
@@ -7,6 +7,8 @@
 - add doughnut ocean algo
 
 DONE
+- instead of expanding coasts, just make  every subpolygon with continental neighbors coast
+- use subdivisions for ice
 - use subdivisions for tiny islands
 - use subpolygons to fill regions
 - subdivide all polygons from the beginning, and give each large polygon a "pseudopolygon" made up of all its subpolygons plus and minus some randomly from its edges, to reduce obvious straight-sided shapes on large maps
