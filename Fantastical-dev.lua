@@ -152,7 +152,6 @@ local OptionDictionary = {
 			[2] = { name = "Two", values = {2} },
 			[3] = { name = "Three", values = {3} },
 			[4] = { name = "Four", values = {4} },
-			[5] = { name = "Five", values = {5} },
 		}
 	},
 	{ name = "Continents Per Ocean", sortpriority = 1, keys = { "majorContinentNumber", }, default = 1,
@@ -1282,35 +1281,47 @@ function Space:PickOceansCylinder()
 	end
 end
 
-function Space:PickOceansRectangle() 
-	-- pick a corner and grow the ocean from there
-	local corners = { [1] = {x = 0, y = 0}, [2] = {x = 0, y = self.h}, [3] = {x = self.w, y = 0}, [4] = {x = self.w, y = self.h} }
+function Space:PickOceansRectangle()
+	local sides = {
+		{ {0,0}, {0,1} },
+		{ {0,1}, {1,1} },
+		{ {1,0}, {1,1} },
+		{ {0,0}, {1,0} },
+	}
+	self.oceanSides = {}
 	for oceanIndex = 1, self.oceanNumber do
-		local corner = tRemoveRandom(corners)
-		local x, y = corner.x, corner.y
-		local hex = self.hexes[self:GetIndex(x, y)]
-		local polygon = hex.polygon
-		local ocean = {}
-		local iterations = 0
-		while self.nonOceanPolygons > self.minNonOceanPolygons do
-			local upNeighbors = {}
-			for ni, neighbor in pairs(polygon.neighbors) do
-				if neighbor.oceanIndex == nil then tInsert(upNeighbors, neighbor) end
+		local side = tRemoveRandom(sides)
+		EchoDebug("side: ", side[1][1], side[1][2], side[2][1], side[2][2])
+		local x, y = side[1][1] * self.w, side[1][2] * self.h
+		local xUp = side[2][1] - x == 1
+		local yUp = side[2][2] - y == 1
+		local xMinimize, yMinimize, xMaximize, yMaximize
+		local bottomTopCriterion
+		if xUp then
+			if side[1][2] == 0 then
+				bottomTopCriterion = "bottomYPolygons"
+				self.oceanSides["bottomY"] = true
+			elseif side[1][2] == 1 then
+				bottomTopCriterion = "topYPolygons"
+				self.oceanSides["topY"] = true
 			end
-			if #upNeighbors == 0 then
-				EchoDebug("no upNeighbors")
-				break
+		elseif yUp then
+			if side[1][1] == 0 then
+				bottomTopCriterion = "bottomXPolygons"
+				self.oceanSides["bottomX"] = true
+			elseif side[1][1] == 1 then
+				bottomTopCriterion = "topXPolygons"
+				self.oceanSides["topX"] = true
 			end
-			if iterations == 0 then tInsert(upNeighbors, polygon) end
-			for ni, neighbor in pairs(upNeighbors) do
-				neighbor.oceanIndex = oceanIndex
-				tInsert(ocean, neighbor)
-				self.nonOceanArea = self.nonOceanArea - neighbor.area
-				self.nonOceanPolygons = self.nonOceanPolygons - 1
-			end
-			polygon = tGetRandom(upNeighbors)
-			iterations = iterations + 1
 		end
+		local ocean = {}
+		for i, polygon in pairs(self[bottomTopCriterion]) do
+			polygon.oceanIndex = oceanIndex
+			tInsert(ocean, polygon)
+			self.nonOceanArea = self.nonOceanArea - polygon.area
+			self.nonOceanPolygons = self.nonOceanPolygons - 1
+		end
+		tInsert(self.oceans, ocean)
 	end
 end
 
@@ -1353,6 +1364,13 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	local nonIslandPolygons = mMax(1, #polygonBuffer - islandPolygons)
 	local filledPolygons = 0
 	local continentIndex = 1
+	if self.oceanSides then
+		self.nonOceanSides = {}
+		if not self.oceanSides["bottomX"] then tInsert(self.nonOceanSides, "bottomX") end
+		if not self.oceanSides["topX"] then tInsert(self.nonOceanSides, "topX") end
+		if not self.oceanSides["bottomY"] then tInsert(self.nonOceanSides, "bottomY") end
+		if not self.oceanSides["topY"] then tInsert(self.nonOceanSides, "topY") end
+	end
 	while #polygonBuffer > 0 do
 		-- determine theoretical continent size
 		local size = mCeil(nonIslandPolygons / self.majorContinentNumber)
@@ -1361,8 +1379,23 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		local polygon
 		repeat
 			polygon = tRemoveRandom(polygonBuffer)
-			if polygon.continentIndex == nil and not polygon:NearOther(nil, "continentIndex") and (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then
-				break
+			if polygon.continentIndex == nil and not polygon:NearOther(nil, "continentIndex") then
+				if (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then
+					break
+				elseif (not self.wrapX and not self.wrapY) then
+					local goodSide = false
+					local sides = 0
+					for nosi, side in pairs(self.nonOceanSides) do
+						if polygon[side] then
+							goodSide = true
+							break
+						end
+						sides = sides + 1
+					end
+					if goodSide or sides == 0 then break else polygon = nil end
+				else
+					polygon = nil
+				end
 			else
 				polygon = nil
 			end
