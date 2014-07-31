@@ -322,7 +322,7 @@ function Hex:ComputeNeighbors()
 			if self.polygon.edges[nhex.polygon] then
 				tInsert(self.polygon.edges[nhex.polygon].hexes, self)
 			else
-				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self } }
+				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self }, connections = {} }
 				self.polygon.edges[nhex.polygon] = edge
 				nhex.polygon.edges[self.polygon] = edge
 				tInsert(self.space.edges, edge)
@@ -727,6 +727,10 @@ function Region:Fill()
 			for hi, hex in pairs(subPolygon.hexes) do
 				local element = tGetRandom(subCollection)
 				if hex.plotType ~= plotOcean then
+					if element.plotType == plotOcean then
+						hex.lake = true
+						hex.subPolygon.lake = true
+					end
 					hex.plotType = element.plotType
 					if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
 					hex.terrainType = element.terrainType
@@ -871,7 +875,9 @@ function Space:Compute()
     self:ComputePolygonNeighbors()
     EchoDebug("post-processing polygons...")
     self:PostProcessPolygons()
-    EchoDebug("picking oceans...")
+    EchoDebug("finding edge connections...")
+    self:FindEdgeConnections()
+    EchoDebug("picking oceans...")    
     self:PickOceans()
     EchoDebug("flooding astronomy basins...")
     self:FindAstronomyBasins()
@@ -935,7 +941,7 @@ end
 
 function Space:ComputeCoasts()
 	for i, subPolygon in pairs(self.subPolygons) do
-		if not subPolygon.superPolygon.continentIndex and not subPolygon.tinyIsland then
+		if (not subPolygon.superPolygon.continentIndex or subPolygon.lake) and not subPolygon.tinyIsland then
 			if subPolygon.superPolygon.coastal then
 				subPolygon.coast = true
 				subPolygon.oceanTemperature = subPolygon.superPolygon.region.temperatureMin
@@ -1082,6 +1088,26 @@ function Space:PostProcessPolygons()
 		end
 	end
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
+end
+
+function Space:FindEdgeConnections()
+	for i, edge in pairs(self.edges) do
+		local polygon1 = edge.polygons[1]
+		local polygon2 = edge.polygons[2]
+		local mutualNeighbors = {}
+		for n, neighbor in pairs(polygon1.neighbors) do
+			if neighbor.isNeighbor[polygon2] then
+				mutualNeighbors[neighbor] = true
+			end
+		end
+		for p, polygon in pairs(edge.polygons) do
+			for pe, pedge in pairs(polygon.edges) do
+				if (mutualNeighbors[pedge.polygons[1]] or mutualNeighbors[pedge.polygons[2]]) and pedge ~= edge then
+					edge.connections[pedge] = true
+				end
+			end
+		end
+	end
 end
 
 function Space:PickOceans()
@@ -1344,12 +1370,21 @@ function Space:PickMountainRanges()
 			local nextPolygon = edge.polygons[mRandom(1, 2)]
 			local nextEdges = {}
 			for neighborPolygon, nextEdge in pairs(nextPolygon.edges) do
+				local okay = false
 				if (nextEdge.polygons[1].continentIndex or nextEdge.polygons[2].continentIndex) and not nextEdge.mountains then
 					if coastRange and (not nextEdge.polygons[1].continentIndex or not nextEdge.polygons[2].continentIndex) then
-						tInsert(nextEdges, nextEdge)
+						okay = true
 					elseif not coastRange and nextEdge.polygons[1].continentIndex and nextEdge.polygons[2].continentIndex then
-						tInsert(nextEdges, nextEdge)
+						okay = true
 					end
+				end
+				if okay then
+					for cedge, yes in pairs(nextEdge.connections) do
+						if cedge.mountains and cedge ~= nextEdge then okay = false end
+					end
+				end
+				if okay then
+					tInsert(nextEdges, nextEdge)
 				end
 			end
 			if #nextEdges == 0 then break end
@@ -1517,46 +1552,6 @@ function Space:AdjustMountains()
 	for i, hex in pairs(self.mountainHexes) do
 		hex.featureType = featureNone
 	end
-end
-
-function Space:ExpandCoasts()
-	EchoDebug(self.coastArea .. " coastal hexes before expansion")
-	local d = 1
-	repeat 
-		local makeCoast = {}
-		local potential = 0
-		for i, hex in pairs(self.deepHexes) do
-			if hex.plotType == plotOcean and hex.terrainType == terrainOcean and hex.polygon.oceanIndex == nil then
-				local nearcoast
-				for n, nhex in pairs(hex:Neighbors()) do
-					if nhex.terrainType == terrainCoast then
-						nearcoast = nhex
-						break
-					end
-				end
-				if nearcoast then
-					potential = potential + 1
-					if Map.Rand(hex.polygon.coastExpansionDice[d], "expand coast?") == 0 or nearcoast.featureType == featureIce then
-						makeCoast[hex] = nearcoast
-					end
-				end
-			end
-		end
-		for hex, nearcoast in pairs(makeCoast) do
-			hex.terrainType = terrainCoast
-			if nearcoast.coastalTemperature <= self.freezingTemperature then
-				nearcoast.featureType = featureIce
-			elseif nearcoast.coastalTemperature >= self.atollTemperature then
-				nearcoast.featureType = featureAtoll
-			end
-			hex.expandedCoast = true
-			hex.coastalTemperature = nearcoast.coastalTemperature
-			self.coastArea = self.coastArea + 1
-		end
-		d = d + 1
-		if d > self.coastDiceAmount then d = 1 end
-	until self.coastArea >= self.prescribedCoastArea or potential == 0
-	EchoDebug(self.coastArea .. " coastal hexes after expansion")
 end
 
 ----------------------------------

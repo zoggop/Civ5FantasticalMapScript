@@ -1,4 +1,3 @@
-- don't allow contiguous mountain ranges to self-intersect
 - adjust terrain and feature dictionaries
 - make sure non-wrapping map works
 - make sure coastal ice doesn't interfere with navigation?
@@ -7,6 +6,7 @@
 - add doughnut ocean algo
 
 DONE
+- don't allow contiguous mountain ranges to self-intersect
 - instead of expanding coasts, just make  every subpolygon with continental neighbors coast
 - use subdivisions for ice
 - use subdivisions for tiny islands
