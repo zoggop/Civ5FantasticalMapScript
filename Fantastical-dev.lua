@@ -573,13 +573,28 @@ function Region:CreateCollection()
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
 	EchoDebug(self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	-- create the collection
-	self.size = self.space:GetCollectionSize()
-	local tInc = (self.temperatureMax - self.temperatureMin) / self.size
-	local rInc = (self.rainfallMax - self.rainfallMin) / self.size
-	for i = 1, self.size do
+	self.size, self.subSize = self.space:GetCollectionSize()
+	self.totalSize = self.size * self.subSize
+	local tempList = {}
+	local tInc = (self.temperatureMax - self.temperatureMin) / (self.size - 1)
+	for i = 0, self.size-1 do
 		local temperature = self.temperatureMin + (tInc * i)
+		tInsert(tempList, temperature)
+	end
+	local rainList = {}
+	local rInc = (self.rainfallMax - self.rainfallMin) / (self.size - 1)
+	for i = 0, self.size-1 do
 		local rainfall = self.rainfallMin + (rInc * i)
-		tInsert(self.collection, self:CreateElement(temperature, rainfall))
+		tInsert(rainList, rainfall)
+	end
+	for i = 1, self.size do
+		local temperature = tRemoveRandom(tempList)
+		local rainfall = tRemoveRandom(rainList)
+		local subCollection = {}
+		for si = 1, self.subSize do
+			tInsert(subCollection, self:CreateElement(temperature, rainfall))
+		end
+		tInsert(self.collection, subCollection)
 	end
 end
 
@@ -662,16 +677,16 @@ function Region:CreateElement(temperature, rainfall)
 	local plotType = plotLand
 	local terrainType = bestTerrain.terrainType
 	local featureType = bestFeature.featureType
-	if mountain and self.mountainCount < mCeil(#self.collection * (self.mountainousness / 100)) then
+	if mountain and self.mountainCount < mCeil(self.totalSize * (self.mountainousness / 100)) then
 		plotType = plotMountain
 		featureType = featureNone
 		self.mountainCount = self.mountainCount + 1
-	elseif lake and self.lakeCount < mCeil(#self.collection * (self.lakeyness / 100)) then
+	elseif lake and self.lakeCount < mCeil(self.totalSize * (self.lakeyness / 100)) then
 		plotType = plotOcean
 		terrainType = terrainCoast -- will become coast later
 		featureType = featureNone
 		self.lakeCount = self.lakeCount + 1
-	elseif hill and bestFeature.hill and self.hillCount < mCeil(#self.collection * (self.hillyness / 100)) then
+	elseif hill and bestFeature.hill and self.hillCount < mCeil(self.totalSize * (self.hillyness / 100)) then
 		plotType = plotHills
 		self.hillCount = self.hillCount + 1
 	end
@@ -680,17 +695,20 @@ end
 
 function Region:Fill()
 	for i, polygon in pairs(self.polygons) do
-		for hi, hex in pairs(polygon.hexes) do
-			if hex.plotType ~= plotOcean then
-				local element = tGetRandom(self.collection)
-				hex.plotType = element.plotType
-				if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
-				hex.terrainType = element.terrainType
-				if FeatureDictionary[element.featureType].limitRatio == -1 or self.featureFillCounts[element.featureType] < FeatureDictionary[element.featureType].limitRatio * self.area then
-					hex.featureType = element.featureType
-					self.featureFillCounts[element.featureType] = self.featureFillCounts[element.featureType] + 1
-				else
-					hex.featureType = featureNone
+		for spi, subPolygon in pairs(polygon.subPolygons) do
+			local subCollection = tGetRandom(self.collection)
+			for hi, hex in pairs(subPolygon.hexes) do
+				local element = tGetRandom(subCollection)
+				if hex.plotType ~= plotOcean then
+					hex.plotType = element.plotType
+					if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
+					hex.terrainType = element.terrainType
+					if FeatureDictionary[element.featureType].limitRatio == -1 or self.featureFillCounts[element.featureType] < FeatureDictionary[element.featureType].limitRatio * self.area then
+						hex.featureType = element.featureType
+						self.featureFillCounts[element.featureType] = self.featureFillCounts[element.featureType] + 1
+					else
+						hex.featureType = featureNone
+					end
 				end
 			end
 		end
@@ -713,8 +731,10 @@ Space = class(function(a)
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarContinentChance = 3 -- out of ten chances
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
-	a.collectionSizeMin = 3 -- of how many kinds of tiles does a region consist, at minimum (modified by map size)
-	a.collectionSizeMax = 12 -- of how many kinds of tiles does a region consist, at maximum (modified by map size)
+	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
+	a.collectionSizeMax = 9 -- of how many groups of kinds of tiles does a region consist, at maximum
+	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
+	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -778,8 +798,8 @@ function Space:Compute()
     self.iA = self.iW * self.iH
     self.areaMod = mFloor(mSqrt(self.iA) / 30)
     self.coastalMod = self.areaMod
-    self.collectionSizeMin = self.collectionSizeMin + self.areaMod
-    self.collectionSizeMax = self.collectionSizeMax + self.areaMod
+    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
+    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
     self.h = self.iH - 1
@@ -807,8 +827,8 @@ function Space:Compute()
     self.nonOceanPolygons = self.polygonCount
 	self.inverseMinkowskiOrder = 1 / self.minkowskiOrder
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
+    EchoDebug("initializing polygons...")
     self:InitPolygons()
-    EchoDebug("polygons initialized")
     if self.relaxations > 0 then
     	for i = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
@@ -817,6 +837,7 @@ function Space:Compute()
         	self:RelaxPolygons()
         end
     end
+    EchoDebug("filling polygons post-relaxation...")
     self:FillPolygons()
     EchoDebug("culling polygons...")
     self:CullPolygons()
@@ -1611,7 +1632,7 @@ function Space:GetHillyness()
 end
 
 function Space:GetCollectionSize()
-	return mRandom(self.collectionSizeMin, self.collectionSizeMax)
+	return mRandom(self.collectionSizeMin, self.collectionSizeMax), mRandom(self.subCollectionSizeMin, self.subCollectionSizeMax)
 end
 
 function Space:WrapDistance(x1, y1, x2, y2)
