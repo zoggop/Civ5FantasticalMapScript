@@ -328,18 +328,17 @@ function Hex:ComputeNeighbors()
 				tInsert(self.space.edges, edge)
 			end
 		end
+		if nhex.subPolygon ~= self.subPolygon then
+			self.subPolygon:SetNeighbor(nhex.subPolygon)
+		end
 	end
 end
 
-function Hex:ComputeSubNeighbors()
+function Hex:ComputeAdjacentSuperPolygons()
 	for ni, nhex in pairs(self:Neighbors()) do
-		if nhex.subPolygon ~= self.subPolygon then
-			if nhex.polygon == self.polygon then
-				self.subPolygon:SetNeighbor(nhex.subPolygon)
-			else
-				if not self.subPolygon.adjacentSuperPolygons[nhex.polygon] then
-					self.subPolygon.adjacentSuperPolygons[nhex.polygon] = true
-				end
+		if nhex.polygon ~= self.polygon then
+			if not self.subPolygon.adjacentSuperPolygons[nhex.polygon] then
+				self.subPolygon.adjacentSuperPolygons[nhex.polygon] = true
 			end
 		end
 	end
@@ -487,13 +486,12 @@ function Polygon:Subdivide()
 	end
 	-- compute neighbors
 	for h, hex in pairs(self.hexes) do
-		hex:ComputeSubNeighbors()
+		hex:ComputeAdjacentSuperPolygons()
 	end
 	-- pick off edge subpolygons at random, and populate subpolygon tables
 	-- and create neighbor tables
 	for i = #self.subPolygons, 1, -1 do
 		local subPolygon = self.subPolygons[i]
-		subPolygon:PostProcess()
 		if #subPolygon.hexes > 0 then
 			if #self.subPolygons > 1 and not subPolygon.deserter then
 				local adjacent = {}
@@ -503,9 +501,18 @@ function Polygon:Subdivide()
 				if #adjacent > 0 and mRandom(1, 100) < self.space.subPolygonDesertionPercent then
 					subPolygon.superPolygon = tGetRandom(adjacent)
 					subPolygon.deserter = true
+					--[[
+					subPolygon.adjacentSuperPolygons[subPolygon.superPolygon] = nil
+					subPolygon.adjacentSuperPolygons[self] = true
+					]]--
 					tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
 					tRemove(self.subPolygons, i)
 				end
+			end
+			if #subPolygon.hexes > self.space.biggestSubPolygon then
+				self.space.biggestSubPolygon = #subPolygon.hexes
+			elseif #subPolygon.hexes < self.space.smallestSubPolygon then
+				self.space.smallestSubPolygon = #subPolygon.hexes
 			end
 		else
 			tRemove(self.subPolygons, i)
@@ -529,6 +536,24 @@ function Polygon:PostProcess()
 	self.neighbors = {}
 	for neighbor, yes in pairs(self.isNeighbor) do
 		tInsert(self.neighbors, neighbor)
+	end
+end
+
+function Polygon:PickTinyIslands()
+	for i, subPolygon in pairs(self.subPolygons) do
+		local tooCloseForIsland = false
+		if not tooCloseForIsland then
+			for i, neighbor in pairs(subPolygon.neighbors) do
+				if neighbor.superPolygon.continentIndex or neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
+					tooCloseForIsland = true
+					break
+				end
+			end
+		end
+		if not tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= self.space.tinyIslandChance or (self.loneCoastal and not self.hasTinyIslands)) then
+			subPolygon.tinyIsland = true
+			self.hasTinyIslands = true
+		end
 	end
 end
 
@@ -590,9 +615,10 @@ function Region:CreateCollection()
 	for i = 1, self.size do
 		local temperature = tRemoveRandom(tempList)
 		local rainfall = tRemoveRandom(rainList)
+		local lake = mRandom(1, 100) < self.lakeyness
 		local subCollection = {}
 		for si = 1, self.subSize do
-			tInsert(subCollection, self:CreateElement(temperature, rainfall))
+			tInsert(subCollection, self:CreateElement(temperature, rainfall, lake))
 		end
 		tInsert(self.collection, subCollection)
 	end
@@ -634,11 +660,10 @@ function Region:TemperatureRainfallDistance(thing, temperature, rainfall)
 	-- return tdist + rdist
 end
 
-function Region:CreateElement(temperature, rainfall)
+function Region:CreateElement(temperature, rainfall, lake)
 	temprature = temprature or mRandom(self.temperatureMin, self.temperatureMax)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
-	local lake = mRandom(1, 100) < self.lakeyness
 	local hill = mRandom(1, 100) < self.hillyness
 	if hill then
 		temperature = mMax(temperature * 0.9, 0)
@@ -724,8 +749,8 @@ Space = class(function(a)
 	a.polygonCount = 140 -- how many polygons (map scale)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.subPolygonCount = 9
-	a.subPolygonDesertionPercent = 10
+	a.subPolygonCount = 9 -- how many subpolygons in each polygon
+	a.subPolygonDesertionPercent = 10 -- out of 100, how many subpolygon are swapped over to the adjacent polygon
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -743,7 +768,7 @@ Space = class(function(a)
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.mountainRangeMult = 1.3 -- higher mult means more scattered mountains
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandChance = 5 -- out of 100 hexes, how often do coastal shelves produce tiny islands (this is modified by the map size)
+	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.coastDiceAmount = 2 -- how many dice does each polygon get for coastal expansion
 	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
@@ -786,7 +811,6 @@ Space = class(function(a)
 	a.topXPolygons = {}
 	a.hexes = {}
     a.mountainHexes = {}
-    a.tinyIslandHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
     a.fakeLatitudes = {}
@@ -821,7 +845,6 @@ function Space:Compute()
 	self.rainfallMax = self.rainfallMidpoint + self.rainfallPlusMinus
 	self.rainfallExponentMultiplier = (self.rainfallMax / (self.rainfallMax ^ self.rainfallExponent))
     -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
-    self.tinyIslandChance = mCeil(20000 / self.iA)
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
     if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
     self.nonOceanPolygons = self.polygonCount
@@ -900,28 +923,13 @@ function Space:ComputeSeas()
 	-- ocean plots and tiny islands:
 	for pi, hex in pairs(self.hexes) do
 		if hex.polygon.continentIndex == nil then
-			if hex.polygon.coastal then
-				local nearOcean = false
-				for neighbor, yes in pairs(hex.adjacentPolygons) do
-					if neighbor.oceanIndex or neighbor.continentIndex then
-						hex.tooCloseForIsland = true
-						break
-					end
-				end
-				if not hex.tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= self.tinyIslandChance or (hex.polygon.loneCoastal and not hex.polygon.hasTinyIslands)) then
-					hex.plotType = plotLand
-					tInsert(self.tinyIslandHexes, hex)
-					hex.polygon.hasTinyIslands = true
-					self.tinyIslandPolygons[hex.polygon] = true
-				else
-					hex.plotType = plotOcean
-				end
+			if hex.polygon.coastal and hex.subPolygon.tinyIsland then
+				hex.plotType = plotLand
 			else
 				hex.plotType = plotOcean
 			end
 		end
 	end
-	self:ExpandTinyIslands()
 end
 
 function Space:ComputeCoasts()
@@ -1057,9 +1065,12 @@ function Space:CullPolygons()
 end
 
 function Space:SubdividePolygons()
+	self.smallestSubPolygon = 1000
+	self.biggestSubPolygon = 0
 	for i, polygon in pairs(self.polygons) do
 		polygon:Subdivide()
 	end
+	EchoDebug("smallest subpolygon: " .. self.smallestSubPolygon, "biggest subpolygon: " .. self.biggestSubPolygon)
 end
 
 function Space:ComputePolygonNeighbors()
@@ -1078,6 +1089,9 @@ function Space:PostProcessPolygons()
 		end
 		if polygon.area > self.polygonMaxArea then
 			self.polygonMaxArea = polygon.area
+		end
+		for spi, subPolygon in pairs(polygon.subPolygons) do
+			subPolygon:PostProcess()
 		end
 	end
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
@@ -1428,7 +1442,7 @@ function Space:PickRegions()
 			tInsert(self.regions, region)
 		end
 	end
-	for polygon, yes in pairs(self.tinyIslandPolygons) do
+	for p, polygon in pairs(self.tinyIslandPolygons) do
 		polygon.region = Region(self)
 		tInsert(polygon.region.polygons, polygon)
 		polygon.region.area = polygon.area
@@ -1457,6 +1471,8 @@ function Space:PickCoasts()
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continentIndex") then polygon.loneCoastal = true end
+				polygon:PickTinyIslands()
+				tInsert(self.tinyIslandPolygons, polygon)
 			end
 		end
 	end
@@ -1514,34 +1530,6 @@ function Space:AdjustMountains()
 	for i, hex in pairs(self.mountainHexes) do
 		hex.featureType = featureNone
 	end
-end
-
-function Space:ExpandTinyIslands()
-	local chance = mCeil(60 / self.tinyIslandChance)
-	local toExpand = {}
-	EchoDebug(#self.tinyIslandHexes .. " tiny islands")
-	for i, hex in pairs(self.tinyIslandHexes) do
-		for ni, nhex in pairs(hex:Neighbors()) do
-			if nhex.plotType == plotOcean and not nhex.polygon.oceanIndex and not nhex.polygon.continentIndex then
-				local okay = true
-				for nni, nnhex in pairs(nhex:Neighbors()) do
-					if nnhex ~= hex and (nnhex.polygon.oceanIndex or nnhex.polygon.continentIndex) then
-						okay = false
-						break
-					end
-				end
-				if okay and Map.Rand(100, "tiny island expansion") < chance then
-					tInsert(toExpand, nhex)
-				end
-			end
-		end
-	end
-	for i, hex in pairs(toExpand) do
-		hex.plotType = plotLand
-		hex.tinyIsland = true
-		tInsert(self.tinyIslandHexes, hex)
-	end
-	EchoDebug(#self.tinyIslandHexes .. " tiny islands")
 end
 
 function Space:ExpandCoasts()
