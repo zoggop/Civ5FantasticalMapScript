@@ -138,6 +138,88 @@ end
 
 ------------------------------------------------------------------------------
 
+local OptionDictionary = {
+	{ name = "World Wrapping", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 1,
+	values = {
+			[1] = { name = "Globe (Horizontal Wrapping)", values = {true, false} },
+			[2] = { name = "Region (No Wrapping)", values = {false, false} },
+			[3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
+		}
+	},
+	{ name = "Oceans", sortpriority = 1, keys = { "oceanNumber", }, default = 2,
+	values = {
+			[1] = { name = "One", values = {1} },
+			[2] = { name = "Two", values = {2} },
+			[3] = { name = "Three", values = {3} },
+			[4] = { name = "Four", values = {4} },
+			[5] = { name = "Five", values = {5} },
+		}
+	},
+	{ name = "Continents Per Ocean", sortpriority = 1, keys = { "majorContinentNumber", }, default = 1,
+	values = {
+			[1] = { name = "One", values = {1} },
+			[2] = { name = "Two", values = {2} },
+			[3] = { name = "Three", values = {3} },
+			[4] = { name = "Four", values = {4} },
+		}
+	},
+	{ name = "Islands", sortpriority = 1, keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
+	values = {
+			[1] = { name = "Few", values = {10, 1, 0.25} },
+			[2] = { name = "Some", values = {33, 2, 0.5} },
+			[3] = { name = "Many", values = {80, 3, 0.75} },
+		}
+	},
+	{ name = "World Age", sortpriority = 1, keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	values = {
+			[1] = { name = "1 Billion Years", values = {0.25, 75} },
+			[2] = { name = "2 Billion Years", values = {0.16, 60} },
+			[3] = { name = "3 Billion Years", values = {0.08, 50} },
+			[4] = { name = "4 Billion Years", values = {0.04, 40} },
+			[5] = { name = "5 Billion Years", values = {0.02, 30} },
+			[6] = { name = "6 Billion Years", values = {0.0, 20} },
+		}
+	},
+	{ name = "Temperature", sortpriority = 1, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	values = {
+			[1] = { name = "Ice Age", values = {3, 0, 50} },
+			[2] = { name = "Cool", values = {1.4, 0, 85} },
+			[3] = { name = "Temperate", values = {1.2, 0, 100} },
+			[4] = { name = "Warm", values = {1.0, 10, 100} },
+			[5] = { name = "Hot", values = {0.5, 25, 100} },
+		}
+	},
+	{ name = "Rainfall", sortpriority = 1, keys = { "rainfallMidpoint" }, default = 3,
+	values = {
+			[1] = { name = "Wasteland", values = {13} },
+			[2] = { name = "Arid", values = {35} },
+			[3] = { name = "Normal", values = {50} },
+			[4] = { name = "Wet", values = {60} },
+			[5] = { name = "Waterlogged", values = {90} },
+		}
+	},
+	{ name = "Fallout", sortpriority = 1, keys = { "falloutEnabled" }, default = 1,
+	values = {
+			[1] = { name = "Off", values = {false} },
+			[2] = { name = "On", values = {true} },
+		}
+	},
+}
+
+local function GetCustomOptions()
+	local custOpts = {}
+	for i, option in pairs(OptionDictionary) do
+		local opt = { Name = option.name, SortPriority = option.sortpriority, DefaultValue = option.default, Values = {} }
+		for n, value in pairs(option.values) do
+			opt.Values[n] = value.name
+		end
+		tInsert(custOpts, opt)
+	end
+	return custOpts
+end
+
+------------------------------------------------------------------------------
+
 -- so that these constants can be shorter to access and consistent
 local plotOcean, plotLand, plotHills, plotMountain
 local terrainOcean, terrainCoast, terrainGrass, terrainPlains, terrainDesert, terrainTundra, terrainSnow
@@ -175,11 +257,11 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 	TerrainDictionary = {
-		[terrainGrass] = { temperature = {40, 100}, rainfall = {20, 100, 60}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainGrass] = { temperature = {40, 100, 60}, rainfall = {20, 100, 50}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
 		[terrainPlains] = { temperature = {20, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { temperature = {20, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { temperature = {0, 30, 10}, rainfall = {20, 100}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { temperature = {0, 20, 0}, rainfall = {0, 20, 0}, features = { featureNone, featureFallout } },
+		[terrainTundra] = { temperature = {0, 30, 5}, rainfall = {20, 100, 45}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { temperature = {0, 20, 0}, rainfall = {0, 20}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
@@ -797,13 +879,10 @@ Space = class(function(a)
 	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
 	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
-	a.rainfallExponent = 1 -- higher exponent = wetter climate. anything above 0 is okay
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureMax = 100 -- highest temprature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.intraregionTemperatureDeviation = 20 -- how much at maximum can a region's temperature vary within itself
-	a.rainfallMin = 0 -- just like temperature above
-	a.rainfallMax = 100 -- just like temperature above
 	a.rainfallDice = 1 -- just like temperature above
 	a.intraregionRainfallDeviation = 30 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
@@ -834,6 +913,16 @@ Space = class(function(a)
     a.culledPolygons = 0
 end)
 
+function Space:SetOptions()
+	for optionNumber, option in ipairs(OptionDictionary) do
+		local optionChoice = Map.GetCustomOption(optionNumber)
+		for valueNumber, key in ipairs(option.keys) do
+			EchoDebug(key, optionNumber, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
+			self[key] = option.values[optionChoice].values[valueNumber]
+		end
+	end
+end
+
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
@@ -853,7 +942,7 @@ function Space:Compute()
 		self.rainfallPlusMinus = self.rainfallMidpoint
 	end
 	self.rainfallMax = self.rainfallMidpoint + self.rainfallPlusMinus
-	self.rainfallExponentMultiplier = (self.rainfallMax / (self.rainfallMax ^ self.rainfallExponent))
+	self.rainfallMin = self.rainfallMidpoint - self.rainfallPlusMinus
     -- need to adjust island chance so that bigger maps have about the same number of islands, and of the same relative size
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
     if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
@@ -1134,7 +1223,8 @@ end
 
 function Space:PickOceansCylinder()
 	local div = self.w / self.oceanNumber
-	local x = mRandom(0, self.w)
+	local x
+	if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
 	for oceanIndex = 1, self.oceanNumber do
 		local hex = self.hexes[self:GetIndex(x, 0)]
 		local polygon = hex.polygon
@@ -1615,8 +1705,8 @@ function Space:GetTemperature(latitude)
 		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
 	end
 	local diff = mRandom(1, mFloor(self.intraregionTemperatureDeviation / 2))
-	local temp2 = mMin(temp + diff, 100)
 	local temp1 = mMax(temp - diff, 0)
+	local temp2 = mMin(temp + diff, 100)
 	return mFloor(temp), mFloor(temp1), mFloor(temp2)
 end
 
@@ -1727,10 +1817,12 @@ end
 
 function GetMapScriptInfo()
 	local world_age, temperature, rainfall, sea_level, resources = GetCoreMapOptions()
+	local custOpts = GetCustomOptions()
 	return {
 		Name = "Fantastical (dev)",
 		Description = "Scribbles fantastical lands onto the world.",
 		IconIndex = 5,
+		CustomOptions = custOpts,
 	}
 end
 
@@ -1746,6 +1838,7 @@ function GeneratePlotTypes()
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
+    mySpace:SetOptions()
     mySpace:Compute()
     --[[
     for l = 0, 90, 5 do

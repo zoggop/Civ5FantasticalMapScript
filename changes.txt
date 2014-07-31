@@ -1,11 +1,14 @@
-- adjust terrain and feature dictionaries
-- make sure non-wrapping map works
+- change rectangle and donut ocean algorithms:
+	- one ocean just picks a map side and draws along it
+	- donut two oceans is a cross
+	- rectangle two oceans is two sides
+	- donut three oceans is a cross and a 
 - make coastal ice not interfere with navigation?
-- add map options
 - does wonder placement fix work in game?
-- add doughnut ocean algo
 
 DONE
+- add map options
+- adjust terrain and feature dictionaries
 - seperate continental and noncontinental fake latitude tables for more consistent distribution of land types
 - don't allow contiguous mountain ranges to self-intersect
 - instead of expanding coasts, just make  every subpolygon with continental neighbors coast
