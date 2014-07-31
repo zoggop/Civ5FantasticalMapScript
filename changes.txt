@@ -1,11 +1,12 @@
 - adjust terrain and feature dictionaries
 - make sure non-wrapping map works
-- make sure coastal ice doesn't interfere with navigation?
+- make coastal ice not interfere with navigation?
 - add map options
 - does wonder placement fix work in game?
 - add doughnut ocean algo
 
 DONE
+- seperate continental and noncontinental fake latitude tables for more consistent distribution of land types
 - don't allow contiguous mountain ranges to self-intersect
 - instead of expanding coasts, just make  every subpolygon with continental neighbors coast
 - use subdivisions for ice

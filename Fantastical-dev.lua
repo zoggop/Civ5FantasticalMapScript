@@ -175,12 +175,11 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 	TerrainDictionary = {
-		[terrainGrass] = { temperature = {40, 100}, rainfall = {20, 100, 60}, features = { featureNone, featureForest, featureMarsh, featureFallout } },
+		[terrainGrass] = { temperature = {40, 100}, rainfall = {20, 100, 60}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
 		[terrainPlains] = { temperature = {30, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { temperature = {25, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { temperature = {0, 30}, rainfall = {20, 100, 25}, features = { featureNone, featureForest, featureFallout } },
+		[terrainTundra] = { temperature = {0, 30, 5}, rainfall = {20, 100, 25}, features = { featureNone, featureForest, featureFallout } },
 		[terrainSnow] = { temperature = {0, 30, 0}, rainfall = {0, 20, 0}, features = { featureNone, featureFallout } },
-		[99] = { terrainType = terrainPlains, temperature = {80, 100}, rainfall = {75, 100}, features = { featureJungle, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
@@ -188,11 +187,11 @@ local function SetConstants()
 
 	FeatureDictionary = {
 		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { temperature = {15, 100}, rainfall = {70, 100}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { temperature = {15, 85, 35}, rainfall = {70, 100}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
 		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 25, limitRatio = 0.02, hill = false },
-		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.5, hill = true },
+		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -369,10 +368,6 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	if space.useMapLatitudes then
 		local plot = Map.GetPlot(x, y)
 		a.latitude = plot:GetLatitude()
-	elseif superPolygon then
-		a.latitude = space:GetFakeSubLatitude(superPolygon.latitude)
-	else
-		a.latitude = space:GetFakeLatitude()
 	end
 	a.subPolygons = {}
 	a.hexes = {}
@@ -579,18 +574,8 @@ function Region:CreateCollection()
 	-- get latitude (real or fake)
 	self.latitude = self:GetLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
-	tempA, tempB = self.space:GetTemperature(self.latitude)
-	if tempA > tempB then
-		self.temperatureMin, self.temperatureMax = tempB, tempA
-	else
-		self.temperatureMin, self.temperatureMax = tempA, tempB
-	end
-	rainA, rainB = self.space:GetRainfall(self.latitude)
-	if rainA > rainB then
-		self.rainfallMin, self.rainfallMax = rainB, rainA
-	else
-		self.rainfallMin, self.rainfallMax = rainA, rainB
-	end
+	self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
+	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	self.hillyness = self.space:GetHillyness()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
@@ -598,9 +583,14 @@ function Region:CreateCollection()
 	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
-	EchoDebug(self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
+	EchoDebug(self.latitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	-- create the collection
 	self.size, self.subSize = self.space:GetCollectionSize()
+	local subPolys = 0
+	for i, polygon in pairs(self.polygons) do
+		subPolys = subPolys + #polygon.subPolygons
+	end
+	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
 	self.totalSize = self.size * self.subSize
 	local tempList = {}
 	local tInc = (self.temperatureMax - self.temperatureMin) / (self.size - 1)
@@ -615,9 +605,9 @@ function Region:CreateCollection()
 		tInsert(rainList, rainfall)
 	end
 	for i = 1, self.size do
+		local lake = mRandom(1, 100) < self.lakeyness
 		local temperature = tRemoveRandom(tempList)
 		local rainfall = tRemoveRandom(rainList)
-		local lake = mRandom(1, 100) < self.lakeyness
 		local subCollection = {}
 		for si = 1, self.subSize do
 			tInsert(subCollection, self:CreateElement(temperature, rainfall, lake))
@@ -627,11 +617,15 @@ function Region:CreateCollection()
 end
 
 function Region:GetLatitude()
+	local polygon = tGetRandom(self.polygons)
+	return polygon.latitude
+	--[[
 	local latSum = 0
 	for i, polygon in pairs(self.polygons) do
 		latSum = latSum + polygon.latitude
 	end
 	return mFloor(latSum / #self.polygons)
+	]]--
 end
 
 function Region:WithinBounds(thing, temperature, rainfall)
@@ -684,7 +678,6 @@ function Region:CreateElement(temperature, rainfall, lake)
 			end
 		end
 	end
-	-- EchoDebug("post terrain:", tostring(bestTerrain), temperature, rainfall)
 	bestDist = 300
 	local bestFeature
 	for i, featureType in pairs(bestTerrain.features) do
@@ -702,7 +695,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 	end
 	if bestFeature == nil or mRandom(1, 140) < bestDist or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
 	local plotType = plotLand
-	local terrainType = bestTerrain.terrainType
+	local terrainType = bestFeature.terrainType or bestTerrain.terrainType
 	local featureType = bestFeature.featureType
 	if mountain and self.mountainCount < mCeil(self.totalSize * (self.mountainousness / 100)) then
 		plotType = plotMountain
@@ -818,7 +811,6 @@ Space = class(function(a)
     a.mountainHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
-    a.fakeLatitudes = {}
     a.culledPolygons = 0
 end)
 
@@ -834,13 +826,6 @@ function Space:Compute()
     self.h = self.iH - 1
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
-    -- generate fake latitudes
-    if not self.useMapLatitudes then
-    	local increment = 90 / self.polygonCount
-	    for i = 1, self.polygonCount do
-	    	tInsert(self.fakeLatitudes, increment * (i-1))
-	    end
-	end
 	self.polarExponentMultiplier = 90 ^ self.polarExponent
 	if self.rainfallMidpoint > 50 then
 		self.rainfallPlusMinus = 100 - self.rainfallMidpoint
@@ -887,6 +872,10 @@ function Space:Compute()
     self:PickMountainRanges()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
+	if not self.useMapLatitudes then
+		EchoDebug("dispersing fake latitude...")
+		self:DisperseFakeLatitude()
+	end
 	EchoDebug("computing seas...")
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
@@ -944,12 +933,12 @@ function Space:ComputeCoasts()
 		if (not subPolygon.superPolygon.continentIndex or subPolygon.lake) and not subPolygon.tinyIsland then
 			if subPolygon.superPolygon.coastal then
 				subPolygon.coast = true
-				subPolygon.oceanTemperature = subPolygon.superPolygon.region.temperatureMin
+				subPolygon.oceanTemperature = subPolygon.superPolygon.region.temperatureAvg
 			else
 				for ni, neighbor in pairs(subPolygon.neighbors) do
 					if neighbor.superPolygon.continentIndex or neighbor.tinyIsland then
 						subPolygon.coast = true
-						subPolygon.oceanTemperature = neighbor.superPolygon.region.temperatureMin
+						subPolygon.oceanTemperature = neighbor.superPolygon.region.temperatureAvg
 						break
 					end
 				end
@@ -1238,6 +1227,7 @@ end
 
 function Space:PickContinents()
 	self.filledArea = 0
+	self.filledPolygons = 0
 	for astronomyIndex, basin in pairs(self.astronomyBasins) do
 		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons...")
 		self:PickContinentsInBasin(astronomyIndex)
@@ -1329,6 +1319,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		tInsert(self.continents, continent)
 		continentIndex = continentIndex + 1
 	end
+	self.filledPolygons = self.filledPolygons + filledPolygons
 end
 
 function Space:PickMountainRanges()
@@ -1501,6 +1492,25 @@ function Space:PickCoasts()
 	EchoDebug(self.coastalPolygonCount .. " coastal polygons")
 end
 
+function Space:DisperseFakeLatitude()
+	self.continentalFakeLatitudes = {}
+	local increment = 90 / self.filledPolygons
+    for i = 1, self.filledPolygons do
+    	tInsert(self.continentalFakeLatitudes, increment * (i-1))
+    end
+	self.nonContinentalFakeLatitudes = {}
+    increment = 90 / (#self.polygons - self.filledPolygons)
+    for i = 1, (#self.polygons - self.filledPolygons) do
+    	tInsert(self.nonContinentalFakeLatitudes, increment * (i-1))
+    end
+	for i, polygon in pairs(self.polygons) do
+		polygon.latitude = self:GetFakeLatitude(polygon)
+		for spi, subPolygon in pairs(polygon.subPolygons) do
+			subPolygon.latitude = self:GetFakeSubLatitude(polygon.latitude)
+		end
+	end
+end
+
 function Space:ResizeMountains(prescribedArea)
 	if #self.mountainHexes == prescribedArea then return end
 	if #self.mountainHexes > prescribedArea then
@@ -1557,8 +1567,15 @@ end
 ----------------------------------
 -- INTERNAL FUNCTIONS: --
 
-function Space:GetFakeLatitude()
-	return tRemoveRandom(self.fakeLatitudes)
+function Space:GetFakeLatitude(polygon)
+	if polygon then
+		if polygon.continentIndex then
+			return tRemoveRandom(self.continentalFakeLatitudes)
+		else
+			return tRemoveRandom(self.nonContinentalFakeLatitudes)
+		end
+	end
+	return mRandom(0, 90)
 end
 
 function Space:GetFakeSubLatitude(latitudeStart)
@@ -1570,22 +1587,20 @@ end
 
 function Space:GetTemperature(latitude)
 	local rise = self.temperatureMax - self.temperatureMin
-	local diff = self.intraregionTemperatureDeviation
 	local temp, temp2
 	if latitude then
 		local distFromPole = (90 - latitude) ^ self.polarExponent
 		temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
-		-- EchoDebug("temp calcs", temp, latitude)
 	else
 		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
 	end
-	-- diff = temp * 0.1
-	temp2 = mRandom(mMax(temp-diff, 0), mMin(temp+diff, 100))
-	return mFloor(temp), mFloor(temp2)
+	local diff = mRandom(1, mFloor(self.intraregionTemperatureDeviation / 2))
+	local temp2 = mMin(temp + diff, 100)
+	local temp1 = mMax(temp - diff, 0)
+	return mFloor(temp), mFloor(temp1), mFloor(temp2)
 end
 
 function Space:GetRainfall(latitude)
-	local diff = self.intraregionRainfallDeviation
 	local rain, rain2
 	if latitude then
 		if latitude > 75 then -- polar
@@ -1595,13 +1610,14 @@ function Space:GetRainfall(latitude)
 		else -- tropics and desert
 			rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/25)))
 		end
-		-- EchoDebug("rain calcs", rain, distFromDesert, latitude)
 	else
 		local rise = self.rainfallMax - self.rainfallMin
 		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
 	end
-	rain2 = mRandom(mMax(rain-diff, 0), mMin(rain+diff, 100))
-	return mFloor(rain), mFloor(rain2)
+	local diff = mRandom(1, mFloor(self.intraregionRainfallDeviation / 2))
+	local rain1 = mMax(rain - diff, 0)
+	local rain2 = mMin(rain + diff, 100)
+	return mFloor(rain), mFloor(rain1), mFloor(rain2)
 end
 
 function Space:GetHillyness()
