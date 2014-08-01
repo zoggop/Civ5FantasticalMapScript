@@ -440,6 +440,7 @@ end
 
 function Hex:SetPlot()
 	if self.plot == nil then return end
+
 	self.plot:SetPlotType(self.plotType)
 end
 
@@ -449,6 +450,10 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
+	if self.polygon.oceanIndex then
+		self.plot:SetFeatureType(featureFallout)
+		return
+	end
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	self.plot:SetFeatureType(self.featureType)
@@ -1346,25 +1351,63 @@ function Space:PickOceansDoughnut()
 	local formulas = {
 		[1] = { {1,2} },
 		[2] = { {3}, {4} },
-		[3] = { {-1}, {7,8,9}, {10,11,12} }, -- negative 1 denotes each subtable is a possibility of a list instead of a list of possibilities
+		[3] = { {-1}, {1,7,8}, {2,9,10} }, -- negative 1 denotes each subtable is a possibility of a list instead of a list of possibilities
 		[4] = { {1}, {2}, {5}, {6} },
 	}
-	local hex = self:GetHexByXY(mFloor(self.w / 2), mFloor(self.h / 2))
 	local hexAngles = {}
+	local hex = self:GetHexByXY(mFloor(self.w / 2), mFloor(self.h / 2))
 	for n, nhex in pairs(hex:Neighbors()) do
 		local angle = AngleAtoB(hex.x, hex.y, nhex.x, nhex.y)
-		-- EchoDebug(n, angle)
+		EchoDebug(n, nhex.x-hex.x, nhex.y-hex.y, angle)
 		hexAngles[n] = angle
 	end
 	local origins, terminals = self:InterpretFormula(formulas[self.oceanNumber])
 	for oceanIndex = 1, #origins do
+		local ocean = {}
 		local origin, terminal = origins[oceanIndex], terminals[oceanIndex]
-		local x, y = origin.x, origin.y
 		local hex = self:GetHexByXY(origin.x, origin.y)
+		if not hex.polygon.oceanIndex then
+			hex.polygon.oceanIndex = oceanIndex
+			tInsert(ocean, hex.polygon)
+			self.nonOceanArea = self.nonOceanArea - hex.polygon.area
+			self.nonOceanPolygons = self.nonOceanPolygons - 1
+		end
 		local terminalHex = self:GetHexByXY(terminal.x, terminal.y)
 		local iterations = 0
-		local ocean = {}
+		EchoDebug(origin.x, origin.y, terminal.x, terminal.y)
 		repeat
+			-- find the next hex:
+			local x, y = hex.x, hex.y
+			local mx = terminal.x - x
+			local my = terminal.y - y
+			local dx, dy
+			if mx == 0 then
+				dx = 0
+				if my < 0 then dy = -1 else dy = 1 end
+			elseif my == 0 then
+				dy = 0
+				if mx < 0 then dx = -1 else dx = 1 end
+			else
+				if mx < 0 then dx = -1 else dx = 1 end
+				dy = my / mAbs(mx)
+			end
+			x = x + dx
+			y = y + dy
+			local bestHex
+			local bestDist = 10
+			for n, nhex in pairs(hex:Neighbors()) do
+				if nhex == terminalHex then
+					bestHex = terminalHex
+					break
+				end
+				local dist = self:EucDistance(x, y, nhex.x, nhex.y)
+				if dist < bestDist then
+					bestDist = dist
+					bestHex = nhex
+				end
+			end
+			-- EchoDebug(hex.x, hex.y, x, y, bestHex.x, bestHex.y)
+			hex = bestHex --self:GetHexByXY(mFloor(x), mFloor(y))
 			-- add the polygon here to the ocean
 			local polygon = hex.polygon
 			if not polygon.oceanIndex then
@@ -1373,25 +1416,6 @@ function Space:PickOceansDoughnut()
 				self.nonOceanArea = self.nonOceanArea - polygon.area
 				self.nonOceanPolygons = self.nonOceanPolygons - 1
 			end
-			-- find the next hex:
-			local angle = AngleAtoB(hex.x, hex.y, terminal.x, terminal.y)
-			local bestDist = 10
-			local bestDir
-			local neighbors = hex:Neighbors()
-			for d = 1, 6 do
-				if neighbors[d] then
-					if hexAngles[d] == angle or neighbors[d] == terminalHex then
-						bestDir = d
-						break
-					end
-					local dist = AngleDist(angle, hexAngles[d])
-					if dist < bestDist then
-						bestDist = dist
-						bestDir = d
-					end
-				end
-			end
-			hex = neighbors[bestDir]
 			iterations = iterations + 1
 		until hex == terminalHex or iterations > self.iA
 		tInsert(self.oceans, ocean)
@@ -1406,12 +1430,10 @@ local OceanLines = {
 		[4] = { {1,0}, {0,1} },
 		[5] = { {0.5,0}, {0.5,1} }, -- middle cross
 		[6] = { {0,0.5}, {1,0.5} },
-		[7] = { {0.1425,0}, {0.1425,1} }, -- vertical thirds
-		[8] = { {0.4275,0}, {0.4275,1} },
-		[9] = { {0.7125,0}, {0.7125,1} },
-		[10] = { {0,0.1425}, {1,0.1425} }, -- horizontal thirds
-		[11] = { {0,0.4275}, {1,0.4275} },
-		[12] = { {0,0.7125}, {1,0.7125} },
+		[7] = { {0.33,0}, {0.33,1} }, -- vertical thirds
+		[8] = { {0.67,0}, {0.67,1} },
+		[9] = { {0,0.33}, {1,0.33} }, -- horizontal thirds
+		[10] = { {0,0.67}, {1,0.67} },
 	}
 
 function Space:InterpretFormula(formula)
@@ -1523,7 +1545,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			local polarCandidates = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continentIndex == nil and not neighbor:NearOther(continentIndex, "continentIndex") and neighbor.astronomyIndex < 10 then
-					if self.wrapX and (neighbor.topY or neighbor.bottomY) then
+					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY) then
 						tInsert(polarCandidates, neighbor)
 					else
 						tInsert(candidates, neighbor)

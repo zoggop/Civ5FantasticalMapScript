@@ -106,3 +106,49 @@ function Space:ExpandCoasts()
 	until self.coastArea >= self.prescribedCoastArea or potential == 0
 	EchoDebug(self.coastArea .. " coastal hexes after expansion")
 end
+
+--[[
+			local dx = terminal.x - hex.x
+			local dy = terminal.y - hex.y
+			if dx == 0 then
+				if dy > 0 then d = mRandom(2, 3) else d = mRandom(5, 6) end
+			elseif dx > 0 then
+				if dy == 0 then
+					d = 4
+				elseif dy > 0 then
+					d = mRandom(3, 4)
+				elseif dy < 0 then
+					d = mRandom(5, 4)
+				end
+			elseif dx < 0 then
+				if dy == 0 then
+					d = 1
+				elseif dy > 0 then
+					d = 2
+				elseif dy < 0 then
+					d = 6
+				end
+			end
+			local neighbors = hex:Neighbors({d})
+			hex = neighbors[1]
+			]]--
+			--[[
+			local angle = AngleAtoB(hex.x, hex.y, terminal.x, terminal.y)
+			local bestDist = 10
+			local bestDir
+			local neighbors = hex:Neighbors()
+			for d = 1, 6 do
+				if neighbors[d] then
+					if hexAngles[d] == angle or neighbors[d] == terminalHex then
+						bestDir = d
+						break
+					end
+					local dist = AngleDist(angle, hexAngles[d])
+					if dist < bestDist then
+						bestDist = dist
+						bestDir = d
+					end
+				end
+			end
+			hex = neighbors[bestDir]
+			]]--
