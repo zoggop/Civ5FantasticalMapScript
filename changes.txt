@@ -1,7 +1,9 @@
+- add ocean trench tiny islands or divide astronomy regions in a less space-eating way (using edges?)
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
 
 DONE
+- add squareish map sizes
 - add donut ocean algorithm
 	- one ocean just picks a map side and draws along it
 	- two oceans is an X

@@ -153,10 +153,10 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "World Wrapping", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 1,
+	{ name = "World Wrapping", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 2,
 	values = {
-			[1] = { name = "Globe (Horizontal Wrapping)", values = {true, false} },
-			[2] = { name = "Region (No Wrapping)", values = {false, false} },
+			[1] = { name = "Region (No Wrapping)", values = {false, false} },
+			[2] = { name = "Globe (Horizontal Wrapping)", values = {true, false} },
 			[3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
 		}
 	},
@@ -450,10 +450,12 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
+	--[[
 	if self.polygon.oceanIndex then
 		self.plot:SetFeatureType(featureFallout)
 		return
 	end
+	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	self.plot:SetFeatureType(self.featureType)
@@ -1366,50 +1368,44 @@ function Space:PickOceansDoughnut()
 		local ocean = {}
 		local origin, terminal = origins[oceanIndex], terminals[oceanIndex]
 		local hex = self:GetHexByXY(origin.x, origin.y)
-		if not hex.polygon.oceanIndex then
-			hex.polygon.oceanIndex = oceanIndex
-			tInsert(ocean, hex.polygon)
-			self.nonOceanArea = self.nonOceanArea - hex.polygon.area
+		local polygon = hex.polygon
+		if not polygon.oceanIndex then
+			polygon.oceanIndex = oceanIndex
+			tInsert(ocean, polygon)
+			self.nonOceanArea = self.nonOceanArea - polygon.area
 			self.nonOceanPolygons = self.nonOceanPolygons - 1
 		end
-		local terminalHex = self:GetHexByXY(terminal.x, terminal.y)
 		local iterations = 0
 		EchoDebug(origin.x, origin.y, terminal.x, terminal.y)
+		local mx = terminal.x - origin.x
+		local my = terminal.y - origin.y
+		local dx, dy
+		if mx == 0 then
+			dx = 0
+			if my < 0 then dy = -1 else dy = 1 end
+		elseif my == 0 then
+			dy = 0
+			if mx < 0 then dx = -1 else dx = 1 end
+		else
+			if mx < 0 then dx = -1 else dx = 1 end
+			dy = my / mAbs(mx)
+		end
+		local x, y = origin.x, origin.y
 		repeat
-			-- find the next hex:
-			local x, y = hex.x, hex.y
-			local mx = terminal.x - x
-			local my = terminal.y - y
-			local dx, dy
-			if mx == 0 then
-				dx = 0
-				if my < 0 then dy = -1 else dy = 1 end
-			elseif my == 0 then
-				dy = 0
-				if mx < 0 then dx = -1 else dx = 1 end
-			else
-				if mx < 0 then dx = -1 else dx = 1 end
-				dy = my / mAbs(mx)
-			end
+			-- find the next polygon if it's different
 			x = x + dx
 			y = y + dy
-			local bestHex
-			local bestDist = 10
-			for n, nhex in pairs(hex:Neighbors()) do
-				if nhex == terminalHex then
-					bestHex = terminalHex
-					break
-				end
-				local dist = self:EucDistance(x, y, nhex.x, nhex.y)
+			local best = polygon
+			local bestDist = self:EucDistance(x, y, polygon.x, polygon.y)
+			for n, neighbor in pairs(polygon.neighbors) do
+				local dist = self:EucDistance(x, y, neighbor.x, neighbor.y)
 				if dist < bestDist then
 					bestDist = dist
-					bestHex = nhex
+					best = neighbor
 				end
 			end
-			-- EchoDebug(hex.x, hex.y, x, y, bestHex.x, bestHex.y)
-			hex = bestHex --self:GetHexByXY(mFloor(x), mFloor(y))
+			polygon = best
 			-- add the polygon here to the ocean
-			local polygon = hex.polygon
 			if not polygon.oceanIndex then
 				polygon.oceanIndex = oceanIndex
 				tInsert(ocean, polygon)
@@ -1417,7 +1413,7 @@ function Space:PickOceansDoughnut()
 				self.nonOceanPolygons = self.nonOceanPolygons - 1
 			end
 			iterations = iterations + 1
-		until hex == terminalHex or iterations > self.iA
+		until mFloor(x) == terminal.x and mFloor(y) == terminal.y
 		tInsert(self.oceans, ocean)
 	end
 	self.wrapX, self.wrapY = true, true
@@ -1991,11 +1987,34 @@ function GetMapScriptInfo()
 	}
 end
 
---[[
 function GetMapInitData(worldSize)
-
+	-- i have to use Map.GetCustomOption because this is called before everything else
+	if Map.GetCustomOption(1) ~= 2 then
+		-- for Realm and Doughnut maps
+		-- create a random map aspect ratio for the given map size
+		local areas = {
+			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 25,
+			[GameInfo.Worlds.WORLDSIZE_TINY.ID] = 56 * 36,
+			[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = 66 * 42,
+			[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = 80 * 52,
+			[GameInfo.Worlds.WORLDSIZE_LARGE.ID] = 104 * 64,
+			[GameInfo.Worlds.WORLDSIZE_HUGE.ID] = 128 * 80,
+		}
+		local grid_area = areas[worldSize]
+		local grid_width = mCeil( mSqrt(grid_area) * ((mRandom() * 0.67) + 0.67) )
+		local grid_height = mCeil( grid_area / grid_width )
+		local world = GameInfo.Worlds[worldSize]
+		if world ~= nil then
+			return {
+				Width = grid_width,
+				Height = grid_height,
+				WrapX = Map.GetCustomOption(1) == 3,
+				WrapY = Map.GetCustomOption(1) == 3,
+			}
+	    end
+	end
 end
-]]--
+
 
 local mySpace
 
