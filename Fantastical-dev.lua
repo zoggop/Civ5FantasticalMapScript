@@ -34,6 +34,8 @@ local mSqrt = math.sqrt
 local mSin = math.sin
 local mCos = math.cos
 local mPi = math.pi
+local mTwicePi = math.pi * 2
+local mAtan2 = math.atan2
 local tInsert = table.insert
 local tRemove = table.remove
 
@@ -88,6 +90,18 @@ local function diceRoll(dice, maximum, invert)
 	n = n * maximum
 	return n
 end
+
+local function AngleAtoB(x1, y1, x2, y2)
+	local dx = x2 - x1
+	local dy = y2 - y1
+	return mAtan2(-dy, dx)
+end
+
+local function AngleDist(angle1, angle2)
+	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
+end
+
+
 
 ------------------------------------------------------------------------------
 
@@ -1316,16 +1330,112 @@ function Space:PickOceansRectangle()
 		end
 		local ocean = {}
 		for i, polygon in pairs(self[bottomTopCriterion]) do
-			polygon.oceanIndex = oceanIndex
-			tInsert(ocean, polygon)
-			self.nonOceanArea = self.nonOceanArea - polygon.area
-			self.nonOceanPolygons = self.nonOceanPolygons - 1
+			if not polygon.oceanIndex then
+				polygon.oceanIndex = oceanIndex
+				tInsert(ocean, polygon)
+				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanPolygons = self.nonOceanPolygons - 1
+			end
 		end
 		tInsert(self.oceans, ocean)
 	end
 end
 
 function Space:PickOceansDoughnut()
+	self.wrapX, self.wrapY = false, false
+	local formulas = {
+		[1] = { {1,2} },
+		[2] = { {3}, {4} },
+		[3] = { {-1}, {7,8,9}, {10,11,12} }, -- negative 1 denotes each subtable is a possibility of a list instead of a list of possibilities
+		[4] = { {1}, {2}, {5}, {6} },
+	}
+	local hex = self:GetHexByXY(mFloor(self.w / 2), mFloor(self.h / 2))
+	local hexAngles = {}
+	for n, nhex in pairs(hex:Neighbors()) do
+		local angle = AngleAtoB(hex.x, hex.y, nhex.x, nhex.y)
+		-- EchoDebug(n, angle)
+		hexAngles[n] = angle
+	end
+	local origins, terminals = self:InterpretFormula(formulas[self.oceanNumber])
+	for oceanIndex = 1, #origins do
+		local origin, terminal = origins[oceanIndex], terminals[oceanIndex]
+		local x, y = origin.x, origin.y
+		local hex = self:GetHexByXY(origin.x, origin.y)
+		local terminalHex = self:GetHexByXY(terminal.x, terminal.y)
+		local iterations = 0
+		local ocean = {}
+		repeat
+			-- add the polygon here to the ocean
+			local polygon = hex.polygon
+			if not polygon.oceanIndex then
+				polygon.oceanIndex = oceanIndex
+				tInsert(ocean, polygon)
+				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanPolygons = self.nonOceanPolygons - 1
+			end
+			-- find the next hex:
+			local angle = AngleAtoB(hex.x, hex.y, terminal.x, terminal.y)
+			local bestDist = 10
+			local bestDir
+			local neighbors = hex:Neighbors()
+			for d = 1, 6 do
+				if neighbors[d] then
+					if hexAngles[d] == angle or neighbors[d] == terminalHex then
+						bestDir = d
+						break
+					end
+					local dist = AngleDist(angle, hexAngles[d])
+					if dist < bestDist then
+						bestDist = dist
+						bestDir = d
+					end
+				end
+			end
+			hex = neighbors[bestDir]
+			iterations = iterations + 1
+		until hex == terminalHex or iterations > self.iA
+		tInsert(self.oceans, ocean)
+	end
+	self.wrapX, self.wrapY = true, true
+end
+
+local OceanLines = {
+		[1] = { {0,0}, {0,1} }, -- straight sides
+		[2] = { {0,0}, {1,0} },
+		[3] = { {0,0}, {1,1} }, -- diagonals
+		[4] = { {1,0}, {0,1} },
+		[5] = { {0.5,0}, {0.5,1} }, -- middle cross
+		[6] = { {0,0.5}, {1,0.5} },
+		[7] = { {0.1425,0}, {0.1425,1} }, -- vertical thirds
+		[8] = { {0.4275,0}, {0.4275,1} },
+		[9] = { {0.7125,0}, {0.7125,1} },
+		[10] = { {0,0.1425}, {1,0.1425} }, -- horizontal thirds
+		[11] = { {0,0.4275}, {1,0.4275} },
+		[12] = { {0,0.7125}, {1,0.7125} },
+	}
+
+function Space:InterpretFormula(formula)
+	local origins = {}
+	local terminals = {}
+	if formula[1][1] == -1 then
+		local list = formula[mRandom(2, #formula)]
+		for l, lineCode in pairs(list) do
+			local line = OceanLines[lineCode]
+			tInsert(origins, self:InterpretPosition(line[1]))
+			tInsert(terminals, self:InterpretPosition(line[2]))
+		end
+	else
+		for i, part in pairs(formula) do
+			local line = OceanLines[tGetRandom(part)]
+			tInsert(origins, self:InterpretPosition(line[1]))
+			tInsert(terminals, self:InterpretPosition(line[2]))
+		end
+	end
+	return origins, terminals
+end
+
+function Space:InterpretPosition(position)
+	return { x = mFloor(position[1] * self.w), y = mFloor(position[2] * self.h) }
 end
 
 function Space:FindAstronomyBasins()

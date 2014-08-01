@@ -1,12 +1,12 @@
-- change donut ocean algorithm
-	- one ocean just picks a map side and draws along it
-	- two oceans is an X
-	- three oceans is just like cylinder three oceans, but three horizontal or vertical lines
-	- four oceans is everything but four blobs
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
 
 DONE
+- add donut ocean algorithm
+	- one ocean just picks a map side and draws along it
+	- two oceans is an X
+	- three oceans is just like cylinder three oceans, but three horizontal or vertical lines
+	- four oceans is cross plus both sides
 - new rectangle ocean algo just picks sides of the map
 - add map options
 - adjust terrain and feature dictionaries
