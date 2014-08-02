@@ -2,6 +2,8 @@
 - does wonder placement fix work in game?
 
 DONE
+- remove tiny islands from realm maps edges
+- give realm maps only one section of the real latitudes
 - ocean trench tiny islands
 - add squareish map sizes
 - add donut ocean algorithm

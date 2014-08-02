@@ -194,7 +194,13 @@ local OptionDictionary = {
 			[6] = { name = "6 Billion Years", values = {0.0, 20} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 6, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Climate Realism", sortpriority = 6, keys = { "useMapLatitudes" }, default = 1,
+	values = {
+			[1] = { name = "Off", values = {false} },
+			[2] = { name = "On", values = {true} },
+		}
+	},
+	{ name = "Temperature", sortpriority = 7, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
 			[1] = { name = "Ice Age", values = {3, 0, 50} },
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
@@ -203,7 +209,7 @@ local OptionDictionary = {
 			[5] = { name = "Hot", values = {0.5, 25, 100} },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 7, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 8, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
 			[1] = { name = "Wasteland", values = {13} },
 			[2] = { name = "Arid", values = {35} },
@@ -212,7 +218,7 @@ local OptionDictionary = {
 			[5] = { name = "Waterlogged", values = {90} },
 		}
 	},
-	{ name = "Fallout", sortpriority = 8, keys = { "falloutEnabled" }, default = 1,
+	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled" }, default = 1,
 	values = {
 			[1] = { name = "Off", values = {false} },
 			[2] = { name = "On", values = {true} },
@@ -323,6 +329,9 @@ function Hex:Place(relax)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
 		self.latitude = self.plot:GetLatitude()
+		if not self.space.wrapX then
+			self.latitude = self.space:RealmLatitude(self.y, self.latitude)
+		end
 		polygon:CheckBottomTop(self.x, self.y)
 	end
 	if self.polygon and not relax then
@@ -476,6 +485,9 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	if space.useMapLatitudes then
 		local plot = Map.GetPlot(x, y)
 		a.latitude = plot:GetLatitude()
+		if not space.wrapX then
+			a.latitude = space:RealmLatitude(a.y, a.latitude)
+		end
 	end
 	a.subPolygons = {}
 	a.hexes = {}
@@ -538,7 +550,12 @@ function Polygon:RelaxToCentroid()
 		local centroidY = mCeil(totalY / #self.hexes)
 		if centroidY < 0 then centroidY = space.h + centroidY end
 		self.x, self.y = centroidX, centroidY
-		if self.space.useMapLatitudes then self.latitude = Map.GetPlot(self.x, self.y):GetLatitude() end
+		if self.space.useMapLatitudes then
+			self.latitude = Map.GetPlot(self.x, self.y):GetLatitude()
+			if not self.space.wrapX then
+				self.latitude = self.space:RealmLatitude(self.y, self.latitude)
+			end
+		end
 	end
 	self.area = 0
 	self.minX, self.minY, self.maxX, self.maxY = space.w, space.h, 0, 0
@@ -645,6 +662,8 @@ function Polygon:PostProcess()
 end
 
 function Polygon:PickTinyIslands()
+	if (self.bottomX or self.topX) and self.oceanIndex and not self.space.wrapX then return end
+	if (self.bottomY or self.topY) and self.oceanIndex and not self.space.wrapX then return end
 	for i, subPolygon in pairs(self.subPolygons) do
 		local tooCloseForIsland = false
 		if not tooCloseForIsland then
@@ -970,6 +989,9 @@ function Space:Compute()
     self.h = self.iH - 1
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
+    if self.useMapLatitudes then
+    	self.realmHemisphere = mRandom(1, 2)
+    end
 	self.polarExponentMultiplier = 90 ^ self.polarExponent
 	if self.rainfallMidpoint > 50 then
 		self.rainfallPlusMinus = 100 - self.rainfallMidpoint
@@ -1872,6 +1894,11 @@ function Space:GetFakeSubLatitude(latitudeStart)
 		return mRandom(latitudeStart-5, latitudeStart+5)
 	end
 	return mRandom(0, 90)
+end
+
+function Space:RealmLatitude(y, latitude)
+	if self.realmHemisphere == 2 then y = self.h - y end
+	return mFloor(y * (90 / self.h))
 end
 
 function Space:GetTemperature(latitude)
