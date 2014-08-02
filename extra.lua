@@ -1,3 +1,5 @@
+--[[
+
 GetIndicesInLine = function(self, x1, y1, x2, y2)
 		local plots = {}
 		local x1, y1 = mCeil(x1), mCeil(y1)
@@ -107,7 +109,6 @@ function Space:ExpandCoasts()
 	EchoDebug(self.coastArea .. " coastal hexes after expansion")
 end
 
---[[
 			local dx = terminal.x - hex.x
 			local dy = terminal.y - hex.y
 			if dx == 0 then
@@ -131,8 +132,6 @@ end
 			end
 			local neighbors = hex:Neighbors({d})
 			hex = neighbors[1]
-			]]--
-			--[[
 			local angle = AngleAtoB(hex.x, hex.y, terminal.x, terminal.y)
 			local bestDist = 10
 			local bestDir
@@ -151,4 +150,75 @@ end
 				end
 			end
 			hex = neighbors[bestDir]
-			]]--
+
+
+function Space:PickOceansCylinder()
+	local div = self.w / self.oceanNumber
+	local x = 0
+	-- if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
+	for oceanIndex = 1, self.oceanNumber do
+		local hex = self.hexes[self:GetIndex(x, 0)]
+		local polygon = hex.polygon
+		local edge
+		for i, e in pairs(polygon.edges) do
+			if e.polygons[1].bottomY and e.polygons[2].bottomY then
+				edge = e
+				break
+			end
+		end
+		local ocean = {}
+		local iterations = 0
+		while iterations < 100 do
+			edge.oceanIndex = oceanIndex
+			for p = 1, 2 do
+				if not edge.polygons[p].oceanIndex then
+					edge.polygons[p].oceanIndex = oceanIndex
+					tInsert(ocean, edge.polygons[p])
+					self.nonOceanArea = self.nonOceanArea - edge.polygons[p].area
+					self.nonOceanPolygons = self.nonOceanPolygons - 1
+				end
+			end
+			if edge.polygons[1].topY and edge.polygons[2].topY then
+				EchoDebug("topY found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+				break
+			end
+			local up = {}
+			local down = {}
+			for cedge, yes in pairs(edge.connections) do
+				if not cedge.oceanIndex then
+					if cedge.maxY > edge.maxY then
+						tInsert(up, cedge)
+					else
+						tInsert(down, cedge)
+					end
+				end
+			end
+			if #up == 0 then
+				if #down == 0 then
+					if #edge.connections == 0 then
+						EchoDebug("no edge connections!, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+						break
+					else
+						up = edge.connections
+					end
+				else
+					up = down
+				end
+			end
+			local highestY = 0
+			local highestEdge
+			for c, cedge in pairs(up) do
+				if cedge.maxY > highestY then
+					highestY = cedge.maxY
+					highestEdge = cedge
+				end
+			end
+			edge = highestEdge or tGetRandom(up)
+			iterations = iterations + 1
+		end
+		tInsert(self.oceans, ocean)
+		x = mCeil(x + div) % self.w
+	end
+end
+
+]]--

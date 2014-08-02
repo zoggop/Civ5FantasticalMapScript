@@ -414,9 +414,14 @@ function Hex:ComputeNeighbors()
 				if self.adjacentPolyCount == 2 then tInsert(self.polygon.vertices, self) end
 			end
 			if self.polygon.edges[nhex.polygon] then
-				tInsert(self.polygon.edges[nhex.polygon].hexes, self)
+				local edge = self.polygon.edges[nhex.polygon]
+				tInsert(edge.hexes, self)
+				if self.x > edge.maxX then edge.maxX = self.x end
+				if self.x < edge.minX then edge.minX = self.x end
+				if self.y > edge.maxY then edge.maxY = self.y end
+				if self.y < edge.minY then edge.minY = self.y end
 			else
-				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self }, connections = {} }
+				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self }, connections = {}, minX = self.x, maxX = self.x, minY = self.y, maxY = self.y }
 				self.polygon.edges[nhex.polygon] = edge
 				nhex.polygon.edges[self.polygon] = edge
 				tInsert(self.space.edges, edge)
@@ -643,13 +648,22 @@ function Polygon:PickTinyIslands()
 		local tooCloseForIsland = false
 		if not tooCloseForIsland then
 			for i, neighbor in pairs(subPolygon.neighbors) do
-				if neighbor.superPolygon.continentIndex or neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
+				if neighbor.superPolygon.continentIndex or self.oceanIndex ~= neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
 					tooCloseForIsland = true
 					break
 				end
+				for nn, neighneigh in pairs(neighbor.neighbors) do
+					if self.oceanIndex ~= neighneigh.superPolygon.oceanIndex then
+						tooCloseForIsland = true
+						break
+					end
+				end
+				if tooCloseForIsland then break end
 			end
 		end
-		if not tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= self.space.tinyIslandChance or (self.loneCoastal and not self.hasTinyIslands)) then
+		local chance = self.space.tinyIslandChance
+		if self.oceanIndex then chance = chance * 1.5 end
+		if not tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= chance or ((self.loneCoastal or self.oceanIndex) and not self.hasTinyIslands)) then
 			subPolygon.tinyIsland = true
 			self.hasTinyIslands = true
 		end
@@ -1243,8 +1257,8 @@ end
 
 function Space:PickOceansCylinder()
 	local div = self.w / self.oceanNumber
-	local x
-	if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
+	local x = 0
+	-- if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
 	for oceanIndex = 1, self.oceanNumber do
 		local hex = self.hexes[self:GetIndex(x, 0)]
 		local polygon = hex.polygon
@@ -1750,11 +1764,14 @@ function Space:PickCoasts()
 	self.coastalPolygonArea = 0
 	self.coastalPolygonCount = 0
 	for i, polygon in pairs(self.polygons) do
-		if polygon.continentIndex == nil and polygon.oceanIndex == nil then
-			if Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
+		if polygon.continentIndex == nil then
+			if polygon.oceanIndex == nil and Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continentIndex") then polygon.loneCoastal = true end
+				polygon:PickTinyIslands()
+				tInsert(self.tinyIslandPolygons, polygon)
+			elseif polygon.oceanIndex then
 				polygon:PickTinyIslands()
 				tInsert(self.tinyIslandPolygons, polygon)
 			end
@@ -1979,6 +1996,7 @@ end
 function GetMapScriptInfo()
 	local world_age, temperature, rainfall, sea_level, resources = GetCoreMapOptions()
 	local custOpts = GetCustomOptions()
+	tInsert(custOpts, resources)
 	return {
 		Name = "Fantastical (dev)",
 		Description = "Scribbles fantastical lands onto the world.",
@@ -1987,6 +2005,7 @@ function GetMapScriptInfo()
 	}
 end
 
+--[[
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
 	if Map.GetCustomOption(1) ~= 2 then
@@ -2004,16 +2023,18 @@ function GetMapInitData(worldSize)
 		local grid_width = mCeil( mSqrt(grid_area) * ((mRandom() * 0.67) + 0.67) )
 		local grid_height = mCeil( grid_area / grid_width )
 		local world = GameInfo.Worlds[worldSize]
+		local wrap = Map.GetCustomOption(1) == 3
 		if world ~= nil then
 			return {
 				Width = grid_width,
 				Height = grid_height,
-				WrapX = Map.GetCustomOption(1) == 3,
-				WrapY = Map.GetCustomOption(1) == 3,
+				WrapX = wrap,
+				WrapY = wrap,
 			}
 	    end
 	end
 end
+]]--
 
 
 local mySpace
