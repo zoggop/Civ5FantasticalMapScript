@@ -153,22 +153,15 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "World Wrapping", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 2,
+	{ name = "World Wrap", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 1,
 	values = {
-			[1] = { name = "Region (No Wrapping)", values = {false, false} },
-			[2] = { name = "Globe (Horizontal Wrapping)", values = {true, false} },
-			[3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
+			[1] = { name = "Globe (Wraps East-West)", values = {true, false} },
+			[2] = { name = "Region (Does Not Wrap)", values = {false, false} },
+			-- [3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
+			-- sadly wrapY does not work
 		}
 	},
-	{ name = "Oceans", sortpriority = 1, keys = { "oceanNumber", }, default = 2,
-	values = {
-			[1] = { name = "One", values = {1} },
-			[2] = { name = "Two", values = {2} },
-			[3] = { name = "Three", values = {3} },
-			[4] = { name = "Four", values = {4} },
-		}
-	},
-	{ name = "Continents Per Ocean", sortpriority = 1, keys = { "majorContinentNumber", }, default = 1,
+	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 2,
 	values = {
 			[1] = { name = "One", values = {1} },
 			[2] = { name = "Two", values = {2} },
@@ -176,14 +169,22 @@ local OptionDictionary = {
 			[4] = { name = "Four", values = {4} },
 		}
 	},
-	{ name = "Islands", sortpriority = 1, keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
+	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
+	values = {
+			[1] = { name = "One", values = {1} },
+			[2] = { name = "Two", values = {2} },
+			[3] = { name = "Three", values = {3} },
+			[4] = { name = "Four", values = {4} },
+		}
+	},
+	{ name = "Islands", sortpriority = 4, keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
 	values = {
 			[1] = { name = "Few", values = {10, 1, 0.25} },
 			[2] = { name = "Some", values = {33, 2, 0.5} },
 			[3] = { name = "Many", values = {80, 3, 0.75} },
 		}
 	},
-	{ name = "World Age", sortpriority = 1, keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	{ name = "World Age", sortpriority = 5, keys = { "mountainRatio", "hillynessMax" }, default = 4,
 	values = {
 			[1] = { name = "1 Billion Years", values = {0.25, 75} },
 			[2] = { name = "2 Billion Years", values = {0.16, 60} },
@@ -193,7 +194,7 @@ local OptionDictionary = {
 			[6] = { name = "6 Billion Years", values = {0.0, 20} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 1, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Temperature", sortpriority = 6, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
 			[1] = { name = "Ice Age", values = {3, 0, 50} },
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
@@ -202,7 +203,7 @@ local OptionDictionary = {
 			[5] = { name = "Hot", values = {0.5, 25, 100} },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 1, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 7, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
 			[1] = { name = "Wasteland", values = {13} },
 			[2] = { name = "Arid", values = {35} },
@@ -211,7 +212,7 @@ local OptionDictionary = {
 			[5] = { name = "Waterlogged", values = {90} },
 		}
 	},
-	{ name = "Fallout", sortpriority = 1, keys = { "falloutEnabled" }, default = 1,
+	{ name = "Fallout", sortpriority = 8, keys = { "falloutEnabled" }, default = 1,
 	values = {
 			[1] = { name = "Off", values = {false} },
 			[2] = { name = "On", values = {true} },
@@ -2005,11 +2006,10 @@ function GetMapScriptInfo()
 	}
 end
 
---[[
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
-	if Map.GetCustomOption(1) ~= 2 then
-		-- for Realm and Doughnut maps
+	if Map.GetCustomOption(1) == 2 then
+		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
 			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 25,
@@ -2028,14 +2028,11 @@ function GetMapInitData(worldSize)
 			return {
 				Width = grid_width,
 				Height = grid_height,
-				WrapX = wrap,
-				WrapY = wrap,
+				WrapX = false,
 			}
 	    end
 	end
 end
-]]--
-
 
 local mySpace
 
