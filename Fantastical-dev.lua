@@ -1264,8 +1264,8 @@ end
 function Space:FinalFillPolygons()
 	for i, subPolygon in pairs(self.subPolygons) do
 		tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
-		for i, hex in pairs(self.hexes) do
-			tInsert(subPolygon.superPolygon.hexes, hex)
+		for i, hex in pairs(subPolygon.hexes) do
+			hex:FinalPlace()
 		end
 	end
 end
