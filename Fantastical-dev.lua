@@ -473,10 +473,12 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
+	--[[
 	if self.polygon.oceanIndex then
 		self.plot:SetFeatureType(featureFallout)
 		return
 	end
+	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	self.plot:SetFeatureType(self.featureType)
@@ -622,9 +624,17 @@ function Polygon:Subdivide()
 			n = n + 1
 		end
 	end
-	-- fill the subpolygons with hexes
-	for h, hex in pairs(self.hexes) do
-		hex:SubPlace(false, subPolygons)
+	for r = 1, self.space.subPolygonRelaxations + 1 do
+		-- fill the subpolygons with hexes
+		for h, hex in pairs(self.hexes) do
+			hex:SubPlace(false, subPolygons)
+		end
+		-- relax subpolygons
+		if r <= self.space.subPolygonRelaxations then
+			for i, subPolygon in pairs(subPolygons) do
+				subPolygon:RelaxToCentroid()
+			end
+		end
 	end
 	-- populate space's subpolygon table (don't include those w/o hexes)
 	for i, subPolygon in pairs(subPolygons) do
@@ -890,7 +900,8 @@ Space = class(function(a)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 12 -- how many subpolygons in each polygon
-	a.subPolygonFlopPercent = 10 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonRelaxations = 1 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -1015,7 +1026,7 @@ function Space:Compute()
     self:FloodFillFakePolygons()
     EchoDebug("populating polygon tables...")
     self:FinalFillPolygons()
-    EchoDebug("culling real polygon...")
+    EchoDebug("culling real polygons...")
     self:CullPolygons()
     EchoDebug("computing polygon neighbors...")
     self:ComputePolygonNeighbors()
