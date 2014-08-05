@@ -511,6 +511,18 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	end
 end)
 
+function Polygon:FloodFillSuperPolygon(floodIndex, superPolygon)
+	superPolygon = superPolygon or self.superPolygon
+	if self.superPolygon ~= superPolygon or self.flooded then return false end
+	if self.space.floods[floodIndex] == nil then self.space.floods[floodIndex] = {} end
+	tInsert(self.space.floods[floodIndex], self)
+	self.flooded = true
+	for i, neighbor in pairs(self.neighbors) do
+		neighbor:FloodFillSuperPolygon(floodIndex, superPolygon)
+	end
+	return true
+end
+
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex or self.nearOcean then
 		self.astronomyIndex = (self.oceanIndex or 100) + 10
@@ -627,7 +639,7 @@ function Polygon:Subdivide()
 	end
 end
 
-function Polygon:PostProcess()
+function Polygon:PopulateNeighbors()
 	self.neighbors = {}
 	for neighbor, yes in pairs(self.isNeighbor) do
 		tInsert(self.neighbors, neighbor)
@@ -878,7 +890,7 @@ Space = class(function(a)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 12 -- how many subpolygons in each polygon
-	a.subPolygonFlopPercent = 15 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 10 -- out of 100 subpolygons, how many flop to another polygon
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -991,7 +1003,7 @@ function Space:Compute()
     end
     EchoDebug("filling polygons post-relaxation...")
     self:FillPolygons()
-    EchoDebug("culling polygons...")
+    EchoDebug("culling empty polygons...")
     self:CullPolygons()
     EchoDebug("subdividing polygons...")
     self:SubdividePolygons()
@@ -999,14 +1011,14 @@ function Space:Compute()
     self:ComputeSubPolygonNeighbors()
     EchoDebug("flip-flopping subpolygons...")
     self:FlipFlopSubPolygons()
-    EchoDebug("populating polygon tables")
+    EchoDebug("flood-filling fake polygons...")
+    self:FloodFillFakePolygons()
+    EchoDebug("populating polygon tables...")
     self:FinalFillPolygons()
-    EchoDebug("culling polygons again...")
+    EchoDebug("culling real polygon...")
     self:CullPolygons()
     EchoDebug("computing polygon neighbors...")
     self:ComputePolygonNeighbors()
-    EchoDebug("post-processing polygons...")
-    self:PostProcessPolygons()
     EchoDebug("finding edge connections...")
     self:FindEdgeConnections()
     EchoDebug("picking oceans...")    
@@ -1190,7 +1202,7 @@ function Space:CullPolygons()
 			self.culledPolygons = self.culledPolygons + 1
 		end
 	end
-	EchoDebug(self.culledPolygons .. " polygons culled")
+	EchoDebug(self.culledPolygons .. " polygons culled", #self.polygons .. " remaining")
 end
 
 function Space:SubdividePolygons()
@@ -1208,7 +1220,7 @@ function Space:ComputeSubPolygonNeighbors()
 		hex:ComputeSubPolygonNeighbors()
 	end
 	for i, subPolygon in pairs(self.subPolygons) do
-		subPolygon:PostProcess()
+		subPolygon:PopulateNeighbors()
 	end
 end
 
@@ -1233,29 +1245,51 @@ function Space:FlipFlopSubPolygons()
 			end
 			subPolygon.superPolygon = superPolygon
 			subPolygon.flopped = true
-			-- make sure the flopping didn't cause any discontinuities, and if so, fix them
-			for n, neighbor in pairs(subPolygon.neighbors) do
-				local hasFriendlyNeighbors = false
-				local unfriendly = {}
-				for nn, neighneigh in pairs(neighbor.neighbors) do
-					if neighneigh.superPolygon == neighbor.superPolygon then
-						hasFriendlyNeighbors = true
-						break
-					else
-						unfriendly[neighneigh.superPolygon] = true
-					end
-				end
-				if not hasFriendlyNeighbors then
-					local uchoices = {}
-					for superPolygon, yes in pairs(unfriendly) do
-						tInsert(uchoices, superPolygon)
-					end
-					neighbor.superPolygon = tGetRandom(uchoices)
-					for h, hex in pairs(neighbor.hexes) do
-						hex.polygon = neighbor.superPolygon
-					end
-					neighbor.flopped = true
-				end
+		end
+	end
+	-- fix stranded single subpolygons
+	for i, subPolygon in pairs(self.subPolygons) do
+		local hasFriendlyNeighbors = false
+		local unfriendly = {}
+		for n, neighbor in pairs(subPolygon.neighbors) do
+			if neighbor.superPolygon == subPolygon.superPolygon then
+				hasFriendlyNeighbors = true
+				break
+			else
+				unfriendly[neighbor.superPolygon] = true
+			end
+		end
+		if not hasFriendlyNeighbors then
+			local uchoices = {}
+			for superPolygon, yes in pairs(unfriendly) do
+				tInsert(uchoices, superPolygon)
+			end
+			subPolygon.superPolygon = tGetRandom(uchoices)
+			for h, hex in pairs(subPolygon.hexes) do
+				hex.polygon = subPolygon.superPolygon
+			end
+			subPolygon.flopped = true
+		end
+	end
+end
+
+function Space:FloodFillFakePolygons()
+	-- redo polygons based on flood filling subpolygons by superpolygon
+	floodIndex = 1
+	self.floods = {}
+	for i, subPolygon in pairs(self.subPolygons) do
+		if subPolygon:FloodFillSuperPolygon(floodIndex) then
+			floodIndex = floodIndex + 1
+		end
+	end
+	for fi, flood in pairs(self.floods) do
+		local randCenter = tGetRandom(flood)
+		local superPoly = Polygon(self, randCenter.x, randCenter.y)
+		tInsert(self.polygons, superPoly)
+		for s, subPoly in pairs(flood) do
+			subPoly.superPolygon = superPoly
+			for h, hex in pairs(subPoly.hexes) do
+				hex.polygon = superPoly
 			end
 		end
 	end
@@ -1274,13 +1308,10 @@ function Space:ComputePolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
 		hex:ComputeNeighbors()
 	end
-end
-
-function Space:PostProcessPolygons()
 	self.polygonMinArea = self.iA
 	self.polygonMaxArea = 0
 	for i, polygon in pairs(self.polygons) do
-		polygon:PostProcess()
+		polygon:PopulateNeighbors()
 		if #polygon.hexes < self.polygonMinArea and #polygon.hexes > 0 then
 			self.polygonMinArea = #polygon.hexes
 		end
