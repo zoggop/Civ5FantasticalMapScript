@@ -1,3 +1,7 @@
+- fix gaps being caused by subdivision jumping
+- less scattered mountains
+- rivers along subpolygon edges?
+- optional roads?
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
 

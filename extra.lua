@@ -221,4 +221,119 @@ function Space:PickOceansCylinder()
 	end
 end
 
+function Polygon:Subdivide()
+	-- initialize subpolygons by picking locations randomly from the polygon's hexes
+	local hexBuffer = tDuplicate(self.hexes)
+	local n = 0
+	while #hexBuffer > 0 and n < self.space.subPolygonCount do
+		local hex = tRemoveRandom(hexBuffer)
+		if not hex.subPolygon then
+			local subPolygon = Polygon(self.space, hex.x, hex.y, self)
+			subPolygon.superPolygon = self
+			subPolygon.adjacentSuperPolygons = {}
+			tInsert(self.subPolygons, subPolygon)
+			n = n + 1
+		end
+	end
+	-- see how many of these deserted from another polygon
+	local deserterCount = 0
+	for i, subPolygon in pairs(self.subPolygons) do
+		if subPolygon.deserter then deserterCount = deserterCount + 1 end
+	end
+	local nonDeserterCount = #self.subPolygons - deserterCount
+	-- fill the subpolygons with available hexes (hexes that did not come from deserter subpolygons)
+	for h, hex in pairs(self.hexes) do
+		if not hex.subPolygon then hex:SubPlace() end
+	end
+	-- compute superpolygon neighbors
+	for h, hex in pairs(self.hexes) do
+		if not hex.subPolygon.deserter then hex:ComputeAdjacentSuperPolygons() end
+	end
+	-- pick off edge subpolygons at random, and populate subpolygon tables
+	-- and create neighbor tables
+	local maxDeserters = #self.subPolygons * (self.space.subPolygonDesertionPercent / 100)
+	local minNonDeserters = #self.subPolygons - maxDeserters
+	EchoDebug("before", #self.subPolygons, deserterCount, nonDeserterCount)
+	for i = #self.subPolygons, 1, -1 do
+		local subPolygon = self.subPolygons[i]
+		if #subPolygon.hexes > 0 then
+			if not subPolygon.deserter then
+				if deserterCount < maxDeserters and nonDeserterCount > minNonDeserters then
+					local adjacent = {}
+					for polygon, yes in pairs(subPolygon.adjacentSuperPolygons) do
+						tInsert(adjacent, polygon)
+					end
+					if #adjacent > 0 and mRandom(1, 100) < self.space.subPolygonDesertionPercent then
+						subPolygon.superPolygon = tGetRandom(adjacent)
+						subPolygon.deserter = true
+						tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
+						tRemove(self.subPolygons, i)
+						nonDeserterCount = nonDeserterCount - 1
+					end
+				end
+				subPolygon.adjacentSuperPolygons = {}
+				tInsert(self.space.subPolygons, subPolygon)
+				if #subPolygon.hexes > self.space.biggestSubPolygon then
+					self.space.biggestSubPolygon = #subPolygon.hexes
+				elseif #subPolygon.hexes < self.space.smallestSubPolygon then
+					self.space.smallestSubPolygon = #subPolygon.hexes
+				end
+			end
+		else
+			tRemove(self.subPolygons, i)
+		end
+	end
+	EchoDebug("after", #self.subPolygons, deserterCount, nonDeserterCount)
+	-- remove hexes that are no longer inside this polygon
+	-- and move them to the correct polygon
+	for i = #self.hexes, 1, -1 do
+		local hex = self.hexes[i]
+		if hex.subPolygon.superPolygon ~= self then
+			hex.polygon = hex.subPolygon.superPolygon
+			tInsert(hex.polygon.hexes, hex)
+			tRemove(self.hexes, i)
+		end
+	end
+	-- find stranded subpolygons
+	for i, hex in pairs(self.hexes) do
+		for ni, nhex in pairs(hex:Neighbors()) do
+			if hex.polygon == nhex.polygon then
+				hex.subPolygon.hasPartisanNeighbors = true
+			else
+				if not hex.subPolygon.adjacentSuperPolygons[nhex.polygon] then
+					hex.subPolygon.adjacentSuperPolygons[nhex.polygon] = true
+				end
+			end
+		end
+	end
+	-- move stranded subpolygons to an adjacent polygon
+	for i = #self.subPolygons, 1, -1 do
+		local subPolygon = self.subPolygons[i]
+		if not subPolygon.hasPartisanNeighbors then
+			local adjacent = {}
+			for polygon, yes in pairs(subPolygon.adjacentSuperPolygons) do
+				tInsert(adjacent, polygon)
+			end
+			if #adjacent == 0 then EchoDebug("NONE ADJACENT") end
+			local superPolygon = tGetRandom(adjacent)
+			subPolygon.superPolygon = superPolygon
+			subPolygon.deserter = true
+			tInsert(superPolygon.subPolygons, subPolygon)
+			tRemove(self.subPolygons, i)
+			nonDeserterCount = nonDeserterCount - 1
+		end
+	end
+	-- move moved hexes again
+	for i = #self.hexes, 1, -1 do
+		local hex = self.hexes[i]
+		if hex.subPolygon.superPolygon ~= self then
+			hex.polygon = hex.subPolygon.superPolygon
+			tInsert(hex.polygon.hexes, hex)
+			tRemove(self.hexes, i)
+		end
+	end
+	if #self.subPolygons == 0 or #self.hexes == 0 then EchoDebug("NO SUBPOLYGONS OR HEXES") end
+	EchoDebug("after removing stranded", #self.hexes, #self.subPolygons, deserterCount, nonDeserterCount)
+end
+
 ]]--

@@ -292,7 +292,7 @@ local function SetConstants()
 		[featureForest] = { temperature = {0, 85, 30}, rainfall = {50, 100, 90}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
-		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 25, limitRatio = 0.02, hill = false },
+		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 20, limitRatio = 0.01, hill = false },
 		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
 	}
 
@@ -318,27 +318,34 @@ Hex = class(function(a, space, x, y, index)
 end)
 
 function Hex:Place(relax)
-	local polygon = self:ClosestPolygon(relax)
+	self.polygon = self:ClosestPolygon(relax)
 	self.space.hexes[self.index] = self
-	tInsert(polygon.hexes, self)
-	polygon.area = polygon.area + 1
-	if self.x < polygon.minX then polygon.minX = self.x end
-	if self.y < polygon.minY then polygon.minY = self.y end
-	if self.x > polygon.maxX then polygon.maxX = self.x end
-	if self.y > polygon.maxY then polygon.maxY = self.y end
+	tInsert(self.polygon.hexes, self)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
 		self.latitude = self.plot:GetLatitude()
 		if not self.space.wrapX then
 			self.latitude = self.space:RealmLatitude(self.y, self.latitude)
 		end
-		polygon:CheckBottomTop(self.x, self.y)
 	end
-	if self.polygon and not relax then
-		self.subPolygon = polygon
-	else
-		self.polygon = polygon
-	end
+end
+
+function Hex:SubPlace(relax, subPolygons)
+	self.subPolygon = self:ClosestPolygon(relax, subPolygons)
+	self:InsidePolygon(self.subPolygon)
+end
+
+function Hex:FinalPlace()
+	self:InsidePolygon(self.polygon)
+end
+
+function Hex:InsidePolygon(polygon)
+	tInsert(polygon.hexes, self)
+	if self.x < polygon.minX then polygon.minX = self.x end
+	if self.y < polygon.minY then polygon.minY = self.y end
+	if self.x > polygon.maxX then polygon.maxX = self.x end
+	if self.y > polygon.maxY then polygon.maxY = self.y end
+	polygon:CheckBottomTop(self.x, self.y)
 end
 
 function Hex:Adjacent(direction)
@@ -388,30 +395,35 @@ function Hex:Neighbors(directions)
 	return neighbors
 end
 
-function Hex:ClosestPolygon(relax)
+function Hex:ClosestPolygon(relax, polygons)
 	local dists = {}
-	local closest_distance = 0
+	local closest_distance = self.space.w
 	local closest_polygon
 	-- find the closest point to this point
-	local somePolygons
-	if self.polygon and not relax then
-		somePolygons = self.polygon.subPolygons
-	else
-		somePolygons = self.space.polygons
-	end
-	for i = 1, #somePolygons do
-		local polygon = somePolygons[i]
-		dists[i] = self.space:EucDistance(polygon.x, polygon.y, self.x, self.y)
-		if i == 1 or dists[i] < closest_distance then
-			closest_distance = dists[i]
-			closest_polygon = polygon
+	polygons = polygons or self.space.polygons
+	for i = 1, #polygons do
+		local polygon = polygons[i]
+		if not polygon.deserter then
+			dists[i] = self.space:EucDistance(polygon.x, polygon.y, self.x, self.y)
+			if i == 1 or dists[i] < closest_distance then
+				closest_distance = dists[i]
+				closest_polygon = polygon
+			end
 		end
 	end
 	return closest_polygon
 end
 
+function Hex:ComputeSubPolygonNeighbors()
+	for ni, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
+		if nhex.subPolygon ~= self.subPolygon then
+			self.subPolygon:SetNeighbor(nhex.subPolygon)
+		end
+	end
+end
+
 function Hex:ComputeNeighbors()
-	for ni, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet
+	for ni, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
 		if nhex.polygon ~= self.polygon then
 			self.polygon:SetNeighbor(nhex.polygon)
 			if not self.edgeWith[nhex] then
@@ -437,9 +449,6 @@ function Hex:ComputeNeighbors()
 				tInsert(self.space.edges, edge)
 			end
 		end
-		if nhex.subPolygon ~= self.subPolygon then
-			self.subPolygon:SetNeighbor(nhex.subPolygon)
-		end
 	end
 end
 
@@ -455,7 +464,6 @@ end
 
 function Hex:SetPlot()
 	if self.plot == nil then return end
-
 	self.plot:SetPlotType(self.plotType)
 end
 
@@ -465,12 +473,10 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
-	--[[
 	if self.polygon.oceanIndex then
 		self.plot:SetFeatureType(featureFallout)
 		return
 	end
-	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	self.plot:SetFeatureType(self.featureType)
@@ -494,7 +500,6 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	a.edges = {}
 	a.vertices = {}
 	a.isNeighbor = {}
-	a.area = 0
 	a.minX = space.w
 	a.maxX = 0
 	a.minY = space.h
@@ -557,7 +562,6 @@ function Polygon:RelaxToCentroid()
 			end
 		end
 	end
-	self.area = 0
 	self.minX, self.minY, self.maxX, self.maxY = space.w, space.h, 0, 0
 	self.hexes = {}
 end
@@ -566,19 +570,19 @@ function Polygon:CheckBottomTop(x, y)
 	local space = self.space
 	if y == 0 and self.y < space.halfHeight then
 		self.bottomY = true
-		tInsert(space.bottomYPolygons, self)
+		if not self.superPolygon then tInsert(space.bottomYPolygons, self) end
 	end
 	if x == 0 and self.x < space.halfWidth then
 		self.bottomX = true
-		tInsert(space.bottomXPolygons, self)
+		if not self.superPolygon then tInsert(space.bottomXPolygons, self) end
 	end
 	if y == space.h and self.y >= space.halfHeight then
 		self.topY = true
-		tInsert(space.topYPolygons, self)
+		if not self.superPolygon then tInsert(space.topYPolygons, self) end
 	end
 	if x == space.w and self.x >= space.halfWidth then
 		self.topX = true
-		tInsert(space.topXPolygons, self)
+		if not self.superPolygon then tInsert(space.topXPolygons, self) end
 	end
 end
 
@@ -593,63 +597,32 @@ function Polygon:NearOther(value, key)
 end
 
 function Polygon:Subdivide()
+	-- initialize subpolygons by picking locations randomly from the polygon's hexes
 	local hexBuffer = tDuplicate(self.hexes)
-	for n = 1, self.space.subPolygonCount do
-		if #hexBuffer == 0 then break end
+	local n = 0
+	local subPolygons = {}
+	while #hexBuffer > 0 and n < self.space.subPolygonCount do
 		local hex = tRemoveRandom(hexBuffer)
-		local subPolygon = Polygon(self.space, hex.x, hex.y, self)
-		subPolygon.superPolygon = self
-		subPolygon.adjacentSuperPolygons = {}
-		tInsert(self.subPolygons, subPolygon)
+		if not hex.subPolygon then
+			local subPolygon = Polygon(self.space, hex.x, hex.y, self)
+			subPolygon.superPolygon = self
+			tInsert(subPolygons, subPolygon)
+			n = n + 1
+		end
 	end
+	-- fill the subpolygons with hexes
 	for h, hex in pairs(self.hexes) do
-		hex:Place()
+		hex:SubPlace(false, subPolygons)
 	end
-	-- compute neighbors
-	for h, hex in pairs(self.hexes) do
-		hex:ComputeAdjacentSuperPolygons()
-	end
-	-- pick off edge subpolygons at random, and populate subpolygon tables
-	-- and create neighbor tables
-	for i = #self.subPolygons, 1, -1 do
-		local subPolygon = self.subPolygons[i]
+	-- populate space's subpolygon table (don't include those w/o hexes)
+	for i, subPolygon in pairs(subPolygons) do
 		if #subPolygon.hexes > 0 then
-			if #self.subPolygons > 1 and not subPolygon.deserter then
-				local adjacent = {}
-				for polygon, yes in pairs(subPolygon.adjacentSuperPolygons) do
-					tInsert(adjacent, polygon)
-				end
-				if #adjacent > 0 and mRandom(1, 100) < self.space.subPolygonDesertionPercent then
-					subPolygon.superPolygon = tGetRandom(adjacent)
-					subPolygon.deserter = true
-					--[[
-					subPolygon.adjacentSuperPolygons[subPolygon.superPolygon] = nil
-					subPolygon.adjacentSuperPolygons[self] = true
-					]]--
-					tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
-					tRemove(self.subPolygons, i)
-				end
-			end
 			tInsert(self.space.subPolygons, subPolygon)
 			if #subPolygon.hexes > self.space.biggestSubPolygon then
 				self.space.biggestSubPolygon = #subPolygon.hexes
 			elseif #subPolygon.hexes < self.space.smallestSubPolygon then
 				self.space.smallestSubPolygon = #subPolygon.hexes
 			end
-		else
-			tRemove(self.subPolygons, i)
-		end
-	end
-	-- remove hexes that are no longer inside this pseudopolygon
-	-- and move them to the correct polygon
-	for i = #self.hexes, 1, -1 do
-		local hex = self.hexes[i]
-		if hex.subPolygon.superPolygon ~= self then
-			hex.polygon = hex.subPolygon.superPolygon
-			self.area = self.area - 1
-			hex.polygon.area = hex.polygon.area + 1
-			tInsert(hex.polygon.hexes, hex)
-			tRemove(self.hexes, i)
 		end
 	end
 end
@@ -905,7 +878,7 @@ Space = class(function(a)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 12 -- how many subpolygons in each polygon
-	a.subPolygonDesertionPercent = 10 -- out of 100, how many subpolygon are swapped over to the adjacent polygon
+	a.subPolygonFlopPercent = 15 -- out of 100 subpolygons, how many flop to another polygon
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -929,8 +902,8 @@ Space = class(function(a)
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
 	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
 	a.freezingTemperature = 18 -- this temperature and below creates ice. temperature is 0 to 100
-	a.atollTemperature = 80 -- this temperature and above creates atolls
-	a.atollPercent = 1 -- of 100 hexes, how often does atoll temperature produce atolls
+	a.atollTemperature = 75 -- this temperature and above creates atolls
+	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
 	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
@@ -1022,6 +995,14 @@ function Space:Compute()
     self:CullPolygons()
     EchoDebug("subdividing polygons...")
     self:SubdividePolygons()
+    EchoDebug("determining subpolygon neighbors...")
+    self:ComputeSubPolygonNeighbors()
+    EchoDebug("flip-flopping subpolygons...")
+    self:FlipFlopSubPolygons()
+    EchoDebug("populating polygon tables")
+    self:FinalFillPolygons()
+    EchoDebug("culling polygons again...")
+    self:CullPolygons()
     EchoDebug("computing polygon neighbors...")
     self:ComputePolygonNeighbors()
     EchoDebug("post-processing polygons...")
@@ -1114,7 +1095,7 @@ function Space:ComputeCoasts()
 			if subPolygon.coast then
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
 				for hi, hex in pairs(subPolygon.hexes) do
-					if ice and self:GimmeIce(subPolygon.oceanTemperature) then -- and self:GimmeIce(subPolygon.oceanTemperature) then
+					if (ice and self:GimmeIce(subPolygon.oceanTemperature)) or (self.useMapLatitudes and (hex.y == self.h or hex.y == 0)) then
 						hex.featureType = featureIce
 					elseif atoll and mRandom(1, 100) < self.atollPercent then
 						hex.featureType = featureAtoll
@@ -1123,7 +1104,7 @@ function Space:ComputeCoasts()
 				end
 			else
 				for hi, hex in pairs(subPolygon.hexes) do
-					if ice and self:GimmeIce(subPolygon.oceanTemperature) then hex.featureType = featureIce end
+					if (ice and self:GimmeIce(subPolygon.oceanTemperature)) or (self.useMapLatitudes and (hex.y == self.h or hex.y == 0)) then hex.featureType = featureIce end
 					hex.terrainType = terrainOcean
 				end
 			end
@@ -1217,8 +1198,76 @@ function Space:SubdividePolygons()
 	self.biggestSubPolygon = 0
 	for i, polygon in pairs(self.polygons) do
 		polygon:Subdivide()
+		polygon.hexes = {}
 	end
 	EchoDebug("smallest subpolygon: " .. self.smallestSubPolygon, "biggest subpolygon: " .. self.biggestSubPolygon)
+end
+
+function Space:ComputeSubPolygonNeighbors()
+	for i, hex in pairs(self.hexes) do
+		hex:ComputeSubPolygonNeighbors()
+	end
+	for i, subPolygon in pairs(self.subPolygons) do
+		subPolygon:PostProcess()
+	end
+end
+
+function Space:FlipFlopSubPolygons()
+	for i, subPolygon in pairs(self.subPolygons) do
+		-- see if it's next to another superpolygon
+		local adjacent = {}
+		for n, neighbor in pairs(subPolygon.neighbors) do
+			if neighbor.superPolygon ~= subPolygon.superPolygon then
+				adjacent[neighbor.superPolygon] = true
+			end
+		end
+		local choices = {}
+		for superPolygon, yes in pairs(adjacent) do
+			tInsert(choices, superPolygon)
+		end
+		if #choices > 0 and not subPolygon.flopped and mRandom(1, 100) < self.subPolygonFlopPercent then
+			-- flop the subpolygon
+			local superPolygon = tGetRandom(choices)
+			for h, hex in pairs(subPolygon.hexes) do
+				hex.polygon = superPolygon
+			end
+			subPolygon.superPolygon = superPolygon
+			subPolygon.flopped = true
+			-- make sure the flopping didn't cause any discontinuities, and if so, fix them
+			for n, neighbor in pairs(subPolygon.neighbors) do
+				local hasFriendlyNeighbors = false
+				local unfriendly = {}
+				for nn, neighneigh in pairs(neighbor.neighbors) do
+					if neighneigh.superPolygon == neighbor.superPolygon then
+						hasFriendlyNeighbors = true
+						break
+					else
+						unfriendly[neighneigh.superPolygon] = true
+					end
+				end
+				if not hasFriendlyNeighbors then
+					local uchoices = {}
+					for superPolygon, yes in pairs(unfriendly) do
+						tInsert(uchoices, superPolygon)
+					end
+					neighbor.superPolygon = tGetRandom(uchoices)
+					for h, hex in pairs(neighbor.hexes) do
+						hex.polygon = neighbor.superPolygon
+					end
+					neighbor.flopped = true
+				end
+			end
+		end
+	end
+end
+
+function Space:FinalFillPolygons()
+	for i, subPolygon in pairs(self.subPolygons) do
+		tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
+		for i, hex in pairs(self.hexes) do
+			tInsert(subPolygon.superPolygon.hexes, hex)
+		end
+	end
 end
 
 function Space:ComputePolygonNeighbors()
@@ -1232,14 +1281,11 @@ function Space:PostProcessPolygons()
 	self.polygonMaxArea = 0
 	for i, polygon in pairs(self.polygons) do
 		polygon:PostProcess()
-		if polygon.area < self.polygonMinArea and polygon.area > 0 then
-			self.polygonMinArea = polygon.area
+		if #polygon.hexes < self.polygonMinArea and #polygon.hexes > 0 then
+			self.polygonMinArea = #polygon.hexes
 		end
-		if polygon.area > self.polygonMaxArea then
-			self.polygonMaxArea = polygon.area
-		end
-		for spi, subPolygon in pairs(polygon.subPolygons) do
-			subPolygon:PostProcess()
+		if #polygon.hexes > self.polygonMaxArea then
+			self.polygonMaxArea = #polygon.hexes
 		end
 	end
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
@@ -1292,7 +1338,7 @@ function Space:PickOceansCylinder()
 			chosen[polygon] = true
 			polygon.oceanIndex = oceanIndex
 			tInsert(ocean, polygon)
-			self.nonOceanArea = self.nonOceanArea - polygon.area
+			self.nonOceanArea = self.nonOceanArea - #polygon.hexes
 			self.nonOceanPolygons = self.nonOceanPolygons - 1
 			if polygon.topY then
 					EchoDebug("topY found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
@@ -1377,7 +1423,7 @@ function Space:PickOceansRectangle()
 			if not polygon.oceanIndex then
 				polygon.oceanIndex = oceanIndex
 				tInsert(ocean, polygon)
-				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanArea = self.nonOceanArea - #polygon.hexes
 				self.nonOceanPolygons = self.nonOceanPolygons - 1
 			end
 		end
@@ -1409,7 +1455,7 @@ function Space:PickOceansDoughnut()
 		if not polygon.oceanIndex then
 			polygon.oceanIndex = oceanIndex
 			tInsert(ocean, polygon)
-			self.nonOceanArea = self.nonOceanArea - polygon.area
+			self.nonOceanArea = self.nonOceanArea - #polygon.hexes
 			self.nonOceanPolygons = self.nonOceanPolygons - 1
 		end
 		local iterations = 0
@@ -1446,7 +1492,7 @@ function Space:PickOceansDoughnut()
 			if not polygon.oceanIndex then
 				polygon.oceanIndex = oceanIndex
 				tInsert(ocean, polygon)
-				self.nonOceanArea = self.nonOceanArea - polygon.area
+				self.nonOceanArea = self.nonOceanArea - #polygon.hexes
 				self.nonOceanPolygons = self.nonOceanPolygons - 1
 			end
 			iterations = iterations + 1
@@ -1569,9 +1615,9 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		local backlog = {}
 		local polarBacklog = {}
 		polygon.continentIndex = continentIndex
-		self.filledArea = self.filledArea + polygon.area
+		self.filledArea = self.filledArea + #polygon.hexes
 		filledPolygons = filledPolygons + 1
-		local filledContinentArea = polygon.area
+		local filledContinentArea = #polygon.hexes
 		local continent = { polygons = { polygon }, index = continentIndex }
 		repeat
 			local candidates = {}
@@ -1617,8 +1663,8 @@ function Space:PickContinentsInBasin(astronomyIndex)
 				tInsert(polarBacklog, polygon)
 			end
 			candidate.continentIndex = continentIndex
-			self.filledArea = self.filledArea + candidate.area
-			filledContinentArea = filledContinentArea + candidate.area
+			self.filledArea = self.filledArea + #candidate.hexes
+			filledContinentArea = filledContinentArea + #candidate.hexes
 			filledPolygons = filledPolygons + 1
 			tInsert(continent.polygons, candidate)
 			polygon = candidate
@@ -1728,7 +1774,7 @@ function Space:PickRegions()
 				region = Region(self)
 				polygon.region = region
 				tInsert(region.polygons, polygon)
-				region.area = region.area + polygon.area
+				region.area = region.area + #polygon.hexes
 				repeat
 					if #polygon.neighbors == 0 then break end
 					local candidates = {}
@@ -1753,7 +1799,7 @@ function Space:PickRegions()
 					if candidate == nil then break end
 					candidate.region = region
 					tInsert(region.polygons, candidate)
-					region.area = region.area + candidate.area
+					region.area = region.area + #candidate.hexes
 					polygon = candidate
 					for candi, c in pairs(candidates) do
 						tInsert(backlog, c)
@@ -1766,7 +1812,7 @@ function Space:PickRegions()
 	for p, polygon in pairs(self.tinyIslandPolygons) do
 		polygon.region = Region(self)
 		tInsert(polygon.region.polygons, polygon)
-		polygon.region.area = polygon.area
+		polygon.region.area = #polygon.hexes
 		polygon.region.archipelago = true
 		tInsert(self.regions, polygon.region)
 	end
