@@ -2126,10 +2126,16 @@ function Space:ResizeMountains(prescribedArea)
 		repeat
 			local hex = tGetRandom(self.mountainHexes)
 			local neighbors = hex:Neighbors()
+			local neighborBuffer = {} -- because neighbors has gaps in it
+			for n, nhex in pairs(neighbors) do
+				if nhex then
+					tInsert(neighborBuffer, nhex)
+				end
+			end
 			local nhex
 			repeat
-				nhex = tRemoveRandom(neighbors)
-			until nhex.plotType == plotLand or #neighbors == 0
+				nhex = tRemoveRandom(neighborBuffer)
+			until nhex.plotType == plotLand or #neighborBuffer == 0
 			if nhex ~= nil and nhex.plotType == plotLand then
 				if Map.Rand(10, "hill dice") < self.hillChance then
 					nhex.plotType = plotHills
