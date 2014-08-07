@@ -1,11 +1,13 @@
-- fix gaps being caused by subdivision jumping
-- less scattered mountains
-- rivers along subpolygon edges?
+- short rivers along subpolygon edges and avoid lakes?
 - optional roads?
+- less scattered mountains?
 - make coastal ice not interfere with navigation?
+- clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- rivers along region edges
+- fix gaps being caused by subdivision jumping
 - remove tiny islands from realm maps edges
 - give realm maps only one section of the real latitudes
 - ocean trench tiny islands
