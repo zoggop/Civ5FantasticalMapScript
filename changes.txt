@@ -1,4 +1,6 @@
-- short rivers along subpolygon edges and avoid lakes?
+- fix rivers flowing from coast to coast or to no coast at all
+- add flood plains to deserts
+- short rivers along subpolygon edges and avoid lakes
 - optional roads?
 - less scattered mountains?
 - make coastal ice not interfere with navigation?

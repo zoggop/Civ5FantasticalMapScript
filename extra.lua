@@ -336,4 +336,5 @@ function Polygon:Subdivide()
 	EchoDebug("after removing stranded", #self.hexes, #self.subPolygons, deserterCount, nonDeserterCount)
 end
 
+
 ]]--

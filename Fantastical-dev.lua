@@ -615,7 +615,7 @@ function Polygon:CheckBottomTop(x, y)
 end
 
 function Polygon:NearOther(value, key)
-	if key == nil then key = "continentIndex" end
+	if key == nil then key = "continent" end
 	for ni, neighbor in pairs (self.neighbors) do
 		if neighbor[key] ~= nil and neighbor[key] ~= value then
 			return true
@@ -677,7 +677,7 @@ function Polygon:PickTinyIslands()
 		local tooCloseForIsland = false
 		if not tooCloseForIsland then
 			for i, neighbor in pairs(subPolygon.neighbors) do
-				if neighbor.superPolygon.continentIndex or self.oceanIndex ~= neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
+				if neighbor.superPolygon.continent or self.oceanIndex ~= neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
 					tooCloseForIsland = true
 					break
 				end
@@ -1068,7 +1068,7 @@ function Space:Compute()
 	EchoDebug("picking regions...")
 	self:PickRegions()
 	EchoDebug("finding region edges...")
-	self:FindRegionEdges()
+	self:FindPotentialRivers()
 	EchoDebug("picking major rivers...")
 	self:PickMajorRivers()
 	EchoDebug("filling regions...")
@@ -1085,7 +1085,7 @@ end
 
 function Space:ComputeLandforms()
 	for pi, hex in pairs(self.hexes) do
-		if hex.polygon.continentIndex ~= nil then
+		if hex.polygon.continent ~= nil then
 			-- near ocean trench?
 			for neighbor, yes in pairs(hex.adjacentPolygons) do
 				if neighbor.oceanIndex ~= nil then
@@ -1111,7 +1111,7 @@ end
 function Space:ComputeSeas()
 	-- ocean plots and tiny islands:
 	for pi, hex in pairs(self.hexes) do
-		if hex.polygon.continentIndex == nil then
+		if hex.polygon.continent == nil then
 			if hex.polygon.coastal and hex.subPolygon.tinyIsland then
 				hex.plotType = plotLand
 			else
@@ -1123,13 +1123,13 @@ end
 
 function Space:ComputeCoasts()
 	for i, subPolygon in pairs(self.subPolygons) do
-		if (not subPolygon.superPolygon.continentIndex or subPolygon.lake) and not subPolygon.tinyIsland then
+		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
 			if subPolygon.superPolygon.coastal then
 				subPolygon.coast = true
 				subPolygon.oceanTemperature = subPolygon.superPolygon.region.temperatureAvg
 			else
 				for ni, neighbor in pairs(subPolygon.neighbors) do
-					if neighbor.superPolygon.continentIndex or neighbor.tinyIsland then
+					if neighbor.superPolygon.continent or neighbor.tinyIsland then
 						subPolygon.coast = true
 						subPolygon.oceanTemperature = neighbor.superPolygon.region.temperatureAvg
 						break
@@ -1164,8 +1164,10 @@ function Space:ComputeRivers()
 			local low
 			if river[e+1] ~= nil then
 				low = edge.highConnections[river[e+1]]
-			else
+			elseif river[e-1] ~= nil then
 				low = edge.lowConnections[river[e-1]]
+			else
+				low = not edge.drainsHigh
 			end
 			local from, to, inc = 1, #edge.path, 1
 			if low then from, to, inc = #edge.path, 1, -1 end
@@ -1187,12 +1189,12 @@ end
 
 function Space:ComputeOceanTemperatures()
 	for p, polygon in pairs(self.polygons) do
-		if polygon.continentIndex == nil then
+		if polygon.continent == nil then
 			if not self.useMapLatitudes and polygon.oceanIndex == nil then
 				local latSum = 0
 				local div = 0
 				for n, neighbor in pairs(polygon.neighbors) do
-					if neighbor.continentIndex then
+					if neighbor.continent then
 						latSum = latSum + neighbor.latitude
 						div = div + 1
 					end
@@ -1763,7 +1765,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		local polygon
 		repeat
 			polygon = tRemoveRandom(polygonBuffer)
-			if polygon.continentIndex == nil and not polygon:NearOther(nil, "continentIndex") then
+			if polygon.continent == nil and not polygon:NearOther(nil, "continent") then
 				if (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) then
 					break
 				elseif (not self.wrapX and not self.wrapY) then
@@ -1787,16 +1789,16 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		if polygon == nil then break end
 		local backlog = {}
 		local polarBacklog = {}
-		polygon.continentIndex = continentIndex
 		self.filledArea = self.filledArea + #polygon.hexes
 		filledPolygons = filledPolygons + 1
 		local filledContinentArea = #polygon.hexes
-		local continent = { polygons = { polygon }, index = continentIndex }
+		local continent = { polygon }
+		polygon.continent = continent
 		repeat
 			local candidates = {}
 			local polarCandidates = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
-				if neighbor.continentIndex == nil and not neighbor:NearOther(continentIndex, "continentIndex") and neighbor.astronomyIndex < 10 then
+				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 10 then
 					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY) then
 						tInsert(polarCandidates, neighbor)
 					else
@@ -1813,12 +1815,12 @@ function Space:PickContinentsInBasin(astronomyIndex)
 					if #backlog > 0 then
 						repeat
 							candidate = tRemove(backlog, #backlog) -- pop off the most recent
-							if candidate.continentIndex ~= nil then candidate = nil end
+							if candidate.continent ~= nil then candidate = nil end
 						until candidate ~= nil or #backlog == 0
 					elseif #polarBacklog > 0 then
 						repeat
 							candidate = tRemove(polarBacklog, #polarBacklog) -- pop off the most recent polar
-							if candidate.continentIndex ~= nil then candidate = nil end
+							if candidate.continent ~= nil then candidate = nil end
 						until candidate ~= nil or #polarBacklog == 0
 					else
 						break -- nothing left to do but stop
@@ -1835,14 +1837,14 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			for nothing, polygon in pairs(polarCandidates) do
 				tInsert(polarBacklog, polygon)
 			end
-			candidate.continentIndex = continentIndex
+			candidate.continent = continent
 			self.filledArea = self.filledArea + #candidate.hexes
 			filledContinentArea = filledContinentArea + #candidate.hexes
 			filledPolygons = filledPolygons + 1
-			tInsert(continent.polygons, candidate)
+			tInsert(continent, candidate)
 			polygon = candidate
-		until #backlog == 0 or #continent.polygons >= size
-		EchoDebug(size, #continent.polygons, filledContinentArea)
+		until #backlog == 0 or #continent >= size
+		EchoDebug(size, #continent, filledContinentArea)
 		tInsert(self.continents, continent)
 		continentIndex = continentIndex + 1
 	end
@@ -1867,8 +1869,8 @@ function Space:PickMountainRanges()
 		local coastRange
 		repeat
 			edge = tRemoveRandom(edgeBuffer)
-			if (edge.polygons[1].continentIndex or edge.polygons[2].continentIndex) and not edge.mountains then
-				if edge.polygons[1].continentIndex and edge.polygons[2].continentIndex and interiorCount < interiorPrescription then
+			if (edge.polygons[1].continent or edge.polygons[2].continent) and not edge.mountains then
+				if edge.polygons[1].continent and edge.polygons[2].continent and interiorCount < interiorPrescription then
 					coastRange = false
 					break
 				elseif coastCount < coastPrescription then
@@ -1889,10 +1891,10 @@ function Space:PickMountainRanges()
 			local nextEdges = {}
 			for neighborPolygon, nextEdge in pairs(nextPolygon.edges) do
 				local okay = false
-				if (nextEdge.polygons[1].continentIndex or nextEdge.polygons[2].continentIndex) and not nextEdge.mountains then
-					if coastRange and (not nextEdge.polygons[1].continentIndex or not nextEdge.polygons[2].continentIndex) then
+				if (nextEdge.polygons[1].continent or nextEdge.polygons[2].continent) and not nextEdge.mountains then
+					if coastRange and (not nextEdge.polygons[1].continent or not nextEdge.polygons[2].continent) then
 						okay = true
-					elseif not coastRange and nextEdge.polygons[1].continentIndex and nextEdge.polygons[2].continentIndex then
+					elseif not coastRange and nextEdge.polygons[1].continent and nextEdge.polygons[2].continent then
 						okay = true
 					end
 				end
@@ -1927,7 +1929,7 @@ end
 function Space:PickRegions()
 	for ci, continent in pairs(self.continents) do
 		local polygonBuffer = {}
-		for polyi, polygon in pairs(continent.polygons) do
+		for polyi, polygon in pairs(continent) do
 			tInsert(polygonBuffer, polygon)
 		end
 		while #polygonBuffer > 0 do
@@ -1952,7 +1954,7 @@ function Space:PickRegions()
 					if #polygon.neighbors == 0 then break end
 					local candidates = {}
 					for ni, neighbor in pairs(polygon.neighbors) do
-						if neighbor.continentIndex == continent.index then
+						if neighbor.continent == continent then
 							tInsert(candidates, neighbor)
 						end
 					end
@@ -1977,7 +1979,7 @@ function Space:PickRegions()
 					for candi, c in pairs(candidates) do
 						tInsert(backlog, c)
 					end
-				until #region.polygons == size or region.area > self.polygonMaxArea / 2 or #region.polygons == #continent.polygons
+				until #region.polygons == size or region.area > self.polygonMaxArea / 2 or #region.polygons == #continent
 			end
 			tInsert(self.regions, region)
 		end
@@ -1998,37 +2000,51 @@ function Space:FillRegions()
 	end
 end
 
-function Space:FindRegionEdges()
+function Space:FindPotentialRivers()
 	self.regionEdges = {}
 	self.regionEdgesDry = {}
 	self.regionEdgesDrain = {}
+	self.edgesDry = {}
+	self.edgesDrain = {}
 	for i, edge in pairs(self.edges) do
-		if edge.polygons[1].region ~= edge.polygons[2].region and edge.polygons[1].region and edge.polygons[2].region and edge.polygons[1].continentIndex and edge.polygons[2].continentIndex then
-			edge.regionEdge = true
-			tInsert(self.regionEdges, edge)
+		if edge.polygons[1].continent and edge.polygons[2].continent then
+			edge.continental = true
+			if edge.polygons[1].region ~= edge.polygons[2].region and edge.polygons[1].region and edge.polygons[2].region then
+				edge.regionEdge = true
+				tInsert(self.regionEdges, edge)
+			end
 			local waterPolys = {}
 			for n, neighbor in pairs(edge.polygons[1].neighbors) do
-				if not neighbor.continentIndex then
+				if not neighbor.continent then
 					waterPolys[neighbor] = true
 				end
 			end
 			for n, neighbor in pairs(edge.polygons[2].neighbors) do
 				if waterPolys[neighbor] then
 					edge.drainsToWater = true
-					tInsert(self.regionEdgesDrain, edge)
+					if edge.regionEdge then tInsert(self.regionEdgesDrain, edge) end
+					tInsert(self.edgesDrain, edge)
 					break
 				end
 			end
-			if not edge.drainsToWater then
-				tInsert(self.regionEdgesDry, edge)
+			if edge.drainsToWater then
+				for c, cedge in pairs(edge.highConnections) do
+					if waterPolys[cedge.polygons[1]] or waterPolys[cedge.polygons[2]] then
+						edge.drainsHigh = true
+						break
+					end
+				end
+			else
+				if edge.regionEdge then tInsert(self.regionEdgesDry, edge) end
+				tInsert(self.edgesDry, edge)
 			end
 		end
 	end
 end
 
 function Space:PickMajorRivers()
-	self.majorRiversMax = #self.regionEdgesDrain * self.majorRiverRatio
-	local edgeBuffer = tDuplicate(self.regionEdgesDrain)
+	self.majorRiversMax = #self.edgesDrain * self.majorRiverRatio
+	local edgeBuffer = tDuplicate(self.edgesDrain)
 	self.majorRivers = {}
 	while #edgeBuffer > 0 and #self.majorRivers < self.majorRiversMax do
 		local river = {}
@@ -2038,12 +2054,21 @@ function Space:PickMajorRivers()
 			if n > 0 then
 				local upstream = {}
 				for cedge, yes in pairs(edge.connections) do
-					if cedge.regionEdge and not cedge.river and not cedge.drainsToWater then
-						if cedge.mountains then
-							upstream = { cedge }
-							break
+					if cedge.continental and not cedge.river and not cedge.drainsToWater then
+						local badConnection = false
+						for ccedge, yes in pairs(cedge.connections) do
+							if (ccedge.river and ccedge.river ~= river) or not ccedge.continental then
+								badConnection = true
+								break
+							end
 						end
-						tInsert(upstream, cedge)
+						if not badConnection then
+							if cedge.mountains then
+								upstream = { cedge }
+								break
+							end
+							tInsert(upstream, cedge)
+						end
 					end
 				end
 				if #upstream == 0 then
@@ -2057,9 +2082,14 @@ function Space:PickMajorRivers()
 			tInsert(river, edge)
 			n = n + 1
 		until not edge or edge.mountains
-		if edge and #river > 1 then
+		if edge and edge.mountains and #river > 0 then
 			EchoDebug(#river)
 			tInsert(self.majorRivers, river)
+		else
+			for e, ed in pairs(river) do
+				ed.majorRiver = nil
+				ed.river = nil
+			end
 		end
 	end
 end
@@ -2072,11 +2102,11 @@ function Space:PickCoasts()
 	self.coastalPolygonArea = 0
 	self.coastalPolygonCount = 0
 	for i, polygon in pairs(self.polygons) do
-		if polygon.continentIndex == nil then
+		if polygon.continent == nil then
 			if polygon.oceanIndex == nil and Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
-				if not polygon:NearOther(nil, "continentIndex") then polygon.loneCoastal = true end
+				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
 				polygon:PickTinyIslands()
 				tInsert(self.tinyIslandPolygons, polygon)
 			elseif polygon.oceanIndex then
@@ -2171,7 +2201,7 @@ end
 
 function Space:GetFakeLatitude(polygon)
 	if polygon then
-		if polygon.continentIndex then
+		if polygon.continent then
 			return tRemoveRandom(self.continentalFakeLatitudes)
 		else
 			return tRemoveRandom(self.nonContinentalFakeLatitudes)
