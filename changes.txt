@@ -1,6 +1,6 @@
 - fix rivers flowing from coast to coast or to no coast at all
+- change major river picking to downstream--each edge connected to a mountain range edge is a possible starting point
 - add flood plains to deserts
-- short rivers along subpolygon edges and avoid lakes
 - optional roads?
 - less scattered mountains?
 - make coastal ice not interfere with navigation?
@@ -8,6 +8,9 @@
 - does wonder placement fix work in game?
 
 DONE
+- make edge path-following split paths, because currently paths can have gaps (same polygons touching, with a polygon in between it), because deviating from voronoi (which can never have disconnections along an edge of two polygons) screwed things up
+- turn edges into a class
+- short rivers along subpolygon edges and avoid lakes
 - rivers along region edges
 - fix gaps being caused by subdivision jumping
 - remove tiny islands from realm maps edges

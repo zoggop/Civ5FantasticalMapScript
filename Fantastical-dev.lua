@@ -228,7 +228,7 @@ local OptionDictionary = {
 
 local function GetCustomOptions()
 	local custOpts = {}
-	for i, option in pairs(OptionDictionary) do
+	for i, option in ipairs(OptionDictionary) do
 		local opt = { Name = option.name, SortPriority = option.sortpriority, DefaultValue = option.default, Values = {} }
 		for n, value in pairs(option.values) do
 			opt.Values[n] = value.name
@@ -242,12 +242,21 @@ end
 
 -- so that these constants can be shorter to access and consistent
 local DirW, DirNW, DirNE, DirE, DirSE, DirSW = 1, 2, 3, 4, 5, 6
+local DirConvert = {}
+
+local function DirFant2Native(direction)
+	return DirConvert[direction]
+end
+
 local plotOcean, plotLand, plotHills, plotMountain
 local terrainOcean, terrainCoast, terrainGrass, terrainPlains, terrainDesert, terrainTundra, terrainSnow
 local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, featureFallout, featureAtoll
 local TerrainDictionary, FeatureDictionary
 
 local function SetConstants()
+
+	DirConvert = { [DirW] = DirectionTypes.DIRECTION_WEST, [DirNW] = DirectionTypes.DIRECTION_NORTHWEST, [DirNE] = DirectionTypes.DIRECTION_NORTHEAST, [DirE] = DirectionTypes.DIRECTION_EAST, [DirSE] = DirectionTypes.DIRECTION_SOUTHEAST, [DirSW] = DirectionTypes.DIRECTION_SOUTHWEST }
+
 	plotOcean = PlotTypes.PLOT_OCEAN
 	plotLand = PlotTypes.PLOT_LAND
 	plotHills = PlotTypes.PLOT_HILLS
@@ -316,6 +325,11 @@ Hex = class(function(a, space, x, y, index)
 	a.adjacentPolygons = {}
 	a.adjacentPolyCount = 0
 	a.edgeWith = {}
+	a.edgeBottom = {}
+	a.edgeTop = {}
+	a.edgeTerminal = {}
+	a.onPath = {}
+	a.edges = {}
 end)
 
 function Hex:Place(relax)
@@ -383,6 +397,13 @@ function Hex:Adjacent(direction)
 		if ny > self.space.h then ny = self.space.h elseif ny < 0 then ny = 0 end
 	end
 	local nhex = self.space:GetHexByXY(nx, ny)
+	local adjPlot = Map.PlotDirection(x, y, DirFant2Native(direction))
+	if adjPlot ~= nil then
+		local px, py = adjPlot:GetX(), adjPlot:GetY()
+		if ((nhex.x ~= px or nhex.y ~= py) and nhex.x ~= 0 and nhex.x ~= self.space.w) or (nhex.y ~= py and (nhex.x == 0 or nhex.x == self.space.w)) then
+			EchoDebug("mismatched direction " .. direction .. "/" .. DirFant2Native(direction) .. ":", nhex.x .. ", " .. nhex.y, "vs", px .. ", " .. py)
+		end
+	end
 	if nhex ~= self then return nhex end
 end
 
@@ -390,8 +411,7 @@ function Hex:Neighbors(directions)
 	if directions == nil then directions = { 1, 2, 3, 4, 5, 6 } end
 	local neighbors = {}
 	for i, direction in pairs(directions) do
-		local nhex = self:Adjacent(direction)
-		if nhex ~= nil then neighbors[direction] = nhex end
+		neighbors[direction] = self:Adjacent(direction)
 	end
 	return neighbors
 end
@@ -415,19 +435,15 @@ function Hex:ClosestPolygon(relax, polygons)
 	return closest_polygon
 end
 
-function Hex:ComputeSubPolygonNeighbors()
-	for ni, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
+function Hex:FindSubPolygonNeighbors()
+	for direction, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
 		if nhex.subPolygon ~= self.subPolygon then
 			self.subPolygon:SetNeighbor(nhex.subPolygon)
 			if self.subPolygon.edges[nhex.subPolygon] then
 				local subEdge = self.subPolygon.edges[nhex.subPolygon]
 				tInsert(subEdge.hexes, self)
-				if self.x > subEdge.maxX then subEdge.maxX = self.x end
-				if self.x < subEdge.minX then subEdge.minX = self.x end
-				if self.y > subEdge.maxY then subEdge.maxY = self.y end
-				if self.y < subEdge.minY then subEdge.minY = self.y end
 			else
-				local subEdge = { polygons = { self.subPolygon, nhex.subPolygon }, hexes = { self }, onEdge = {}, connections = {}, lowConnections = {}, highConnections = {}, hexOfRiver = {}, path = {}, minX = self.x, maxX = self.x, minY = self.y, maxY = self.y }
+				local subEdge = { polygons = { self.subPolygon, nhex.subPolygon }, hexes = { self }, onEdge = {}, connections = {}, lowConnections = {}, highConnections = {}, hexOfRiver = {}, path = {}, minX = self.x, maxX = self.x, minY = self.y, maxY = self.y, isSub = true }
 				self.subPolygon.edges[nhex.subPolygon] = subEdge
 				nhex.subPolygon.edges[self.subPolygon] = subEdge
 				tInsert(self.space.subEdges, subEdge)
@@ -441,7 +457,7 @@ function Hex:ComputeSubPolygonNeighbors()
 	end
 end
 
-function Hex:ComputeNeighbors()
+function Hex:FindPolygonNeighbors()
 	for direction, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
 		if nhex.polygon ~= self.polygon then
 			self.polygon:SetNeighbor(nhex.polygon)
@@ -454,36 +470,36 @@ function Hex:ComputeNeighbors()
 				self.adjacentPolygons[nhex.polygon] = true
 				if self.adjacentPolyCount == 2 then tInsert(self.polygon.vertices, self) end
 			end
-			if self.polygon.edges[nhex.polygon] then
-				local edge = self.polygon.edges[nhex.polygon]
-				tInsert(edge.hexes, self)
-				if self.x > edge.maxX then edge.maxX = self.x end
-				if self.x < edge.minX then edge.minX = self.x end
-				if self.y > edge.maxY then edge.maxY = self.y end
-				if self.y < edge.minY then edge.minY = self.y end
+			local discontEdge = self.polygon.discontEdges[nhex.polygon] or nhex.polygon.discontEdges[self.polygon]
+			if discontEdge then
+				discontEdge:AddHexPair(self, nhex, direction)
 			else
-				local edge = { polygons = { self.polygon, nhex.polygon }, hexes = { self }, onEdge = {}, connections = {}, lowConnections = {}, highConnections = {}, hexOfRiver = {}, path = {}, minX = self.x, maxX = self.x, minY = self.y, maxY = self.y }
-				self.polygon.edges[nhex.polygon] = edge
-				nhex.polygon.edges[self.polygon] = edge
-				tInsert(self.space.edges, edge)
-			end
-			self.polygon.edges[nhex.polygon].onEdge[self] = nhex
-			if direction == DirE or direction == DirSE or direction == DirSW then
-				if self.polygon.edges[nhex.polygon].hexOfRiver[self] == nil then self.polygon.edges[nhex.polygon].hexOfRiver[self] = {} end
-				self.polygon.edges[nhex.polygon].hexOfRiver[self][direction-3] = true
+				discontEdge = DiscontinuousEdge(self.polygon, nhex.polygon)
+				discontEdge:AddHexPair(self, nhex, direction)
+				tInsert(self.space.discontEdges, discontEdge)
 			end
 		end
 	end
 end
 
-function Hex:ComputeAdjacentSuperPolygons()
-	for ni, nhex in pairs(self:Neighbors()) do
-		if nhex.polygon ~= self.polygon then
-			if not self.subPolygon.adjacentSuperPolygons[nhex.polygon] then
-				self.subPolygon.adjacentSuperPolygons[nhex.polygon] = true
-			end
-		end
+function Hex:Near(hexKey, hexValue, subPolygonKey, subPolygonValue, polygonKey, polygonValue)
+	for d, nhex in pairs(self:Neighbors()) do
+		if hexKey ~= nil and nhex[hexKey] == hexValue then return true end
+		if subPolygonKey ~= nil and nhex.subPolygon[subPolygonKey] == subPolygonValue then return true end
+		if polygonKey ~= nil and nhex.polygon[polygonKey] == polygonValue then return true end
 	end
+	return false
+end
+
+function Hex:NearOcean()
+	return self:Near(nil, nil, nil, nil, "continent", nil)
+end
+
+function Hex:IsNeighbor(hex)
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex == hex then return d end
+	end
+	return false
 end
 
 function Hex:SetPlot()
@@ -498,11 +514,21 @@ end
 
 function Hex:SetFeature()
 	--[[
-	if self.ofRiver then
+	for edge, pairHex in pairs(self.edgeTerminal) do
+		if edge.continental and edge.drainsToWater then
+			if (edge.drainsHigh and self.edgeTop[edge]) or (edge.drainsLow and self.edgeBottom[edge]) then
+				if not (self:NearOcean() and pairHex:NearOcean()) then
+					self.plot:SetFeatureType(featureFallout)
+					return
+				end
+			end
+		end
+	end
+	]]--
+	if self.onPath[self.space.edges[10]] then
 		self.plot:SetFeatureType(featureFallout)
 		return
 	end
-	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	self.plot:SetFeatureType(self.featureType)
@@ -511,9 +537,9 @@ end
 function Hex:SetRiver()
 	if self.plot == nil then return end
 	if not self.ofRiver then return end
-	if self.ofRiver[DirW] then self.plot:SetWOfRiver(true, self.riverDirection) end
-	if self.ofRiver[DirNW] then self.plot:SetNWOfRiver(true, self.riverDirection) end
-	if self.ofRiver[DirNE] then self.plot:SetNEOfRiver(true, self.riverDirection) end
+	if self.ofRiver[DirW] then self.plot:SetWOfRiver(true, DirFant2Native(self.riverDirection)) end
+	if self.ofRiver[DirNW] then self.plot:SetNWOfRiver(true, DirFant2Native(self.riverDirection)) end
+	if self.ofRiver[DirNE] then self.plot:SetNEOfRiver(true, DirFant2Native(self.riverDirection)) end
 end
 
 ------------------------------------------------------------------------------
@@ -531,6 +557,7 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	end
 	a.subPolygons = {}
 	a.hexes = {}
+	a.discontEdges = {}
 	a.edges = {}
 	a.vertices = {}
 	a.isNeighbor = {}
@@ -715,6 +742,155 @@ function Polygon:PickTinyIslands()
 			self.hasTinyIslands = true
 		end
 	end
+end
+
+------------------------------------------------------------------------------
+
+DiscontinuousEdge = class(function(a, polygon1, polygon2)
+	a.space = polygon1.space
+	a.polygons = { polygon1, polygon2 }
+	a.hexes = {}
+	a.hexAdded = {}
+	a.onEdge = {}
+	a.hexOfRiver = {}
+	polygon1.discontEdges[polygon2] = a
+	polygon2.discontEdges[polygon1] = a
+end)
+
+function DiscontinuousEdge:AddHexPair(hex, pairHex, direction)
+	if not self.onEdge[hex] then
+		tInsert(self.hexes, hex)
+		self.onEdge[hex] = pairHex
+	end
+	if not self.onEdge[pairHex] then
+		tInsert(self.hexes, pairHex)
+		self.onEdge[pairHex] = hex
+	end
+	if direction == DirE or direction == DirSE or direction == DirSW then
+		if self.hexOfRiver[hex] == nil then self.hexOfRiver[hex] = {} end
+		self.hexOfRiver[hex][direction-3] = true
+	end
+end
+
+function DiscontinuousEdge:CreateContinuousEdges()
+	local paired = {}
+	local directions = {}
+	local hexPairs = {}
+	for hex, pairHex in pairs(self.onEdge) do
+		if not paired[hex] and not paired[pairHex] then
+			tInsert(hexPairs, {hex, pairHex})
+			paired[hex], paired[pairHex] = pairHex, hex
+		end
+	end
+	repeat
+		-- get a starting point
+		local hexPair
+		repeat
+			hexPair = tRemove(hexPairs)
+		until (hexPair and not hexPair[1].pickedAgain and not hexPair[2].pickedAgain) or #hexPairs == 0
+		if #hexPairs == 0 then break end
+		local hex = hexPair[1]
+		-- find an end or discontinuity
+		repeat
+			local pairHex = paired[hex]
+			hex.picked, pairHex.picked = true, true
+			local newHex
+			for d, nhex in pairs(hex:Neighbors()) do
+				if paired[nhex] and not nhex.picked then
+					newHex = nhex
+					break
+				end
+			end
+			if not newHex then
+				for d, nhex in pairs(pairHex:Neighbors()) do
+					if paired[nhex] and not nhex.picked then
+						newHex = nhex
+						break
+					end
+				end
+			end
+			hex = newHex or hex
+		until not newHex
+		local edge = Edge(self)
+		if not self.isSub then
+			local pairHex = paired[hex]
+			hex.edgeBottom[edge], hex.edgeTerminal[edge] = pairHex, pairHex
+			pairHex.edgeBottom[edge], pairHex.edgeTerminal[edge] = hex, hex
+		end
+		-- follow the edge's path from that end
+		local p = 1
+		repeat
+			local pairHex = paired[hex]
+			hex.pickedAgain, pairHex.pickedAgain = true, true
+			local newHex
+			local newDirection = DirectionTypes.NO_DIRECTION
+			for d, nhex in pairs(hex:Neighbors()) do
+				if paired[nhex] and not nhex.pickedAgain then
+					newHex = nhex
+					newDirection = d
+					break
+				end
+			end
+			if not newHex then
+				for d, nhex in pairs(pairHex:Neighbors()) do
+					if paired[nhex] and not nhex.pickedAgain then
+						newHex = nhex
+						newDirection = d
+						break
+					end
+				end
+			end
+			edge:AddHexPair(hex, pairHex, newDirection)
+			p = p + 1
+			hex = newHex or hex
+		until not newHex
+		if not self.isSub then
+			local pairHex = paired[hex]
+			hex.edgeTop[edge], hex.edgeTerminal[edge] = pairHex, pairHex
+			pairHex.edgeTop[edge], pairHex.edgeTerminal[edge] = hex, hex
+		end
+		if #edge.path > 0 then
+			tInsert(self.space.edges, edge)
+			if self.polygons[1].edges[self.polygons[2]] == nil then
+				self.polygons[1].edges[self.polygons[2]] = {}
+			end
+			tInsert(self.polygons[1].edges[self.polygons[2]], edge)
+			if self.polygons[2].edges[self.polygons[1]] == nil then
+				self.polygons[2].edges[self.polygons[1]] = {}
+			end
+			tInsert(self.polygons[2].edges[self.polygons[1]], edge)
+		else
+			EchoDebug("EMPTY EDGE")
+		end
+	until #hexPairs == 0
+	-- reset hexes' temporary markers
+	for h, hex in pairs(self.hexes) do
+		hex.picked, hex.pickedAgain = false, false
+	end
+end
+
+------------------------------------------------------------------------------
+
+Edge = class(function(a, discontEdge)
+	a.discontEdge = discontEdge
+	a.space = discontEdge.space
+	a.polygons = { discontEdge.polygons[1], discontEdge.polygons[2] }
+	a.hexes = {}
+	a.connections = {}
+	a.lowConnections = {}
+	a.highConnections = {}
+	a.hexOfRiver = {}
+	a.path = {}
+end)
+
+function Edge:AddHexPair(hex, pairHex, nextDirection)
+	tInsert(self.hexes, hex)
+	tInsert(self.hexes, pairHex)
+	tInsert(self.path, { hexes = {hex, pairHex}, nextDirection = nextDirection })
+	self.hexOfRiver[hex] = self.discontEdge.hexOfRiver[hex]
+	self.hexOfRiver[pairHex] = self.discontEdge.hexOfRiver[pairHex]
+	hex.edges[self] = true
+	pairHex.edges[self] = true
 end
 
 ------------------------------------------------------------------------------
@@ -986,9 +1162,12 @@ Space = class(function(a)
 	a.regions = {}
 	a.polygons = {}
 	a.subPolygons = {}
+	a.discontEdges = {}
 	a.edges = {}
 	a.subEdges = {}
 	a.mountainRanges = {}
+	a.majorRivers = {}
+	a.minorRivers = {}
 	a.bottomYPolygons = {}
 	a.bottomXPolygons = {}
 	a.topYPolygons = {}
@@ -1000,8 +1179,8 @@ Space = class(function(a)
     a.culledPolygons = 0
 end)
 
-function Space:SetOptions()
-	for optionNumber, option in ipairs(OptionDictionary) do
+function Space:SetOptions(optDict)
+	for optionNumber, option in ipairs(optDict) do
 		local optionChoice = Map.GetCustomOption(optionNumber)
 		for valueNumber, key in ipairs(option.keys) do
 			EchoDebug(key, optionNumber, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
@@ -1056,7 +1235,7 @@ function Space:Compute()
     EchoDebug("subdividing polygons...")
     self:SubdividePolygons()
     EchoDebug("determining subpolygon neighbors...")
-    self:ComputeSubPolygonNeighbors()
+    self:FindSubPolygonNeighbors()
     EchoDebug("flip-flopping subpolygons...")
     self:FlipFlopSubPolygons()
     EchoDebug("flood-filling fake polygons...")
@@ -1065,12 +1244,14 @@ function Space:Compute()
     self:FinalFillPolygons()
     EchoDebug("culling real polygons...")
     self:CullPolygons()
-    EchoDebug("computing polygon neighbors...")
-    self:ComputePolygonNeighbors()
+    EchoDebug("finding polygon neighbors...")
+    self:FindPolygonNeighbors()
+    EchoDebug("finding edges...")
+    self:FindEdges()
     EchoDebug("finding edge connections...")
     self:FindEdgeConnections()
-    EchoDebug("computing edge paths...")
-    self:ComputeEdgePaths()
+    -- EchoDebug("creating edge paths...")
+    -- self:CreateEdgePaths()
     EchoDebug("picking oceans...")    
     self:PickOceans()
     EchoDebug("flooding astronomy basins...")
@@ -1089,14 +1270,14 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
+	EchoDebug("filling regions...")
+	self:FillRegions()
 	EchoDebug("finding potential rivers...")
 	self:FindPotentialRivers()
 	EchoDebug("picking major rivers...")
 	self:PickMajorRivers()
-	EchoDebug("picking minor rivers...")
-	self:PickMinorRivers()
-	EchoDebug("filling regions...")
-	self:FillRegions()
+	-- EchoDebug("picking minor rivers...")
+	-- self:PickMinorRivers()
 	EchoDebug("computing landforms...")
 	self:ComputeLandforms()
 	EchoDebug("computing ocean temperatures...")
@@ -1210,27 +1391,30 @@ function Space:ComputeRivers()
 		end
 	end
 	for mr, majorRiver in pairs(self.majorRivers) do
-		for r, river in pairs(self.minorRivers[majorRiver]) do
-			for e, edge in ipairs(river) do
-				local low
-				if river[e+1] ~= nil then
-					low = edge.lowConnections[river[e+1]]
-				elseif river[e-1] ~= nil then
-					low = edge.highConnections[river[e-1]]
-				else
-					low = self.minorRiverForksLowHigh[river]
-				end
-				local from, to, inc = 1, #edge.path, 1
-				if low then from, to, inc = #edge.path, 1, -1 end
-				for p = from, to, inc do
-					local part = edge.path[p]
-					for h, hex in pairs(part.hexes) do
-						if edge.hexOfRiver[hex] then
-							if hex.ofRiver == nil then hex.ofRiver = {} end
-							for direction, yes in pairs(edge.hexOfRiver[hex]) do
-								hex.ofRiver[direction] = true
+		local minorRivers = self.minorRivers[majorRiver]
+		if minorRivers ~= nil then
+			for r, river in pairs(minorRivers) do
+				for e, edge in ipairs(river) do
+					local low
+					if river[e+1] ~= nil then
+						low = edge.lowConnections[river[e+1]]
+					elseif river[e-1] ~= nil then
+						low = edge.highConnections[river[e-1]]
+					else
+						low = self.minorRiverForksLowHigh[river]
+					end
+					local from, to, inc = 1, #edge.path, 1
+					if low then from, to, inc = #edge.path, 1, -1 end
+					for p = from, to, inc do
+						local part = edge.path[p]
+						for h, hex in pairs(part.hexes) do
+							if edge.hexOfRiver[hex] then
+								if hex.ofRiver == nil then hex.ofRiver = {} end
+								for direction, yes in pairs(edge.hexOfRiver[hex]) do
+									hex.ofRiver[direction] = true
+								end
+								hex.riverDirection = part.nextDirection
 							end
-							hex.riverDirection = part.nextDirection
 						end
 					end
 				end
@@ -1335,9 +1519,9 @@ function Space:SubdividePolygons()
 	EchoDebug("smallest subpolygon: " .. self.smallestSubPolygon, "biggest subpolygon: " .. self.biggestSubPolygon)
 end
 
-function Space:ComputeSubPolygonNeighbors()
+function Space:FindSubPolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
-		hex:ComputeSubPolygonNeighbors()
+		hex:FindSubPolygonNeighbors()
 	end
 	for i, subPolygon in pairs(self.subPolygons) do
 		subPolygon:PopulateNeighbors()
@@ -1430,9 +1614,9 @@ function Space:FinalFillPolygons()
 	end
 end
 
-function Space:ComputePolygonNeighbors()
+function Space:FindPolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
-		hex:ComputeNeighbors()
+		hex:FindPolygonNeighbors()
 	end
 	self.polygonMinArea = self.iA
 	self.polygonMaxArea = 0
@@ -1448,98 +1632,39 @@ function Space:ComputePolygonNeighbors()
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
 end
 
-function Space:FindEdgeConnections()
-	local allEdges = {}
-	for i, edge in pairs(self.edges) do tInsert(allEdges, edge) end
-	for i, edge in pairs(self.subEdges) do tInsert(allEdges, edge) end
-	for i, edge in pairs(allEdges) do
-		local polygon1 = edge.polygons[1]
-		local polygon2 = edge.polygons[2]
-		local mutualNeighbors = {}
-		for n, neighbor in pairs(polygon1.neighbors) do
-			if neighbor.isNeighbor[polygon2] then
-				mutualNeighbors[neighbor] = true
-			end
-		end
-		for p, polygon in pairs(edge.polygons) do
-			for pe, pedge in pairs(polygon.edges) do
-				if (mutualNeighbors[pedge.polygons[1]] or mutualNeighbors[pedge.polygons[2]]) and pedge ~= edge then
-					edge.connections[pedge] = true
-				end
-			end
-		end
+function Space:FindEdges()
+	for i, discontEdge in pairs(self.discontEdges) do
+		discontEdge:CreateContinuousEdges()
 	end
 end
 
-function Space:ComputeEdgePaths()
+function Space:FindEdgeConnections()
 	local allEdges = {}
 	for i, edge in pairs(self.edges) do tInsert(allEdges, edge) end
-	for i, edge in pairs(self.subEdges) do tInsert(allEdges, edge) end
+	-- for i, edge in pairs(self.subEdges) do tInsert(allEdges, edge) end
 	for i, edge in pairs(allEdges) do
-		-- find an end of the edge
-		local hex = tGetRandom(edge.hexes)
-		repeat
-			local pairHex = edge.onEdge[hex]
-			hex.picked, pairHex.picked = true, true
-			local newHex
-			for d, nhex in pairs(hex:Neighbors()) do
-				if edge.onEdge[nhex] and not nhex.picked then
-					newHex = nhex
-					break
-				end
-			end
-			if not newHex then
-				for d, nhex in pairs(pairHex:Neighbors()) do
-					if edge.onEdge[nhex] and not nhex.picked then
-						newHex = nhex
-						break
-					end
-				end
-			end
-			hex = newHex or hex
-		until not newHex
-		-- determine which connections are connected to this end
-		for cedge, yes in pairs(edge.connections) do
-			local low = false
-			for ch, chex in pairs(cedge.hexes) do
-				if chex == hex or chex == edge.onEdge[hex] then
-					low = true
+		for h = 1, 2 do
+			-- EchoDebug("first", tostring(edge), tostring(edge.path), tostring(edge.path[1]))
+			-- EchoDebug("second", tostring(edge.path[1].hexes), tostring(edge.path[1].hexes[1]), tostring(edge.path[1].hexes[1]))
+			local hex = edge.path[1].hexes[h]
+			for cedge, yes in pairs(hex.edges) do
+				if not edge.connections[cedge] then
+					edge.connections[cedge] = true
 					tInsert(edge.lowConnections, cedge)
-					break
 				end
 			end
-			if not low then tInsert(edge.highConnections, cedge) end
 		end
-		-- follow the edge's path from that end
-		local p = 1
-		repeat
-			local pairHex = edge.onEdge[hex]
-			hex.pickedAgain, pairHex.pickedAgain = true, true
-			edge.path[p] = { hexes = {hex, pairHex} }
-			local newHex
-			local newDirection
-			for d, nhex in pairs(hex:Neighbors()) do
-				if edge.onEdge[nhex] and not nhex.pickedAgain then
-					newHex = nhex
-					edge.path[p].nextDirection = d
-					break
+		for h = 1, 2 do
+			local hex = edge.path[#edge.path].hexes[h]
+			for cedge, yes in pairs(hex.edges) do
+				if not edge.connections[cedge] then
+					edge.connections[cedge] = true
+					tInsert(edge.highConnections, cedge)
 				end
 			end
-			if not newHex then
-				for d, nhex in pairs(pairHex:Neighbors()) do
-					if edge.onEdge[nhex] and not nhex.pickedAgain then
-						newHex = nhex
-						edge.path[p].nextDirection = d
-						break
-					end
-				end
-			end
-			p = p + 1
-			hex = newHex or hex
-		until not newHex
-		-- reset hexes' temporary markers
-		for h, hex in pairs(edge.hexes) do
-			hex.picked, hex.pickedAgain = false, false
+		end
+		for cedge, yes in pairs(edge.connections) do
+			if cedge.polygons == nil then EchoDebug("NIL CEDGE POLYGONS") end
 		end
 	end
 end
@@ -1945,9 +2070,8 @@ function Space:PickMountainRanges()
 		edgeCount = edgeCount + 1
 		if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
 		repeat
-			local nextPolygon = edge.polygons[mRandom(1, 2)]
 			local nextEdges = {}
-			for neighborPolygon, nextEdge in pairs(nextPolygon.edges) do
+			for nextEdge, yes in pairs(edge.connections) do
 				local okay = false
 				if (nextEdge.polygons[1].continent or nextEdge.polygons[2].continent) and not nextEdge.mountains then
 					if coastRange and (not nextEdge.polygons[1].continent or not nextEdge.polygons[2].continent) then
@@ -2069,32 +2193,28 @@ function Space:FindPotentialRivers()
 				edge.regionEdge = true
 				tInsert(self.regionEdges, edge)
 			end
-			local waterPolys = {}
-			for n, neighbor in pairs(edge.polygons[1].neighbors) do
-				if not neighbor.continent then
-					waterPolys[neighbor] = true
+			-- check high and low hexes's mutual neighbors to see if the edge connects to water
+			for lowHigh = 1, 2 do
+				local pn = 1
+				if lowHigh == 2 then pn = #edge.path end
+				local hex, pairHex = edge.path[pn].hexes[1], edge.path[pn].hexes[2]
+				local mutualWater = {}
+				for d, nhex in pairs(hex:Neighbors()) do
+					if not nhex.polygon.continent then
+						mutualWater[nhex] = true
+					end
 				end
-			end
-			for n, neighbor in pairs(edge.polygons[2].neighbors) do
-				if waterPolys[neighbor] then
-					edge.drainsToWater = true
-					break
+				for d, nhex in pairs(pairHex:Neighbors()) do
+					if mutualWater[nhex] then
+						if lowHigh == 1 then edge.drainsLow = true else edge.drainsHigh = true end
+						edge.drainsToWater = true
+						break
+					end
 				end
 			end
 			if edge.drainsToWater then
-				for c, cedge in pairs(edge.highConnections) do
-					if waterPolys[cedge.polygons[1]] or waterPolys[cedge.polygons[2]] then
-						edge.drainsHigh = true
-						break
-					end
-				end
-				for c, cedge in pairs(edge.lowConnections) do
-					if waterPolys[cedge.polygons[1]] or waterPolys[cedge.polygons[2]] then
-						edge.drainsLow = true
-						break
-					end
-				end
 				if edge.drainsLow and edge.drainsHigh then
+					self.ismuthCross = true
 					self.drainsToWater = nil
 					self.continental = nil
 				else
@@ -2104,9 +2224,11 @@ function Space:FindPotentialRivers()
 			end
 		end
 	end
-	-- do minor rivers
+	-- look for potential minor rivers (subedges)
+	--[[
 	self.subEdgesFork = {}
 	for i, edge in pairs(self.subEdges) do
+		edge.superEdge = edge.polygons[1].superPolygon.edges[edge.polygons[2].superPolygon]
 		if edge.polygons[1].superPolygon.continent and edge.polygons[2].superPolygon.continent and not edge.polygons[1].lake and not edge.polygons[2].lake then
 			edge.continental = true
 			local waterPolys = {}
@@ -2130,6 +2252,7 @@ function Space:FindPotentialRivers()
 						edge.forks[superEdge] = true
 						if self.subEdgesFork[superEdge] == nil then self.subEdgesFork[superEdge] = {} end
 						self.subEdgesFork[superEdge][edge] = 2 -- 2 is high, 1 is low
+						edge.isFork = true
 					end
 				end
 				for c, cedge in pairs(edge.lowConnections) do
@@ -2139,76 +2262,102 @@ function Space:FindPotentialRivers()
 						edge.forks[superEdge] = true
 						if self.subEdgesFork[superEdge] == nil then self.subEdgesFork[superEdge] = {} end
 						self.subEdgesFork[superEdge][edge] = 1 -- 2 is high, 1 is low
+						edge.isFork = true
 					end
 				end
 			end
 		end
 	end
+	]]--
+end
+
+function Space:CanBeOnTheMajorRiver(cedge, edge)
+	if cedge.continental and not cedge.river and ((edge and not cedge.drainsToWater) or (not edge and cedge.drainsToWater)) and not cedge.ismuthCross then
+		for ccedge, yes in pairs(cedge.connections) do
+			if ccedge ~= edge and ccedge.river then
+				return false
+			end
+		end
+		if cedge.mountains then
+			return 1
+		else
+			return 2
+		end
+	end
+	return false
 end
 
 function Space:PickMajorRivers()
 	self.majorRiversMax = #self.edgesDrain * self.majorRiverRatio
 	local edgeBuffer = tDuplicate(self.edgesDrain)
-	self.majorRivers = {}
 	while #edgeBuffer > 0 and #self.majorRivers < self.majorRiversMax do
 		local river = {}
-		local edge = tRemoveRandom(edgeBuffer)
-		local n = 0
+		local edge
 		repeat
-			if n > 0 then
-				local upstream = {}
-				for cedge, yes in pairs(edge.connections) do
-					if cedge.continental and not cedge.river and not cedge.drainsToWater then
-						local badConnection = false
-						for ccedge, yes in pairs(cedge.connections) do
-							if (ccedge.river and ccedge.river ~= river) or not ccedge.continental then
-								badConnection = true
-								break
-							end
-						end
-						if not badConnection then
-							if cedge.mountains then
-								upstream = { cedge }
-								break
-							end
+			edge = tRemoveRandom(edgeBuffer)
+			if self:CanBeOnTheMajorRiver(edge) then
+				break
+			else
+				edge = nil
+			end
+		until #edgeBuffer == 0
+		if edge then
+			local n = 0
+			repeat
+				if n > 0 then
+					local upstream = {}
+					for cedge, yes in pairs(edge.connections) do
+						local can = self:CanBeOnTheMajorRiver(cedge, edge)
+						if can == 1 then
+							upstream = { cedge }
+						elseif can == 2 then
 							tInsert(upstream, cedge)
 						end
 					end
+					if #upstream == 0 then
+						edge = nil
+						break
+					end
+					edge = tGetRandom(upstream)
 				end
-				if #upstream == 0 then
-					edge = nil
-					break
+				edge.majorRiver = true
+				edge.river = river
+				tInsert(river, edge)
+				n = n + 1
+			until not edge or edge.mountains
+			if edge and edge.mountains and #river > 0 then
+				EchoDebug(#river)
+				tInsert(self.majorRivers, river)
+			else
+				for e, ed in pairs(river) do
+					ed.majorRiver = nil
+					ed.river = nil
 				end
-				edge = tGetRandom(upstream)
-			end
-			edge.majorRiver = true
-			edge.river = river
-			tInsert(river, edge)
-			n = n + 1
-		until not edge or edge.mountains
-		if edge and edge.mountains and #river > 0 then
-			EchoDebug(#river)
-			tInsert(self.majorRivers, river)
-		else
-			for e, ed in pairs(river) do
-				ed.majorRiver = nil
-				ed.river = nil
 			end
 		end
 	end
 end
 
+function Space:CanBeOnTheMinorRiver(cedge, edge)
+	if cedge.continental and not cedge.river and not cedge.isFork and not cedge.drainsToWater and (not cedge.superEdge or (not cedge.superEdge.river and not cedge.superEdge.ismuthCross)) then
+		local badConnection = false
+		for ccedge, yes in pairs(cedge.connections) do
+			badConnection = ccedge ~= edge and (ccedge.river or (ccedge.superEdge and ccedge.superEdge.river))
+			if badConnection then break end
+		end
+		return not badConnection
+	end
+	return false
+end
+
 function Space:PickMinorRivers()
-	self.minorRivers = {}
 	self.minorRiverForksLowHigh = {}
 	for mr, majorRiver in pairs(self.majorRivers) do
 		local subEdgeBuffer = {}
-		local isFork = {}
 		for e, edge in pairs(majorRiver) do
 			if self.subEdgesFork[edge] ~= nil then
 				for subEdge, lowHigh in pairs(self.subEdgesFork[edge]) do
 					tInsert(subEdgeBuffer, {subEdge = subEdge, lowHigh = lowHigh})
-					isFork[subEdge] = true
 				end
 			end
 		end
@@ -2224,16 +2373,7 @@ function Space:PickMinorRivers()
 				if n > 0 then
 					local downstream = {}
 					for cedge, yes in pairs(edge.connections) do
-						if cedge.continental and not cedge.river and not isFork[cedge] and not cedge.drainsToWater then
-							local badConnection = false
-							for ccedge, yes in pairs(cedge.connections) do
-								if ccedge.river and ccedge.river ~= river then
-									badConnection = true
-									break
-								end
-							end
-							if not badConnection then tInsert(downstream, cedge) end
-						end
+						if self:CanBeOnTheMinorRiver(cedge, edge) then tInsert(downstream, cedge) end
 					end
 					if #downstream == 0 then
 						edge = nil
@@ -2552,7 +2692,7 @@ function GeneratePlotTypes()
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
-    mySpace:SetOptions()
+    mySpace:SetOptions(OptionDictionary)
     mySpace:Compute()
     --[[
     for l = 0, 90, 5 do
