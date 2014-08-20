@@ -1622,7 +1622,7 @@ function Space:FindEdgeConnections()
 			local neighs = {}
 			local mutual = {}
 			for d, nhex in pairs(hex:Neighbors()) do
-				if not edge.pairings[hex][nhex] then neighs[nhex] = true end
+				if not edge.pairings[hex][nhex] and not edge.pairings[nhex] then neighs[nhex] = true end
 			end
 			for phex, pdir in pairs(edge.pairings[hex]) do
 				for d, nhex in pairs(phex:Neighbors()) do
@@ -2310,7 +2310,7 @@ function Space:PickMajorRivers()
 				tInsert(river, edge)
 				n = n + 1
 			until not edge or edge.mountains
-			if edge and edge.mountains and #river > 0 then
+			if #river > 0 then -- edge and edge.mountains and
 				EchoDebug(#river)
 				tInsert(self.majorRivers, river)
 			else
