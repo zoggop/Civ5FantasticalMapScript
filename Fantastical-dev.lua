@@ -245,7 +245,13 @@ local DirW, DirNW, DirNE, DirE, DirSE, DirSW = 1, 2, 3, 4, 5, 6
 local DirConvert = {}
 
 local function DirFant2Native(direction)
-	return DirConvert[direction]
+	return DirConvert[direction] or DirectionTypes.NO_DIRECTION
+end
+
+local function OppositeDirection(direction)
+	direction = direction + 3
+	if direction > 6 then direction = direction - 6 end
+	return direction
 end
 
 local plotOcean, plotLand, plotHills, plotMountain
@@ -323,7 +329,6 @@ Hex = class(function(a, space, x, y, index)
 	a.x, a.y = x, y
 	a.edginess = 0
 	a.adjacentPolygons = {}
-	a.adjacentPolyCount = 0
 	a.edgeWith = {}
 	a.edgeBottom = {}
 	a.edgeTop = {}
@@ -465,11 +470,7 @@ function Hex:FindPolygonNeighbors()
 				self.edginess = self.edginess + 1
 				self.edgeWith[nhex] = true
 			end
-			if not self.adjacentPolygons[nhex.polygon] then
-				self.adjacentPolyCount = self.adjacentPolyCount + 1
-				self.adjacentPolygons[nhex.polygon] = true
-				if self.adjacentPolyCount == 2 then tInsert(self.polygon.vertices, self) end
-			end
+			self.adjacentPolygons[nhex.polygon] = true
 			local discontEdge = self.polygon.discontEdges[nhex.polygon] or nhex.polygon.discontEdges[self.polygon]
 			if discontEdge then
 				discontEdge:AddHexPair(self, nhex, direction)
@@ -513,21 +514,13 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
-	--[[
-	for edge, pairHex in pairs(self.edgeTerminal) do
-		if edge.continental and edge.drainsToWater then
-			if (edge.drainsHigh and self.edgeTop[edge]) or (edge.drainsLow and self.edgeBottom[edge]) then
-				if not (self:NearOcean() and pairHex:NearOcean()) then
-					self.plot:SetFeatureType(featureFallout)
-					return
-				end
+	for edge, yes in pairs(self.edges) do
+		if edge.drainsToWater then
+			if ((self == edge.path[1].hexes[1] or self == edge.path[1].hexes[2]) and edge.drainsLow) or ((self == edge.path[#edge.path].hexes[1] or self == edge.path[#edge.path].hexes[2]) and edge.drainsHigh) then
+				self.plot:SetFeatureType(featureFallout)
+				return
 			end
 		end
-	end
-	]]--
-	if self.onPath[self.space.edges[10]] then
-		self.plot:SetFeatureType(featureFallout)
-		return
 	end
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
@@ -751,101 +744,120 @@ DiscontinuousEdge = class(function(a, polygon1, polygon2)
 	a.polygons = { polygon1, polygon2 }
 	a.hexes = {}
 	a.hexAdded = {}
-	a.onEdge = {}
+	a.pairings = {}
 	a.hexOfRiver = {}
 	polygon1.discontEdges[polygon2] = a
 	polygon2.discontEdges[polygon1] = a
+	a.pairDirections = {}
 end)
 
 function DiscontinuousEdge:AddHexPair(hex, pairHex, direction)
-	if not self.onEdge[hex] then
+	if not self.pairings[hex] then
 		tInsert(self.hexes, hex)
-		self.onEdge[hex] = pairHex
+		self.pairings[hex] = { [pairHex] = direction }
+	else
+		self.pairings[hex][pairHex] = direction
 	end
-	if not self.onEdge[pairHex] then
+	if not self.pairings[pairHex] then
 		tInsert(self.hexes, pairHex)
-		self.onEdge[pairHex] = hex
+		self.pairings[pairHex] = { [hex] = OppositeDirection(direction) }
+	else
+		self.pairings[pairHex][hex] = OppositeDirection(direction)
 	end
-	if direction == DirE or direction == DirSE or direction == DirSW then
-		if self.hexOfRiver[hex] == nil then self.hexOfRiver[hex] = {} end
-		self.hexOfRiver[hex][direction-3] = true
+	--[[
+	local adjPlot = Map.PlotDirection(hex.plot:GetX(), hex.plot:GetY(), DirFant2Native(direction))
+	if adjPlot ~= pairHex.plot then
+		EchoDebug("BAD NATIVE/FANT MATCH HEX PAIRING", hex.plot:GetX() .. ", " .. hex.plot:GetY(), pairHex.x .. ", " .. pairHex.y, direction, DirFant2Native(direction))
 	end
+	]]--
 end
 
 function DiscontinuousEdge:CreateContinuousEdges()
-	local paired = {}
-	local directions = {}
-	local hexPairs = {}
-	for hex, pairHex in pairs(self.onEdge) do
-		if not paired[hex] and not paired[pairHex] then
-			tInsert(hexPairs, {hex, pairHex})
-			paired[hex], paired[pairHex] = pairHex, hex
+	local pairBuffer = {}
+	for hex, pairings in pairs(self.pairings) do
+		for pairHex, direction in pairs(pairings) do
+			tInsert(pairBuffer, {hex = hex, pairHex = pairHex, direction = direction})
 		end
 	end
 	repeat
 		-- get a starting point
 		local hexPair
 		repeat
-			hexPair = tRemove(hexPairs)
-		until (hexPair and not hexPair[1].pickedAgain and not hexPair[2].pickedAgain) or #hexPairs == 0
-		if #hexPairs == 0 then break end
-		local hex = hexPair[1]
+			hexPair = tRemove(pairBuffer)
+		until (hexPair and not hexPair.hex.pickedAgain and not hexPair.pairHex.pickedAgain) or #pairBuffer == 0
+		if #pairBuffer == 0 then break end
+		local hex, pairHex = hexPair.hex, hexPair.pairHex
 		-- find an end or discontinuity
 		repeat
-			local pairHex = paired[hex]
 			hex.picked, pairHex.picked = true, true
-			local newHex
-			for d, nhex in pairs(hex:Neighbors()) do
-				if paired[nhex] and not nhex.picked then
-					newHex = nhex
-					break
-				end
-			end
-			if not newHex then
-				for d, nhex in pairs(pairHex:Neighbors()) do
-					if paired[nhex] and not nhex.picked then
+			local newHex, newPairHex
+			local neighbors = hex:Neighbors()
+			for d, nhex in pairs(pairHex:Neighbors()) do tInsert(neighbors, nhex) end
+			for ni, nhex in pairs(neighbors) do
+				if self.pairings[nhex] and not nhex.noValidPairings then
+					for phex, pdir in pairs(self.pairings[nhex]) do
+						if not phex.picked then
+							newPairHex = phex
+							break
+						end
+					end
+					if newPairHex then
 						newHex = nhex
 						break
+					else
+						nhex.noValidPairings = true
 					end
 				end
 			end
 			hex = newHex or hex
-		until not newHex
+			pairHex = newPairHex or pairHex
+		until not newHex or not newPairHex
 		local edge = Edge(self)
 		if not self.isSub then
-			local pairHex = paired[hex]
 			hex.edgeBottom[edge], hex.edgeTerminal[edge] = pairHex, pairHex
 			pairHex.edgeBottom[edge], pairHex.edgeTerminal[edge] = hex, hex
 		end
 		-- follow the edge's path from that end
 		local p = 1
 		repeat
-			local pairHex = paired[hex]
 			hex.pickedAgain, pairHex.pickedAgain = true, true
-			local newHex
-			local newDirection = DirectionTypes.NO_DIRECTION
-			for d, nhex in pairs(hex:Neighbors()) do
-				if paired[nhex] and not nhex.pickedAgain then
-					newHex = nhex
-					newDirection = d
-					break
-				end
-			end
-			if not newHex then
-				for d, nhex in pairs(pairHex:Neighbors()) do
-					if paired[nhex] and not nhex.pickedAgain then
+			local newHex, newPairHex, newDirection
+			local neighbors = {}
+			for d, nhex in pairs(hex:Neighbors()) do tInsert(neighbors, {direction = d, hex = nhex}) end
+			for d, nhex in pairs(pairHex:Neighbors()) do tInsert(neighbors, {direction = d, hex = nhex}) end
+			for ni, dirHex in pairs(neighbors) do
+				local nhex = dirHex.hex
+				local direction = dirHex.direction
+				if self.pairings[nhex] and not nhex.noValidPairingsAgain then
+					for phex, pdir in pairs(self.pairings[nhex]) do
+						if not phex.picked then
+							newPairHex = phex
+							break
+						end
+					end
+					if newPairHex then
 						newHex = nhex
-						newDirection = d
+						newDirection = direction
 						break
+					else
+						nhex.noValidPairingsAgain = true
 					end
 				end
 			end
 			edge:AddHexPair(hex, pairHex, newDirection)
 			p = p + 1
 			hex = newHex or hex
+			pairHex = newPairHex or pairHex
 		until not newHex
+		--[[
+		if p > 1 then
+			EchoDebug("path of " .. p, #self.hexes)
+			for pp, part in pairs(edge.path) do
+				EchoDebug(part.hexes[1].x .. ", " .. part.hexes[1].y, part.hexes[2].x .. ", " .. part.hexes[2].y)
+			end
+		end
+		]]--
 		if not self.isSub then
-			local pairHex = paired[hex]
 			hex.edgeTop[edge], hex.edgeTerminal[edge] = pairHex, pairHex
 			pairHex.edgeTop[edge], pairHex.edgeTerminal[edge] = hex, hex
 		end
@@ -862,10 +874,10 @@ function DiscontinuousEdge:CreateContinuousEdges()
 		else
 			EchoDebug("EMPTY EDGE")
 		end
-	until #hexPairs == 0
+	until #pairBuffer == 0
 	-- reset hexes' temporary markers
 	for h, hex in pairs(self.hexes) do
-		hex.picked, hex.pickedAgain = false, false
+		hex.picked, hex.pickedAgain, hex.noValidPairings, hex.noValidPairingsAgain = nil, nil, nil, nil
 	end
 end
 
@@ -884,11 +896,27 @@ Edge = class(function(a, discontEdge)
 end)
 
 function Edge:AddHexPair(hex, pairHex, nextDirection)
-	tInsert(self.hexes, hex)
-	tInsert(self.hexes, pairHex)
-	tInsert(self.path, { hexes = {hex, pairHex}, nextDirection = nextDirection })
-	self.hexOfRiver[hex] = self.discontEdge.hexOfRiver[hex]
-	self.hexOfRiver[pairHex] = self.discontEdge.hexOfRiver[pairHex]
+	if not hex.edges[self] then tInsert(self.hexes, hex) end
+	if not pairHex.edges[self] then tInsert(self.hexes, pairHex) end
+	local direction
+	for phex, pdir in pairs(self.discontEdge.pairings[hex]) do
+		if phex == pairHex then
+			direction = pdir
+			break
+		end
+	end
+	if not direction then
+		EchoDebug("NO PAIRING FOUND")
+		return
+	end
+	tInsert(self.path, { hexes = {hex, pairHex}, pairDirection = direction, nextDirection = nextDirection })
+	if direction == DirE or direction == DirSE or direction == DirSW then
+		if self.hexOfRiver[hex] == nil then self.hexOfRiver[hex] = {} end
+		self.hexOfRiver[hex][direction-3] = true
+	else
+		if self.hexOfRiver[pairHex] == nil then self.hexOfRiver[pairHex] = {} end
+		self.hexOfRiver[pairHex][direction] = true
+	end
 	hex.edges[self] = true
 	pairHex.edges[self] = true
 end
@@ -1378,14 +1406,25 @@ function Space:ComputeRivers()
 			if low then from, to, inc = #edge.path, 1, -1 end
 			for p = from, to, inc do
 				local part = edge.path[p]
+				local direction = part.pairDirection
+				if not direction then EchoDebug("nil direction") end
 				for h, hex in pairs(part.hexes) do
-					if edge.hexOfRiver[hex] then
-						if hex.ofRiver == nil then hex.ofRiver = {} end
-						for direction, yes in pairs(edge.hexOfRiver[hex]) do
-							hex.ofRiver[direction] = true
-						end
-						hex.riverDirection = part.nextDirection
+					--[[
+					if h == 1 then
+						local flipDirection = direction - 3
+						if flipDirection < 1 then flipDirection = flipDirection + 6 end
+						hex.ofRiver[flipDirection] = true
+					else
+						hex.ofRiver[direction] = true
 					end
+					]]--
+					hex.riverDirection = part.nextDirection
+				end
+			end
+			for hex, directions in pairs(edge.hexOfRiver) do
+				if hex.ofRiver == nil then hex.ofRiver = {} end
+				for direction, yes in pairs(directions) do
+					hex.ofRiver[direction] = true
 				end
 			end
 		end
@@ -1439,7 +1478,7 @@ function Space:ComputeOceanTemperatures()
 			end
 			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
 		end
-	end
+	end 
 end
 
 function Space:GimmeIce(temperature)
@@ -1653,6 +1692,14 @@ function Space:FindEdgeConnections()
 					tInsert(edge.lowConnections, cedge)
 				end
 			end
+			for d, nhex in pairs(hex:Neighbors()) do
+				for cedge, yes in pairs(nhex.edges) do
+					if not edge.connections[cedge] then
+						edge.connections[cedge] = true
+						tInsert(edge.lowConnections, cedge)
+					end
+				end
+			end
 		end
 		for h = 1, 2 do
 			local hex = edge.path[#edge.path].hexes[h]
@@ -1660,6 +1707,14 @@ function Space:FindEdgeConnections()
 				if not edge.connections[cedge] then
 					edge.connections[cedge] = true
 					tInsert(edge.highConnections, cedge)
+				end
+			end
+			for d, nhex in pairs(hex:Neighbors()) do
+				for cedge, yes in pairs(nhex.edges) do
+					if not edge.connections[cedge] then
+						edge.connections[cedge] = true
+						tInsert(edge.lowConnections, cedge)
+					end
 				end
 			end
 		end
@@ -2200,13 +2255,13 @@ function Space:FindPotentialRivers()
 				local hex, pairHex = edge.path[pn].hexes[1], edge.path[pn].hexes[2]
 				local mutualWater = {}
 				for d, nhex in pairs(hex:Neighbors()) do
-					if not nhex.polygon.continent then
+					if nhex ~= pairHex and not nhex.polygon.continent then
 						mutualWater[nhex] = true
 					end
 				end
 				for d, nhex in pairs(pairHex:Neighbors()) do
 					if mutualWater[nhex] then
-						if lowHigh == 1 then edge.drainsLow = true else edge.drainsHigh = true end
+						if lowHigh == 1 then edge.drainsLow = true elseif #edge.path > 1 then edge.drainsHigh = true end
 						edge.drainsToWater = true
 						break
 					end
@@ -2224,6 +2279,7 @@ function Space:FindPotentialRivers()
 			end
 		end
 	end
+	EchoDebug(#self.edgesDrain)
 	-- look for potential minor rivers (subedges)
 	--[[
 	self.subEdgesFork = {}

@@ -1,4 +1,5 @@
 - fix rivers flowing from coast to coast or to no coast at all
+	- the problem with river drawing (edge paths) is that i'm assuming there's one other hex for each hex (lol) along an edge
 - change major river picking to downstream--each edge connected to a mountain range edge is a possible starting point
 - add flood plains to deserts
 - optional roads?
