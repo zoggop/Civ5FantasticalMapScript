@@ -571,9 +571,9 @@ function Hex:SetRiver()
 	if self.ofRiver[DirW] then self.plot:SetWOfRiver(true, self.ofRiver[DirW] or FlowDirectionTypes.NO_DIRECTION) end
 	if self.ofRiver[DirNW] then self.plot:SetNWOfRiver(true, self.ofRiver[DirNW] or FlowDirectionTypes.NO_DIRECTION) end
 	if self.ofRiver[DirNE] then self.plot:SetNEOfRiver(true, self.ofRiver[DirNE] or FlowDirectionTypes.NO_DIRECTION) end
-	for d, fd in pairs(self.ofRiver) do
-		EchoDebug(DirName(d), FlowDirName(fd))
-	end
+	-- for d, fd in pairs(self.ofRiver) do
+		-- EchoDebug(DirName(d), FlowDirName(fd))
+	-- end
 end
 
 function Hex:EdgeCount()
@@ -1422,22 +1422,13 @@ end
 function Space:ComputeRivers()
 	for i, river in pairs(self.majorRivers) do
 		for e, edge in pairs(river) do
-			-- set river placement
-			--[[
-			for hex, directions in pairs(edge.hexOfRiver) do
-				if hex.ofRiver == nil then hex.ofRiver = {} end
-				for direction, yes in pairs(directions) do
-					hex.ofRiver[direction] = true
-				end
-			end
-			]]--
 			-- compute river directions
-			local startPair
-			local hex, pairHex, direction
-			if edge.drainsToWater then startPair = edge.drainsToWater else startPair = edge.connections[river[e-1]] end
-			local hex, pairHex, direction = startPair.hex, startPair.pairHex, startPair.direction
 			local behindHex
-			EchoDebug(#edge.hexes)
+			local hex, pairHex, direction
+			local startPair = edge.drainsToWater or edge.connections[river[e-1]]
+			EchoDebug(tostring(startPair), e, tostring(river[e-1]), tostring(edge.drainsToWater), tostring(edge.connections[river[e-1]]))
+			local hex, pairHex, direction = startPair.hex, startPair.pairHex, startPair.direction
+			local iteration = 1
 			repeat
 				local newHex, newDirection, newDirectionPair
 				local neighs = {}
@@ -1460,7 +1451,7 @@ function Space:ComputeRivers()
 					flowDirection = self:GetFlowDirection(direction, hex:GetDirectionTo(behindHex))
 				elseif hex == startPair.hex and pairHex == startPair.pairHex then
 					-- EchoDebug("using water")
-					flowDirection = self:GetFlowDirection(direction, startPair.waterDirection)
+					flowDirection = self:GetFlowDirection(direction, startPair.waterDirection or startPair.connectionDirection)
 				elseif newDirection then
 					-- EchoDebug("using new")
 					flowDirection = GetOppositeFlowDirection(self:GetFlowDirection(direction, newDirection))
@@ -1472,28 +1463,22 @@ function Space:ComputeRivers()
 					if pairHex.ofRiver == nil then pairHex.ofRiver = {} end
 					pairHex.ofRiver[direction] = flowDirection
 				end
-				--[[
-				if hex.ofRiver and hex.ofRiver[OppositeDirection(direction)] then
-					hex.riverDirection[OppositeDirection(direction)] = flowDirection
-				end
-				if pairHex.ofRiver and pairHex.ofRiver[direction] then
-					pairHex.riverDirection[direction] = flowDirection
-				end
-				]]--
-				EchoDebug(i, e, "flowing " .. FlowDirName(flowDirection), DirName(direction), DirName(newDirection), DirName(newDirectionPair))
+				EchoDebug(i .. " " .. e .. " " .. iteration, "flowing " .. FlowDirName(flowDirection), DirName(direction), DirName(newDirection), DirName(newDirectionPair))
 				if not newHex then break end
-				if edge.pairings[hex][newHex] then
+				if edge.pairings[hex] and edge.pairings[hex][newHex] then
 					behindHex = pairHex
 					pairHex = newHex
 					direction = newDirection
-				elseif edge.pairings[pairHex][newHex] then
+				elseif edge.pairings[pairHex] and edge.pairings[pairHex][newHex] then
 					behindHex = hex
 					hex = pairHex
 					pairHex = newHex
 					direction = newDirectionPair
 				else
 					EchoDebug("MUTUAL NEIGHBOR IS NEITHER'S PAIRING")
+					break
 				end
+				iteration = iteration + 1
 			until not newHex
 		end
 	end
@@ -1757,7 +1742,7 @@ function Space:FindEdgeConnections()
 			local neighs = {}
 			local mutual = {}
 			for d, nhex in pairs(hex:Neighbors()) do
-				if (nhex:EdgeCount() > 1 or not nhex.edges[edge]) then neighs[nhex] = true end -- not edge.pairings[hex][nhex] and not edge.pairings[nhex] then neighs[nhex] = true end
+				if not nhex.edges[edge] then neighs[nhex] = true end -- not edge.pairings[hex][nhex] and not edge.pairings[nhex] then neighs[nhex] = true end
 			end
 			for phex, pdir in pairs(edge.pairings[hex]) do
 				for d, nhex in pairs(phex:Neighbors()) do
@@ -1768,13 +1753,25 @@ function Space:FindEdgeConnections()
 				for cedge, yes in pairs(mhex.edges) do
 					if cedge ~= edge and (cedge.pairings[mhex][phex] or cedge.pairings[mhex][hex]) then
 						if not edge.connections[cedge] then
-							local pairHex
-							if cedge.pairings[mhex][phex] then pairHex = phex else pairHex = hex end
-							edge.connections[cedge] = { hex = mhex, pairHex = pairHex, direction = mhex:GetDirectionTo(pairHex) }
+							-- local pairHex
+							-- if cedge.pairings[mhex][phex] then pairHex = phex else pairHex = hex end
+							edge.connections[cedge] = { hex = hex, pairHex = phex, direction = hex:GetDirectionTo(phex), connectionDirection = hex:GetDirectionTo(mhex), connectionHex = mhex }
 							if lowHigh == 1 then
 								tInsert(edge.lowConnections, cedge)
 							else
 								tInsert(edge.highConnections, cedge)
+							end
+							-- find reverse connection
+							for mphex, mpdir in pairs(cedge.pairings[mhex]) do
+								for d, nhex in pairs(mphex:Neighbors()) do
+									if nhex == hex then
+										cedge.connections[edge] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(hex), connectionHex = hex }
+										break
+									elseif nhex == phex then
+										cedge.connections[edge] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(phex), connectionHex = phex }
+										break
+									end
+								end
 							end
 						end
 						break
@@ -2325,7 +2322,7 @@ function Space:FindPotentialRivers()
 					for d, nhex in pairs(phex:Neighbors()) do
 						if mutualWater[nhex] then
 							if lowHigh == 1 then edge.drainsLow = true elseif nhex ~= waterHex then edge.drainsHigh = true end
-							edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mutualWater[nhex]}
+							edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mutualWater[nhex], waterHex = nhex}
 							waterHex = nhex
 							break
 						end
@@ -2445,7 +2442,7 @@ function Space:PickMajorRivers()
 				tInsert(river, edge)
 				n = n + 1
 			until not edge or edge.mountains
-			if #river == 1 then -- edge and edge.mountains and
+			if #river > 0 then -- edge and edge.mountains and
 				EchoDebug(#river)
 				tInsert(self.majorRivers, river)
 			else
