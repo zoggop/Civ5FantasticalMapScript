@@ -1,13 +1,14 @@
-- fix rivers flowing from coast to coast and forking
-- change major river picking to downstream--each edge connected to a mountain range edge is a possible starting point
+- fix rivers flowing from running into each other (do this at the hex level)
+- re-add subpolygon minor rivers, including flowing into and out of small lakes
 - add flood plains to deserts
+- mountain ranges based on subpolygons along the edge, so that they scale better
 - optional roads?
-- less scattered mountains?
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- give rivers flow directions
 - actual edge connections
 - make edge path-following split paths, because currently paths can have gaps (same polygons touching, with a polygon in between it), because deviating from voronoi (which can never have disconnections along an edge of two polygons) screwed things up
 - turn edges into a class
