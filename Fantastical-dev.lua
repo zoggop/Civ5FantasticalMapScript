@@ -1010,7 +1010,7 @@ function Edge:AddSubEdge(subEdge)
 end
 
 function Edge:DetermineOrder()
-	local subEdge = tGetRandom(self.subEdge)
+	local subEdge = tGetRandom(self.subEdges)
 	-- find a beginning
 	repeat
 		subEdge.picked = true
@@ -1446,6 +1446,10 @@ function Space:Compute()
     self:AssembleSubEdges()
     EchoDebug("finding subedge connections...")
     self:FindSubEdgeConnections()
+    EchoDebug("finding edges...")
+    self:FindEdges()
+    EchoDebug("assembling edges...")
+    self:AssembleEdges()
     EchoDebug("picking oceans...")
     self:PickOceans()
     EchoDebug("flooding astronomy basins...")
@@ -1573,10 +1577,10 @@ function Space:ComputeRivers()
 					end
 					if OfRiverDirection(part.direction) then
 						if part.hex.ofRiver == nil then part.hex.ofRiver = {} end
-						part.hex.ofRiver[OppositeDirection(direction)] = flowDirection
+						part.hex.ofRiver[OppositeDirection(part.direction)] = flowDirection
 					else
 						if part.pairHex.ofRiver == nil then part.pairHex.ofRiver = {} end
-						part.pairHex.ofRiver[direction] = flowDirection
+						part.pairHex.ofRiver[part.direction] = flowDirection
 					end
 				end
 			end
@@ -1840,6 +1844,13 @@ end
 function Space:FindEdges()
 	for i, subEdge in pairs(self.subEdges) do
 		subEdge:FloodFillSuperEdge()
+	end
+end
+
+function Space:AssembleEdges()
+	for i, edge in pairs(self.edges) do
+		edge:DetermineOrder()
+		edge:FindConnections()
 	end
 end
 
@@ -2374,19 +2385,22 @@ function Space:FindPotentialRivers()
 			end
 			-- check high and low hexes's mutual neighbors to see if the edge connects to water
 			for lowHigh = 1, 2 do
-				local hex, phex, mhex
+				local hex, phex, pdir, mhex, mdir
 				if lowHigh == 1 then
 					hex = edge.lowSubEdge.lowHex
 					phex = hex.edgePart[edge.lowSubEdge].pairHex
+					pdir = hex.edgePart[edge.lowSubEdge].direction
 					mhex = hex.edgePart[edge.lowSubEdge].behindHex
+					mdir = hex.edgePart[edge.lowSubEdge].behindDirection
 				else
 					hex = edge.highSubEdge.highHex
 					phex = hex.edgePart[edge.highSubEdge].pairHex
+					pdir = hex.edgePart[edge.highSubEdge].direction
 					mhex = hex.edgePart[edge.highSubEdge].forwardHex
+					mdir = hex.edgePart[edge.highSubEdge].forwardDirection
 				end
-				if not mhex.polygon.continent then
-					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mutualWater[nhex], waterHex = nhex}
-					waterHex = mhex
+				if mhex and not mhex.polygon.continent then
+					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mdir, waterHex = mhex}
 					if lowHigh == 1 then edge.drainsLow = true else edge.drainsHigh = true end
 				end
 			end
