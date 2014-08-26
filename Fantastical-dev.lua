@@ -939,7 +939,7 @@ function SubEdge:FindConnections()
 			mhex = hex.edgePart[self].behindHex
 		end
 		if mhex then
-			for cedge, yes in pairs(mhex.edges) do
+			for cedge, yes in pairs(mhex.subEdges) do
 				if cedge ~= self and (cedge.pairings[mhex][phex] or cedge.pairings[mhex][hex]) then
 					if not self.connections[cedge] then
 						self.connections[cedge] = { hex = hex, pairHex = phex, direction = hex:GetDirectionTo(phex), connectionDirection = hex:GetDirectionTo(mhex), connectionHex = mhex }
@@ -1072,7 +1072,7 @@ function Edge:FindConnections()
 	else
 		connections = self.lowSubEdge.lowConnections
 	end
-	for ci, cedge in pairs(connections) do
+	for cedge, yes in pairs(connections) do
 		self.lowConnections[cedge.superEdge] = true
 		self.connections[cedge.superEdge] = true
 	end
@@ -1082,7 +1082,7 @@ function Edge:FindConnections()
 	else
 		connections = self.highSubEdge.lowConnections
 	end
-	for ci, cedge in pairs(connections) do
+	for cedge, yes in pairs(connections) do
 		self.highConnections[cedge.superEdge] = true
 		self.connections[cedge.superEdge] = true
 	end
