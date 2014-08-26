@@ -395,7 +395,7 @@ Hex = class(function(a, space, x, y, index)
 	a.subEdgeLow = {}
 	a.subEdgeHigh = {}
 	a.subEdgeEnd = {}
-	a.edgePart = {}
+	a.subEdgeParts = {}
 	a.edges = {}
 	a.subEdges = {}
 	a.riverDirection = {}
@@ -899,7 +899,10 @@ function SubEdge:Assemble()
 		local behindFlowDirection = GetFlowDirection(direction, behindDirection)
 		local forwardFlowDirection = GetFlowDirection(direction, newDirection)
 		local part = {hex = hex, pairHex = pairHex, direction = direction, behindHex = behindHex, behindDirection = behindDirection, behindDirectionPair = behindDirectionPair, behindFlowDirection = behindFlowDirection, forwardHex = newHex, forwardDirection = newDirection, forwardDirectionPair = newDirectionPair, forwardFlowDirection = forwardFlowDirection}
-		hex.edgePart[self], pairHex.edgePart[self] = part, part
+		if hex.subEdgeParts[self] == nil then hex.subEdgeParts[self] = {} end
+		if pairHex.subEdgeParts[self] == nil then pairHex.subEdgeParts[self] = {} end
+		tInsert(hex.subEdgeParts[self], part)
+		tInsert(pairHex.subEdgeParts[self], part)
 		tInsert(self.path, part)
 		if not newHex then break end
 		if self.pairings[hex] and self.pairings[hex][newHex] then
@@ -930,37 +933,43 @@ function SubEdge:FindConnections()
 	for lowHigh = 1, 2 do
 		local hex, phex, mhex
 		if lowHigh == 1 then
-			hex = self.lowHex
-			phex = self.pairings[hex]
-			mhex = hex.edgePart[self].forwardHex
+			local part = self.path[1]
+			hex = part.hex
+			phex = part.pairHex
+			mhex = part.forwardHex
 		else
-			hex = self.highHex
-			phex = self.pairings[hex]
-			mhex = hex.edgePart[self].behindHex
+			local part = self.path[#self.path]
+			hex = part.hex
+			phex = part.pairHex
+			mhex = part.behindHex
 		end
 		if mhex then
 			for cedge, yes in pairs(mhex.subEdges) do
 				if cedge ~= self and (cedge.pairings[mhex][phex] or cedge.pairings[mhex][hex]) then
-					if not self.connections[cedge] then
-						self.connections[cedge] = { hex = hex, pairHex = phex, direction = hex:GetDirectionTo(phex), connectionDirection = hex:GetDirectionTo(mhex), connectionHex = mhex }
-						if lowHigh == 1 then
-							self.lowConnections[cedge] = self.connections[cedge]
-						else
-							self.highConnections[cedge] = self.connections[cedge]
-						end
-						-- find reverse connection
-						for mphex, mpdir in pairs(cedge.pairings[mhex]) do
-							for d, nhex in pairs(mphex:Neighbors()) do
-								if nhex == hex then
-									cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(hex), connectionHex = hex }
-									break
-								elseif nhex == phex then
-									cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(phex), connectionHex = phex }
-									break
-								end
-							end
+					self.connections[cedge] = { hex = hex, pairHex = phex, direction = hex:GetDirectionTo(phex), connectionDirection = hex:GetDirectionTo(mhex), connectionHex = mhex }
+					if lowHigh == 1 then
+						self.lowConnections[cedge] = self.connections[cedge]
+					else
+						self.highConnections[cedge] = self.connections[cedge]
+					end
+					cedge.connections[self] = true
+					if mhex == cedge.path[1].hex or mhex == cedge.path[1].pairHex then
+						cedge.lowConnections[self] = true
+					else
+						cedge.highConnections[self] = true
+					end
+					-- find reverse connection
+					--[[
+					for mphex, mpdir in pairs(cedge.pairings[mhex]) do
+						if mphex == hex then
+							cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(phex), connectionHex = phex }
+							break
+						elseif mphex == phex then
+							cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(hex), connectionHex = hex }
+							break
 						end
 					end
+					]]--
 				end
 			end
 		end
@@ -984,7 +993,6 @@ function SubEdge:FloodFillSuperEdge(polygon1, polygon2, superEdge)
 	for cedge, yes in pairs(self.connections) do
 		cedge:FloodFillSuperEdge(polygon1, polygon2, superEdge)
 	end
-	return superEdge
 end
 
 ------------------------------------------------------------------------------
@@ -1010,9 +1018,11 @@ function Edge:AddSubEdge(subEdge)
 end
 
 function Edge:DetermineOrder()
-	local subEdge = tGetRandom(self.subEdges)
+	local subEdge = self.subEdges[1]
 	-- find a beginning
+	local it = 0
 	repeat
+		local newEdge
 		subEdge.picked = true
 		for cedge, yes in pairs(subEdge.connections) do
 			if cedge.superEdge == self and not cedge.picked then
@@ -1021,34 +1031,32 @@ function Edge:DetermineOrder()
 			end
 		end
 		subEdge = newEdge or subEdge
+		it = it + 1
 	until not newEdge
+	-- EchoDebug(it .. " iterations", #self.subEdges .. " subedges" )
 	self.lowSubEdge = subEdge
 	-- find an end
+	local it2 = 0
 	repeat
+		local newEdge
 		subEdge.pickedAgain = true
 		tInsert(self.orderedSubEdges, subEdge)
-		for cedge, yes in pairs(subEdge.lowConnections) do
+		for cedge, yes in pairs(subEdge.connections) do
 			if cedge.superEdge == self and not cedge.pickedAgain then
 				newEdge = cedge
-				subEdge.superEdgeLow = true
+				if subEdge.lowConnections[cedge] then subEdge.superEdgeLow = true end
 				break
 			end
 		end
-		if not newEdge then
-			for cedge, yes in pairs(subEdge.highConnections) do
-				if cedge.superEdge == self and not cedge.pickedAgain then
-					newEdge = cedge
-					break
-				end
-			end
-		end
 		subEdge = newEdge or subEdge
+		it2 = it2 + 1
 	until not newEdge
 	self.highSubEdge = subEdge
 	-- reset temporary markers
-	for i, subEdge in pairs(self.orderedSubEdges) do
+	for i, subEdge in pairs(self.subEdges) do
 		subEdge.picked, subEdge.pickedAgain = nil, nil
 	end
+	if #self.orderedSubEdges < #self.subEdges then EchoDebug(#self.orderedSubEdges, #self.subEdges) end
 end
 
 function Edge:FindConnections()
@@ -1073,8 +1081,10 @@ function Edge:FindConnections()
 		connections = self.lowSubEdge.lowConnections
 	end
 	for cedge, yes in pairs(connections) do
-		self.lowConnections[cedge.superEdge] = true
-		self.connections[cedge.superEdge] = true
+		if cedge.superEdge then
+			self.lowConnections[cedge.superEdge] = true
+			self.connections[cedge.superEdge] = true
+		end
 	end
 	-- find high end connections
 	if self.highSubEdge.superEdgeLow then
@@ -1083,8 +1093,10 @@ function Edge:FindConnections()
 		connections = self.highSubEdge.lowConnections
 	end
 	for cedge, yes in pairs(connections) do
-		self.highConnections[cedge.superEdge] = true
-		self.connections[cedge.superEdge] = true
+		if cedge.superEdge then
+			self.highConnections[cedge.superEdge] = true
+			self.connections[cedge.superEdge] = true
+		end
 	end
 end
 
@@ -2387,17 +2399,19 @@ function Space:FindPotentialRivers()
 			for lowHigh = 1, 2 do
 				local hex, phex, pdir, mhex, mdir
 				if lowHigh == 1 then
-					hex = edge.lowSubEdge.lowHex
-					phex = hex.edgePart[edge.lowSubEdge].pairHex
-					pdir = hex.edgePart[edge.lowSubEdge].direction
-					mhex = hex.edgePart[edge.lowSubEdge].behindHex
-					mdir = hex.edgePart[edge.lowSubEdge].behindDirection
+					local part = edge.lowSubEdge.path[1]
+					hex = part.hex
+					phex = part.pairHex
+					pdir = part.direction
+					mhex = part.behindHex
+					mdir = part.behindDirection
 				else
-					hex = edge.highSubEdge.highHex
-					phex = hex.edgePart[edge.highSubEdge].pairHex
-					pdir = hex.edgePart[edge.highSubEdge].direction
-					mhex = hex.edgePart[edge.highSubEdge].forwardHex
-					mdir = hex.edgePart[edge.highSubEdge].forwardDirection
+					local part = edge.highSubEdge.path[#edge.highSubEdge.path]
+					hex = part.hex
+					phex = part.pairHex
+					pdir = part.direction
+					mhex = part.forwardHex
+					mdir = part.forwardDirection
 				end
 				if mhex and not mhex.polygon.continent then
 					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mdir, waterHex = mhex}
