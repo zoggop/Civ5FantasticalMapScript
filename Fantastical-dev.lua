@@ -1032,18 +1032,21 @@ function Edge:AddSubEdge(subEdge)
 end
 
 function Edge:DetermineOrder()
+	local picked, pickedAgain = {}, {}
 	local subEdge = self.subEdges[1]
 	-- find a beginning
 	local it = 0
 	repeat
 		local newEdge
-		subEdge.picked = true
+		picked[subEdge] = true
+		local routes = 0
 		for cedge, yes in pairs(subEdge.connections) do
-			if cedge.superEdge == self and not cedge.picked then
+			if cedge.superEdge == self and not picked[cedge] then
 				newEdge = cedge
-				break
+				routes = routes + 1
 			end
 		end
+		if self.space.edges[1] == self then EchoDebug(routes .. " routes") end
 		subEdge = newEdge or subEdge
 		it = it + 1
 	until not newEdge
@@ -1052,22 +1055,20 @@ function Edge:DetermineOrder()
 	-- find an end
 	repeat
 		local newEdge
-		subEdge.pickedAgain = true
+		pickedAgain[subEdge] = true
 		tInsert(self.orderedSubEdges, subEdge)
+		local routes = 0
 		for cedge, yes in pairs(subEdge.connections) do
-			if cedge.superEdge == self and not cedge.pickedAgain then
+			if cedge.superEdge == self and not pickedAgain[cedge] then
 				newEdge = cedge
 				if subEdge.lowConnections[cedge] then subEdge.superEdgeLow = true end
-				break
+				routes = routes + 1
 			end
 		end
+		if self.space.edges[1] == self then EchoDebug(routes .. " routes") end
 		subEdge = newEdge or subEdge
 	until not newEdge
 	self.highSubEdge = subEdge
-	-- reset temporary markers
-	for i, subEdge in pairs(self.subEdges) do
-		subEdge.picked, subEdge.pickedAgain = nil, nil
-	end
 	if #self.orderedSubEdges < #self.subEdges then EchoDebug(#self.orderedSubEdges, #self.subEdges) end
 end
 
@@ -1454,6 +1455,7 @@ function Space:Compute()
     self:CullPolygons()
     EchoDebug("subdividing polygons...")
     self:SubdividePolygons()
+    EchoDebug(#self.subPolygons .. " total subpolygons")
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("flip-flopping subpolygons...")
@@ -1711,6 +1713,19 @@ function Space:FillPolygons(relax)
 			hex:Place(relax)
 		end
 	end
+	self.polygonMinArea = self.iA
+	self.polygonMaxArea = 0
+	for i, polygon in pairs(self.polygons) do
+		if #polygon.hexes < self.polygonMinArea and #polygon.hexes > 0 then
+			self.polygonMinArea = #polygon.hexes
+		end
+		if #polygon.hexes > self.polygonMaxArea then
+			self.polygonMaxArea = #polygon.hexes
+		end
+	end
+	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
+	self.polygonMinArea = self.iA
+	self.polygonMaxArea = 0
 end
 
 function Space:RelaxPolygons()
