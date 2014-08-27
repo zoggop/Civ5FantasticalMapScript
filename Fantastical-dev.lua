@@ -930,18 +930,43 @@ function SubEdge:Assemble()
 end
 
 function SubEdge:FindConnections()
+	local neighs = {}
+	for i, neighbor in pairs(self.polygons[1].neighbors) do
+		neighs[neighbor] = true
+	end
+	local mutual = {}
+	for i, neighbor in pairs(self.polygons[2].neighbors) do
+		if neighs[neighbor] then
+			mutual[neighbor] = true
+		end
+	end
+	local lowHex = self.path[1].behindHex
+	local highHex = self.path[#self.path].forwardHex
+	for neighbor, yes in pairs(mutual) do
+		for p, polygon in pairs(self.polygons) do
+			local subEdge = neighbor.subEdges[polygon] or polygon.subEdges[neighbor]
+			self.connections[subEdge] = true
+			subEdge.connections[self] = true
+			if lowHex.subPolygon == neighbor then
+				self.lowConnections[subEdge] = true
+			else
+				self.highConnections[subEdge] = true
+			end
+		end
+	end
+	--[[
 	for lowHigh = 1, 2 do
 		local hex, phex, mhex
 		if lowHigh == 1 then
 			local part = self.path[1]
 			hex = part.hex
 			phex = part.pairHex
-			mhex = part.forwardHex
+			mhex = part.behindHex
 		else
 			local part = self.path[#self.path]
 			hex = part.hex
 			phex = part.pairHex
-			mhex = part.behindHex
+			mhex = part.forwardHex
 		end
 		if mhex then
 			for cedge, yes in pairs(mhex.subEdges) do
@@ -958,22 +983,11 @@ function SubEdge:FindConnections()
 					else
 						cedge.highConnections[self] = true
 					end
-					-- find reverse connection
-					--[[
-					for mphex, mpdir in pairs(cedge.pairings[mhex]) do
-						if mphex == hex then
-							cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(phex), connectionHex = phex }
-							break
-						elseif mphex == phex then
-							cedge.connections[self] = { hex = mhex, pairHex = mphex, direction = mpdir, connectionDirection = mhex:GetDirectionTo(hex), connectionHex = hex }
-							break
-						end
-					end
-					]]--
 				end
 			end
 		end
 	end
+	]]--
 end
 
 function SubEdge:FloodFillSuperEdge(polygon1, polygon2, superEdge)
@@ -1036,7 +1050,6 @@ function Edge:DetermineOrder()
 	-- EchoDebug(it .. " iterations", #self.subEdges .. " subedges" )
 	self.lowSubEdge = subEdge
 	-- find an end
-	local it2 = 0
 	repeat
 		local newEdge
 		subEdge.pickedAgain = true
@@ -1049,7 +1062,6 @@ function Edge:DetermineOrder()
 			end
 		end
 		subEdge = newEdge or subEdge
-		it2 = it2 + 1
 	until not newEdge
 	self.highSubEdge = subEdge
 	-- reset temporary markers
@@ -1063,13 +1075,13 @@ function Edge:FindConnections()
 	-- determine which way end subedges are oriented
 	for cedge, yes in pairs(self.lowSubEdge.lowConnections) do
 		if cedge.superEdge == self then
-			cedge.superEdgeLow = true
+			self.lowSubEdge.superEdgeLow = true
 			break
 		end
 	end
 	for cedge, yes in pairs(self.highSubEdge.lowConnections) do
 		if cedge.superEdge == self then
-			cedge.superEdgeLow = true
+			self.highSubEdge.superEdgeLow = true
 			break
 		end
 	end
@@ -1081,7 +1093,7 @@ function Edge:FindConnections()
 		connections = self.lowSubEdge.lowConnections
 	end
 	for cedge, yes in pairs(connections) do
-		if cedge.superEdge then
+		if cedge.superEdge and cedge.superEdge ~= self then
 			self.lowConnections[cedge.superEdge] = true
 			self.connections[cedge.superEdge] = true
 		end
@@ -1093,7 +1105,7 @@ function Edge:FindConnections()
 		connections = self.highSubEdge.lowConnections
 	end
 	for cedge, yes in pairs(connections) do
-		if cedge.superEdge then
+		if cedge.superEdge and cedge.superEdge ~= self then
 			self.highConnections[cedge.superEdge] = true
 			self.connections[cedge.superEdge] = true
 		end
@@ -1862,6 +1874,8 @@ end
 function Space:AssembleEdges()
 	for i, edge in pairs(self.edges) do
 		edge:DetermineOrder()
+	end
+	for i, edge in pairs(self.edges) do
 		edge:FindConnections()
 	end
 end
