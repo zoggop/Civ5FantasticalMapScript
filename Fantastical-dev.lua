@@ -402,29 +402,20 @@ Hex = class(function(a, space, x, y, index)
 end)
 
 function Hex:Place(relax)
-	self.polygon = self:ClosestPolygon(relax)
+	self.subPolygon = self:ClosestSubPolygon()
 	self.space.hexes[self.index] = self
-	tInsert(self.polygon.hexes, self)
+	tInsert(self.subPolygon.hexes, self)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
 		self.latitude = self.plot:GetLatitude()
 		if not self.space.wrapX then
 			self.latitude = self.space:RealmLatitude(self.y, self.latitude)
 		end
+		self:InsidePolygon(self.subPolygon)
 	end
 end
 
-function Hex:SubPlace(relax, subPolygons)
-	self.subPolygon = self:ClosestPolygon(relax, subPolygons)
-	self:InsidePolygon(self.subPolygon)
-end
-
-function Hex:FinalPlace()
-	self:InsidePolygon(self.polygon)
-end
-
 function Hex:InsidePolygon(polygon)
-	tInsert(polygon.hexes, self)
 	if self.x < polygon.minX then polygon.minX = self.x end
 	if self.y < polygon.minY then polygon.minY = self.y end
 	if self.x > polygon.maxX then polygon.maxX = self.x end
@@ -491,23 +482,8 @@ function Hex:GetDirectionTo(hex)
 	end
 end
 
-function Hex:ClosestPolygon(relax, polygons)
-	local dists = {}
-	local closest_distance = self.space.w
-	local closest_polygon
-	-- find the closest point to this point
-	polygons = polygons or self.space.polygons
-	for i = 1, #polygons do
-		local polygon = polygons[i]
-		if not polygon.deserter then
-			dists[i] = self.space:SquaredDistance(polygon.x, polygon.y, self.x, self.y)
-			if i == 1 or dists[i] < closest_distance then
-				closest_distance = dists[i]
-				closest_polygon = polygon
-			end
-		end
-	end
-	return closest_polygon
+function Hex:ClosestSubPolygon()
+	return self.space:ClosestThing(self, self.space.subPolygons)
 end
 
 function Hex:FindSubPolygonNeighbors()
@@ -516,15 +492,6 @@ function Hex:FindSubPolygonNeighbors()
 			self.subPolygon:SetNeighbor(nhex.subPolygon)
 			local subEdge = self.subPolygon.edges[nhex.subPolygon] or SubEdge(self.subPolygon, nhex.subPolygon)
 			subEdge:AddHexPair(self, nhex, direction)
-		end
-	end
-end
-
-function Hex:FindPolygonNeighbors()
-	for direction, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
-		if nhex.polygon ~= self.polygon then
-			self.polygon:SetNeighbor(nhex.polygon)
-			self.adjacentPolygons[nhex.polygon] = true
 		end
 	end
 end
@@ -597,7 +564,7 @@ end
 
 ------------------------------------------------------------------------------
 
-Polygon = class(function(a, space, x, y, superPolygon)
+Polygon = class(function(a, space, x, y)
 	a.space = space
 	a.x = x or Map.Rand(space.iW, "random x")
 	a.y = y or Map.Rand(space.iH, "random y")
@@ -610,11 +577,10 @@ Polygon = class(function(a, space, x, y, superPolygon)
 	end
 	a.subPolygons = {}
 	a.hexes = {}
-	a.discontEdges = {}
 	a.edges = {}
 	a.subEdges = {}
-	a.vertices = {}
 	a.isNeighbor = {}
+	a.neighbors = {}
 	a.minX = space.w
 	a.maxX = 0
 	a.minY = space.h
@@ -650,42 +616,59 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 	return true
 end
 
-function Polygon:SetNeighbor(polygon2)
-	self.isNeighbor[polygon2] = true
-	polygon2.isNeighbor[self] = true
+function Polygon:SetNeighbor(polygon)
+	if not self.isNeighbor[polygon] then
+		tInsert(self.neighbors, polygon)
+	end
+	if not polygon.isNeighbor[self] then
+		tInsert(polygon.neighbors, self)
+	end
+	self.isNeighbor[polygon] = true
+	polygon.isNeighbor[self] = true
 end
 
 function Polygon:RelaxToCentroid()
-	local space = self.space
-	if #self.hexes ~= 0 then
-		local totalX, totalY = 0, 0
-		for i, hex in pairs(self.hexes) do
-			local x, y = hex.x, hex.y
-			if space.wrapX then
-				local xdist = mAbs(x - self.minX)
-				if xdist > space.halfWidth then x = x - space.w end
+	local hexes
+	if #self.subPolygons ~= 0 then
+		hexes = {}
+		for spi, subPolygon in pairs(self.subPolygons) do
+			for hi, hex in pairs(subPolygon.hexes) do
+				tInsert(hexes, hex)
 			end
-			if space.wrapY then
+		end
+	elseif #self.hexes ~= 0 then
+		hexes = self.hexes
+	end
+	if hexes then
+		local totalX, totalY, total = 0, 0, 0
+		for hi, hex in pairs(hexes) do
+			local x, y = hex.x, hex.y
+			if self.space.wrapX then
+				local xdist = mAbs(x - self.minX)
+				if xdist > self.space.halfWidth then x = x - self.space.w end
+			end
+			if self.space.wrapY then
 				local ydist = mAbs(y - self.minY)
-				if ydist > space.halfHeight then y = y - space.h end
+				if ydist > self.space.halfHeight then y = y - self.space.h end
 			end
 			totalX = totalX + x
 			totalY = totalY + y
+			total = total + 1
 		end
-		local centroidX = mCeil(totalX / #self.hexes)
-		if centroidX < 0 then centroidX = space.w + centroidX end
-		local centroidY = mCeil(totalY / #self.hexes)
-		if centroidY < 0 then centroidY = space.h + centroidY end
+		local centroidX = mCeil(totalX / total)
+		if centroidX < 0 then centroidX = self.space.w + centroidX end
+		local centroidY = mCeil(totalY / total)
+		if centroidY < 0 then centroidY = self.space.h + centroidY end
 		self.x, self.y = centroidX, centroidY
 		if self.space.useMapLatitudes then
 			self.latitude = Map.GetPlot(self.x, self.y):GetLatitude()
 			if not self.space.wrapX then
-				self.latitude = self.space:RealmLatitude(self.y, self.latitude)
+				self.latitude = self.self.space:RealmLatitude(self.y, self.latitude)
 			end
 		end
 	end
-	self.minX, self.minY, self.maxX, self.maxY = space.w, space.h, 0, 0
-	self.hexes = {}
+	self.minX, self.minY, self.maxX, self.maxY = self.space.w, self.space.h, 0, 0
+	self.hexes, self.subPolygons = {}, {}
 end
 
 function Polygon:CheckBottomTop(x, y)
@@ -718,49 +701,30 @@ function Polygon:NearOther(value, key)
 	return false
 end
 
-function Polygon:Subdivide()
-	-- initialize subpolygons by picking locations randomly from the polygon's hexes
-	local hexBuffer = tDuplicate(self.hexes)
-	local n = 0
-	local subPolygons = {}
-	while #hexBuffer > 0 and n < self.space.subPolygonCount do
-		local hex = tRemoveRandom(hexBuffer)
-		if not hex.subPolygon then
-			local subPolygon = Polygon(self.space, hex.x, hex.y, self)
-			subPolygon.superPolygon = self
-			tInsert(subPolygons, subPolygon)
-			n = n + 1
-		end
-	end
-	for r = 1, self.space.subPolygonRelaxations + 1 do
-		-- fill the subpolygons with hexes
-		for h, hex in pairs(self.hexes) do
-			hex:SubPlace(false, subPolygons)
-		end
-		-- relax subpolygons
-		if r <= self.space.subPolygonRelaxations then
-			for i, subPolygon in pairs(subPolygons) do
-				subPolygon:RelaxToCentroid()
-			end
-		end
-	end
-	-- populate space's subpolygon table (don't include those w/o hexes)
-	for i, subPolygon in pairs(subPolygons) do
-		if #subPolygon.hexes > 0 then
-			tInsert(self.space.subPolygons, subPolygon)
-			if #subPolygon.hexes > self.space.biggestSubPolygon then
-				self.space.biggestSubPolygon = #subPolygon.hexes
-			elseif #subPolygon.hexes < self.space.smallestSubPolygon then
-				self.space.smallestSubPolygon = #subPolygon.hexes
-			end
+function Polygon:FindPolygonNeighbors()
+	for n, neighbor in pairs(self.neighbors) do -- 3 and 4 are are never there yet?
+		if neighbor.superPolygon ~= self.superPolygon then
+			self.superPolygon:SetNeighbor(neighbor.superPolygon)
 		end
 	end
 end
 
-function Polygon:PopulateNeighbors()
-	self.neighbors = {}
-	for neighbor, yes in pairs(self.isNeighbor) do
-		tInsert(self.neighbors, neighbor)
+function Polygon:Place()
+	self.superPolygon = self:ClosestPolygon()
+	tInsert(self.superPolygon.subPolygons, self)
+end
+
+function Polygon:ClosestPolygon()
+	return self.space:ClosestThing(self, self.space.polygons)
+end
+
+function Polygon:FillHexes()
+	for spi, subPolygon in pairs(self.subPolygons) do
+		for hi, hex in pairs(subPolygon.hexes) do
+			hex:InsidePolygon(self)
+			tInsert(self.hexes, hex)
+			hex.polygon = self
+		end
 	end
 end
 
@@ -1328,7 +1292,7 @@ Space = class(function(a)
 	a.polygonCount = 140 -- how many polygons (map scale)
 	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.subPolygonCount = 12 -- how many subpolygons in each polygon
+	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 1 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity)
 	a.oceanNumber = 2 -- how many large ocean basins
@@ -1397,7 +1361,6 @@ Space = class(function(a)
     a.mountainHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
-    a.culledPolygons = 0
 end)
 
 function Space:SetOptions(optDict)
@@ -1441,31 +1404,36 @@ function Space:Compute()
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
+    if self.subPolygonRelaxations > 0 then
+    	for r = 1, self.subPolygonRelaxations do
+    		EchoDebug("filling subpolygons pre-relaxation...")
+        	self:FillSubPolygons(true)
+    		print("relaxing subpolygons... (" .. r .. "/" .. self.subPolygonRelaxations .. ")")
+        	self:RelaxPolygons(self.subPolygons)
+        end
+    end
+    EchoDebug("filling subpolygons post-relaxation...")
+    self:FillSubPolygons()
+    EchoDebug("culling empty subpolygons...")
+    self:CullPolygons(self.subPolygons)
     if self.relaxations > 0 then
-    	for i = 1, self.relaxations do
+    	for r = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
-        	self:FillPolygons(true)
-    		print("relaxing polygons... (" .. i .. "/" .. self.relaxations .. ")")
-        	self:RelaxPolygons()
+        	self:FillPolygons()
+    		print("relaxing polygons... (" .. r .. "/" .. self.relaxations .. ")")
+        	self:RelaxPolygons(self.polygons)
         end
     end
     EchoDebug("filling polygons post-relaxation...")
     self:FillPolygons()
+    EchoDebug("populating polygon hex tables...")
+    self:FillPolygonHexes()
     EchoDebug("culling empty polygons...")
-    self:CullPolygons()
-    EchoDebug("subdividing polygons...")
-    self:SubdividePolygons()
-    EchoDebug(#self.subPolygons .. " total subpolygons")
+    self:CullPolygons(self.polygons)
+    -- EchoDebug("flip-flopping subpolygons...")
+    -- self:FlipFlopSubPolygons()
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
-    EchoDebug("flip-flopping subpolygons...")
-    self:FlipFlopSubPolygons()
-    EchoDebug("flood-filling fake polygons...")
-    self:FloodFillFakePolygons()
-    EchoDebug("populating polygon tables...")
-    self:FinalFillPolygons()
-    EchoDebug("culling real polygons...")
-    self:CullPolygons()
     EchoDebug("finding polygon neighbors...")
     self:FindPolygonNeighbors()
     EchoDebug("assembling subedges...")
@@ -1699,6 +1667,10 @@ end
     -- INTERNAL METAFUNCTIONS: --
 
 function Space:InitPolygons()
+	for i = 1, self.subPolygonCount do
+		local subPolygon = Polygon(self)
+		tInsert(self.subPolygons, subPolygon)
+	end
 	for i = 1, self.polygonCount do
 		local polygon = Polygon(self)
 		tInsert(self.polygons, polygon)
@@ -1706,61 +1678,48 @@ function Space:InitPolygons()
 end
 
 
-function Space:FillPolygons(relax)
+function Space:FillSubPolygons(relax)
 	for x = 0, self.w do
 		for y = 0, self.h do
 			local hex = Hex(self, x, y, self:GetIndex(x, y))
 			hex:Place(relax)
 		end
 	end
-	self.polygonMinArea = self.iA
-	self.polygonMaxArea = 0
-	for i, polygon in pairs(self.polygons) do
-		if #polygon.hexes < self.polygonMinArea and #polygon.hexes > 0 then
-			self.polygonMinArea = #polygon.hexes
-		end
-		if #polygon.hexes > self.polygonMaxArea then
-			self.polygonMaxArea = #polygon.hexes
-		end
-	end
-	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
-	self.polygonMinArea = self.iA
-	self.polygonMaxArea = 0
 end
 
-function Space:RelaxPolygons()
-	for i, polygon in pairs(self.polygons) do
+function Space:FillPolygons()
+	for i, subPolygon in pairs(self.subPolygons) do
+		subPolygon:Place()
+	end
+end
+
+function Space:RelaxPolygons(polygons)
+	for i, polygon in pairs(polygons) do
 		polygon:RelaxToCentroid()
 	end
 end
 
-function Space:CullPolygons()
-	for i = #self.polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
-		local polygon = self.polygons[i]
-		if #polygon.hexes == 0 then
-			tRemove(self.polygons, i)
-			self.culledPolygons = self.culledPolygons + 1
-		end
+function Space:FillPolygonHexes()
+	for i, polygon in pairs(self.polygons) do
+		polygon:FillHexes()
 	end
-	EchoDebug(self.culledPolygons .. " polygons culled", #self.polygons .. " remaining")
 end
 
-function Space:SubdividePolygons()
-	self.smallestSubPolygon = 1000
-	self.biggestSubPolygon = 0
-	for i, polygon in pairs(self.polygons) do
-		polygon:Subdivide()
-		polygon.hexes = {}
+function Space:CullPolygons(polygons)
+	culled = 0
+	for i = #polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
+		local polygon = polygons[i]
+		if #polygon.hexes == 0 then
+			tRemove(polygons, i)
+			culled = culled + 1
+		end
 	end
-	EchoDebug("smallest subpolygon: " .. self.smallestSubPolygon, "biggest subpolygon: " .. self.biggestSubPolygon)
+	EchoDebug(culled .. " polygons culled", #polygons .. " remaining")
 end
 
 function Space:FindSubPolygonNeighbors()
 	for i, hex in pairs(self.hexes) do
 		hex:FindSubPolygonNeighbors()
-	end
-	for i, subPolygon in pairs(self.subPolygons) do
-		subPolygon:PopulateNeighbors()
 	end
 end
 
@@ -1813,51 +1772,13 @@ function Space:FlipFlopSubPolygons()
 	end
 end
 
-function Space:FloodFillFakePolygons()
-	-- redo polygons based on flood filling subpolygons by superpolygon
-	floodIndex = 1
-	self.floods = {}
-	for i, subPolygon in pairs(self.subPolygons) do
-		if subPolygon:FloodFillSuperPolygon(floodIndex) then
-			floodIndex = floodIndex + 1
-		end
-	end
-	for fi, flood in pairs(self.floods) do
-		local randCenter = tGetRandom(flood)
-		local superPoly = Polygon(self, randCenter.x, randCenter.y)
-		tInsert(self.polygons, superPoly)
-		local xSum, ySum, n = 0, 0, 0
-		for s, subPoly in pairs(flood) do
-			subPoly.superPolygon = superPoly
-			for h, hex in pairs(subPoly.hexes) do
-				hex.polygon = superPoly
-				xSum = xSum + hex.x
-				ySum = ySum + hex.y
-				n = n + 1
-			end
-		end
-		superPoly.x = xSum / n
-		superPoly.y = ySum / n
-	end
-end
-
-function Space:FinalFillPolygons()
-	for i, subPolygon in pairs(self.subPolygons) do
-		tInsert(subPolygon.superPolygon.subPolygons, subPolygon)
-		for i, hex in pairs(subPolygon.hexes) do
-			hex:FinalPlace()
-		end
-	end
-end
-
 function Space:FindPolygonNeighbors()
-	for i, hex in pairs(self.hexes) do
-		hex:FindPolygonNeighbors()
+	for spi, subPolygon in pairs(self.subPolygons) do
+		subPolygon:FindPolygonNeighbors()
 	end
 	self.polygonMinArea = self.iA
 	self.polygonMaxArea = 0
 	for i, polygon in pairs(self.polygons) do
-		polygon:PopulateNeighbors()
 		if #polygon.hexes < self.polygonMinArea and #polygon.hexes > 0 then
 			self.polygonMinArea = #polygon.hexes
 		end
@@ -2802,6 +2723,21 @@ end
 
 function Space:GetCollectionSize()
 	return mRandom(self.collectionSizeMin, self.collectionSizeMax), mRandom(self.subCollectionSizeMin, self.subCollectionSizeMax)
+end
+
+function Space:ClosestThing(this, things)
+	local dists = {}
+	local closestDist = self.w
+	local closestThing
+	-- find the closest point to this point
+	for i, thing in pairs(things) do
+		dists[i] = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
+		if i == 1 or dists[i] < closestDist then
+			closestDist = dists[i]
+			closestThing = thing
+		end
+	end
+	return closestThing
 end
 
 function Space:WrapDistance(x1, y1, x2, y2)
