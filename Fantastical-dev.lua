@@ -702,9 +702,11 @@ function Polygon:NearOther(value, key)
 end
 
 function Polygon:FindPolygonNeighbors()
-	for n, neighbor in pairs(self.neighbors) do -- 3 and 4 are are never there yet?
+	for n, neighbor in pairs(self.neighbors) do
 		if neighbor.superPolygon ~= self.superPolygon then
 			self.superPolygon:SetNeighbor(neighbor.superPolygon)
+			local superEdge = self.superPolygon.edges[neighbor.superPolygon] or Edge(self.superPolygon, neighbor.superPolygon)
+			superEdge:AddSubEdge(self.subEdges[neighbor])
 		end
 	end
 end
@@ -843,12 +845,13 @@ function SubEdge:Assemble()
 			end
 		end
 		local mutual = {}
+		local mut = 0
 		for d, nhex in pairs(pairHex:Neighbors()) do
 			if neighs[nhex] then
 				mutual[nhex] = d
+				mut = mut + 1
 			end
 		end
-		local newHex
 		for mhex, pdir in pairs(mutual) do
 			if mhex.edges[self] and mhex ~= lastHex then
 				newHex = mhex
@@ -860,9 +863,20 @@ function SubEdge:Assemble()
 				behindDirectionPair = pdir
 			end
 		end
+		local forwardHex, forwardDirection, forwardDirectionPair = newHex, newDirection, newDirectionPair
+		if not forwardHex then
+			for mhex, pdir in pairs(mutual) do
+				if mhex ~= behindHex then
+					forwardHex = mhex
+					forwardDirection = neighs[mhex]
+					forwardDirectionPair = pdir
+				end
+			end
+		end
+		-- if not forwardHex then EchoDebug("no forward hex", mut, hex.x .. ", " .. hex.y, pairHex.x .. ", " .. pairHex.y) end
 		local behindFlowDirection = GetFlowDirection(direction, behindDirection)
 		local forwardFlowDirection = GetFlowDirection(direction, newDirection)
-		local part = {hex = hex, pairHex = pairHex, direction = direction, behindHex = behindHex, behindDirection = behindDirection, behindDirectionPair = behindDirectionPair, behindFlowDirection = behindFlowDirection, forwardHex = newHex, forwardDirection = newDirection, forwardDirectionPair = newDirectionPair, forwardFlowDirection = forwardFlowDirection}
+		local part = {hex = hex, pairHex = pairHex, direction = direction, behindHex = behindHex, behindDirection = behindDirection, behindDirectionPair = behindDirectionPair, behindFlowDirection = behindFlowDirection, forwardHex = forwardHex, forwardDirection = forwardDirection, forwardDirectionPair = forwardDirectionPair, forwardFlowDirection = forwardFlowDirection}
 		if hex.subEdgeParts[self] == nil then hex.subEdgeParts[self] = {} end
 		if pairHex.subEdgeParts[self] == nil then pairHex.subEdgeParts[self] = {} end
 		tInsert(hex.subEdgeParts[self], part)
@@ -898,26 +912,35 @@ function SubEdge:FindConnections()
 	for i, neighbor in pairs(self.polygons[1].neighbors) do
 		neighs[neighbor] = true
 	end
+	local mut = 0
 	local mutual = {}
 	for i, neighbor in pairs(self.polygons[2].neighbors) do
 		if neighs[neighbor] then
 			mutual[neighbor] = true
+			mut = mut + 1
 		end
 	end
+	if mut ~= 2 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(mut .. " mutual neighbors ", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
+	local actual, fake = 0, 0
 	local lowHex = self.path[1].behindHex
 	local highHex = self.path[#self.path].forwardHex
 	for neighbor, yes in pairs(mutual) do
 		for p, polygon in pairs(self.polygons) do
 			local subEdge = neighbor.subEdges[polygon] or polygon.subEdges[neighbor]
-			self.connections[subEdge] = true
-			subEdge.connections[self] = true
-			if lowHex.subPolygon == neighbor then
+			fake = fake + 1
+			if lowHex and lowHex.subPolygon == neighbor then
 				self.lowConnections[subEdge] = true
-			else
+			else -- if highHex and highHex.subPolygon == neighbor then
 				self.highConnections[subEdge] = true
+			end
+			if self.highConnections[subEdge] or self.lowConnections[subEdge] then
+				self.connections[subEdge] = true
+				subEdge.connections[self] = true
+				actual = actual + 1
 			end
 		end
 	end
+	if fake ~= 4 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(fake .. " fake connections", actual .. " actual connections", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
 	--[[
 	for lowHigh = 1, 2 do
 		local hex, phex, mhex
@@ -932,6 +955,7 @@ function SubEdge:FindConnections()
 			phex = part.pairHex
 			mhex = part.forwardHex
 		end
+		-- if not mhex then EchoDebug("no mhex", lowHigh) end
 		if mhex then
 			for cedge, yes in pairs(mhex.subEdges) do
 				if cedge ~= self and (cedge.pairings[mhex][phex] or cedge.pairings[mhex][hex]) then
@@ -954,23 +978,27 @@ function SubEdge:FindConnections()
 	]]--
 end
 
-function SubEdge:FloodFillSuperEdge(polygon1, polygon2, superEdge)
+function SubEdge:FloodFillSuperEdge(superEdge)
 	if self.superEdge then return end
 	if self.polygons[1].superPolygon == self.polygons[2].superPolygon then return end
 	if not superEdge then
-		polygon1, polygon2 = self.polygons[1].superPolygon, self.polygons[2].superPolygon
-		superEdge = Edge(polygon1, polygon2)
+		superEdge = Edge(self.polygons[1].superPolygon, self.polygons[2].superPolygon)
 		superEdge:AddSubEdge(self)
 	else
-		if (self.polygons[1].superPolygon == polygon1 and self.polygons[2].superPolygon == polygon2) or (self.polygons[2].superPolygon == polygon1 and self.polygons[1].superPolygon == polygon2) then
+		if (self.polygons[1].superPolygon == superEdge.polygons[1] and self.polygons[2].superPolygon == superEdge.polygons[2]) or (self.polygons[2].superPolygon == superEdge.polygons[1] and self.polygons[1].superPolygon == superEdge.polygons[2]) then
 			superEdge:AddSubEdge(self)
 		else
-			return nil
+			return
 		end
 	end
+	local cons = 0
 	for cedge, yes in pairs(self.connections) do
-		cedge:FloodFillSuperEdge(polygon1, polygon2, superEdge)
+		if cedge:FloodFillSuperEdge(superEdge) == superEdge then cons = cons + 1 end
 	end
+	if superEdge == self.space.edges[1] then
+		EchoDebug(cons .. " connections")
+	end
+	return superEdge
 end
 
 ------------------------------------------------------------------------------
@@ -983,16 +1011,16 @@ Edge = class(function(a, polygon1, polygon2)
 	a.connections = {}
 	a.lowConnections = {}
 	a.highConnections = {}
-	if polygon1.edges[polygon2] == nil then polygon1.edges[polygon2] = {} end
-	if polygon2.edges[polygon1] == nil then polygon2.edges[polygon1] = {} end
-	tInsert(polygon1.edges[polygon2], a)
-	tInsert(polygon2.edges[polygon1], a)
+	polygon1.edges[polygon2] = a
+	polygon2.edges[polygon1] = a
 	tInsert(a.space.edges, a)
 end)
 
 function Edge:AddSubEdge(subEdge)
-	subEdge.superEdge = self
-	tInsert(self.subEdges, subEdge)
+	if subEdge.superEdge ~= self then
+		subEdge.superEdge = self
+		tInsert(self.subEdges, subEdge)
+	end
 end
 
 function Edge:DetermineOrder()
@@ -1002,6 +1030,7 @@ function Edge:DetermineOrder()
 	local it = 0
 	repeat
 		local newEdge
+		if subEdge == nil then EchoDebug(it, #self.subEdges) end
 		picked[subEdge] = true
 		local routes = 0
 		for cedge, yes in pairs(subEdge.connections) do
@@ -1010,7 +1039,7 @@ function Edge:DetermineOrder()
 				routes = routes + 1
 			end
 		end
-		if self.space.edges[1] == self then EchoDebug(routes .. " routes") end
+		if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
 		subEdge = newEdge or subEdge
 		it = it + 1
 	until not newEdge
@@ -1029,7 +1058,7 @@ function Edge:DetermineOrder()
 				routes = routes + 1
 			end
 		end
-		if self.space.edges[1] == self then EchoDebug(routes .. " routes") end
+		if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
 		subEdge = newEdge or subEdge
 	until not newEdge
 	self.highSubEdge = subEdge
@@ -1294,7 +1323,7 @@ Space = class(function(a)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
-	a.subPolygonRelaxations = 1 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity)
+	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -1416,6 +1445,8 @@ function Space:Compute()
     self:FillSubPolygons()
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
+    self:GetSubPolygonSizes()
+	EchoDebug("smallest subpolygon: " .. self.subPolygonMinArea, "largest subpolygon: " .. self.subPolygonMaxArea)
     if self.relaxations > 0 then
     	for r = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
@@ -1428,10 +1459,12 @@ function Space:Compute()
     self:FillPolygons()
     EchoDebug("populating polygon hex tables...")
     self:FillPolygonHexes()
-    EchoDebug("culling empty polygons...")
-    self:CullPolygons(self.polygons)
     -- EchoDebug("flip-flopping subpolygons...")
     -- self:FlipFlopSubPolygons()
+    EchoDebug("culling empty polygons...")
+    self:CullPolygons(self.polygons)
+    self:GetPolygonSizes()
+	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("finding polygon neighbors...")
@@ -1440,8 +1473,6 @@ function Space:Compute()
     self:AssembleSubEdges()
     EchoDebug("finding subedge connections...")
     self:FindSubEdgeConnections()
-    EchoDebug("finding edges...")
-    self:FindEdges()
     EchoDebug("assembling edges...")
     self:AssembleEdges()
     EchoDebug("picking oceans...")
@@ -1772,10 +1803,20 @@ function Space:FlipFlopSubPolygons()
 	end
 end
 
-function Space:FindPolygonNeighbors()
-	for spi, subPolygon in pairs(self.subPolygons) do
-		subPolygon:FindPolygonNeighbors()
+function Space:GetSubPolygonSizes()
+	self.subPolygonMinArea = self.iA
+	self.subPolygonMaxArea = 0
+	for i, polygon in pairs(self.subPolygons) do
+		if #polygon.hexes < self.subPolygonMinArea and #polygon.hexes > 0 then
+			self.subPolygonMinArea = #polygon.hexes
+		end
+		if #polygon.hexes > self.subPolygonMaxArea then
+			self.subPolygonMaxArea = #polygon.hexes
+		end
 	end
+end
+
+function Space:GetPolygonSizes()
 	self.polygonMinArea = self.iA
 	self.polygonMaxArea = 0
 	for i, polygon in pairs(self.polygons) do
@@ -1786,7 +1827,12 @@ function Space:FindPolygonNeighbors()
 			self.polygonMaxArea = #polygon.hexes
 		end
 	end
-	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
+end
+
+function Space:FindPolygonNeighbors()
+	for spi, subPolygon in pairs(self.subPolygons) do
+		subPolygon:FindPolygonNeighbors()
+	end
 end
 
 function Space:AssembleSubEdges()
@@ -1798,12 +1844,6 @@ end
 function Space:FindSubEdgeConnections()
 	for i, subEdge in pairs(self.subEdges) do
 		subEdge:FindConnections()
-	end
-end
-
-function Space:FindEdges()
-	for i, subEdge in pairs(self.subEdges) do
-		subEdge:FloodFillSuperEdge()
 	end
 end
 
@@ -2731,10 +2771,13 @@ function Space:ClosestThing(this, things)
 	local closestThing
 	-- find the closest point to this point
 	for i, thing in pairs(things) do
-		dists[i] = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
-		if i == 1 or dists[i] < closestDist then
-			closestDist = dists[i]
-			closestThing = thing
+		local predistx, predisty = self:WrapDistance(thing.x, thing.y, this.x, this.y)
+		if predistx < closestDist or predisty < closestDist then
+			dists[i] = self:SquaredDistance(thing.x, thing.y, this.x, this.y, predistx, predisty)
+			if i == 1 or dists[i] < closestDist then
+				closestDist = dists[i]
+				closestThing = thing
+			end
 		end
 	end
 	return closestThing
@@ -2793,8 +2836,10 @@ function Space:HexDistance(x1, y1, x2, y2)
 	return (xdist + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
 end
 
-function Space:Minkowski(x1, y1, x2, y2)
-	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+function Space:Minkowski(x1, y1, x2, y2, xdist, ydist)
+	if not xdist then
+		xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+	end
 	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
 end
 
