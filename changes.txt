@@ -1,6 +1,4 @@
-- draw major rivers from mountains (store the whole river, so that if it never connects to the coast, erase it)
-- draw some minor (subpolygon border) rivers directly from the coast, after major rivers
-- draw minor minor rivers last, without any regard for polygon or subpolygon borders
+- draw tiny rivers last, without any regard for polygon or subpolygon borders
 - add river chance (chance of a river seed being grown)
 	- rainfall modifies river chance?
 - add flood plains to deserts
@@ -10,6 +8,8 @@
 - does wonder placement fix work in game?
 
 DONE
+- draw some minor (subpolygon border) rivers directly from the coast, after major rivers
+- draw major rivers from mountains (store the whole river, so that if it never connects to the coast, erase it)
 - re-add subpolygon minor rivers, including flowing out of smal llakes
 - fix major river drawing
 - build subpolygons first (slowwww), and polygons built of closest subpolygons
