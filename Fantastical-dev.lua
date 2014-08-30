@@ -1347,10 +1347,9 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.majorRiverRatio = 1.0 -- ratio of total major rivers possible to actually create
-	a.minorRiverRatio = 1.0 -- ratio of total minor rivers possible to actually create
-	a.minorRiverLengthMin = 5
-	a.minorRiverLengthMax = 20
+	a.majorRiverPercent = 33 -- percent of total major (polygon level) rivers possible to actually create
+	a.minorRiverPercent = 50 -- percent of total minor (subpolygon level) rivers possible to actually create
+	a.tinyRiverPercent = 66 -- percent of total tiny (hex level) rivers possible to actually create
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
@@ -1507,20 +1506,12 @@ function Space:Compute()
 	self:PickRegions()
 	EchoDebug("filling regions...")
 	self:FillRegions()
-	-- EchoDebug("finding potential rivers...")
-	-- self:FindPotentialRivers()
-	-- EchoDebug("picking major rivers...")
-	-- self:PickMajorRivers()
-	-- EchoDebug("picking minor rivers...")
-	-- self:PickMinorRivers()
 	EchoDebug("computing landforms...")
 	self:ComputeLandforms()
 	EchoDebug("computing ocean temperatures...")
 	self:ComputeOceanTemperatures()
 	EchoDebug("computing coasts...")
 	self:ComputeCoasts()
-	-- EchoDebug("computing rivers...")
-	-- self:ComputeRivers()
 	EchoDebug("finding river seeds...")
 	self:FindRiverSeeds()
 	EchoDebug("drawing major rivers...")
@@ -1674,6 +1665,8 @@ function Space:FillSubPolygons(relax)
 			local hex = Hex(self, x, y, self:GetIndex(x, y))
 			hex:Place(relax)
 		end
+		local percent = mFloor((x / self.w) * 100)
+		if percent % 10 == 0 and percent > 0 then EchoDebug(percent .. "%") end
 	end
 end
 
@@ -2333,83 +2326,17 @@ function Space:FillRegions()
 	end
 end
 
-function Space:FindPotentialRivers()
-	self.regionEdges = {}
-	self.regionEdgesDrain = {}
-	self.edgesDrain = {}
-	for i, edge in pairs(self.edges) do
-		if edge.polygons[1].continent and edge.polygons[2].continent then -- and not edge.polygons[1].region.lakey and not edge.polygons[2].region.lakey then
-			edge.continental = true
-			if edge.polygons[1].region ~= edge.polygons[2].region and edge.polygons[1].region and edge.polygons[2].region then
-				edge.regionEdge = true
-				tInsert(self.regionEdges, edge)
-			end
-			-- check high and low hexes's mutual neighbors to see if the edge connects to water
-			for lowHigh = 1, 2 do
-				local hex, phex, pdir, mhex, mdir
-				if lowHigh == 1 then
-					local part = edge.lowSubEdge.path[1]
-					hex = part.hex
-					phex = part.pairHex
-					pdir = part.direction
-					mhex = part.behindHex
-					mdir = part.behindDirection
-				else
-					local part = edge.highSubEdge.path[#edge.highSubEdge.path]
-					hex = part.hex
-					phex = part.pairHex
-					pdir = part.direction
-					mhex = part.forwardHex
-					mdir = part.forwardDirection
-					mpdir = part.forwardDirectionPair
-				end
-				if mhex and not mhex.polygon.continent then
-					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mdir, waterDirectionPair = mpdir, waterHex = mhex}
-					if lowHigh == 1 then edge.drainsLow = true else edge.drainsHigh = true end
-				end
-			end
-			if edge.drainsToWater then
-				if edge.drainsLow and edge.drainsHigh then
-					self.drainsToWater = nil
-					self.ismuthCross = true
-				else
-					if edge.regionEdge then tInsert(self.regionEdgesDrain, edge) end
-					tInsert(self.edgesDrain, edge)
-				end
-			end
-		end
-	end
-	EchoDebug(#self.edgesDrain)
-end
-
-function Space:MutualNeighbors(hex, pairHex, neighs)
-	if not neighs then
-		neighs = {}
-		for d, nhex in pairs(hex:Neighbors()) do
-			if nhex ~= pairHex then
-				neighs[nhex] = d
-			end
-		end
-	end
-	local mutual = {}
-	for d, nhex in pairs(pairHex:Neighbors()) do
-		if neighs[nhex] then
-			mutual[nhex] = d
-		end
-	end
-end
-
 function Space:FindRiverSeeds()
 	self.majorRiverSeeds = {}
 	self.minorRiverSeeds = {}
 	self.tinyRiverSeeds = {}
 	for ih, hex in pairs(self.hexes) do
-		if hex.polygon.continent and not hex.subPolygon.lake then
+		if (hex.polygon.continent and not hex.subPolygon.lake) or hex.subPolygon.tinyIsland then
 			local neighs, polygonNeighs, subPolygonNeighs, hexNeighs, oceanNeighs, lakeNeighs, mountainNeighs = {}, {}, {}, {}, {}, {}, {}
 			for d, nhex in pairs(hex:Neighbors()) do
 				if nhex.subPolygon.lake then
 					lakeNeighs[nhex] = d
-				elseif not nhex.polygon.continent then
+				elseif not nhex.polygon.continent and not nhex.subPolygon.tinyIsland then
 					oceanNeighs[nhex] = d
 				else
 					if nhex.polygon ~= hex.polygon then
@@ -2434,7 +2361,6 @@ function Space:FindRiverSeeds()
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if nnhex ~= hex then
 						local inTheHills = (nnhex.plotType == plotMountain or nnhex.plotType == plotHills) and nhexInHills and hexInHills
-						if inTheHills then EchoDebug(hex, nhex, nnhex) end
 						if (mountainNeighs[nnhex] or lakeNeighs[nnhex]) or inTheHills then
 							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex] }
 							if mountainNeighs[nnhex] then
@@ -2471,11 +2397,14 @@ function Space:FindRiverSeeds()
 			end
 		end
 	end
-	EchoDebug(#self.majorRiverSeeds, #self.minorRiverSeeds, #self.tinyRiverSeeds)
+	EchoDebug(#self.majorRiverSeeds .. " major", #self.minorRiverSeeds .. " minor", #self.tinyRiverSeeds .. " tiny")
 end
 
 function Space:DrawMajorRivers()
-	for is, seed in pairs(self.majorRiverSeeds) do
+	local drawnMajorRivers = 0
+	local undrawnMajorRivers = 0
+	repeat
+		local seed = tRemoveRandom(self.majorRiverSeeds)
 		local hex = seed.hex
 		local pairHex = seed.pairHex
 		local direction = seed.direction
@@ -2483,16 +2412,17 @@ function Space:DrawMajorRivers()
 		local lastDirection = seed.lastDirection
 		local river = {}
 		local onRiver = {}
+		local minorRiverSeedsToBe = {}
 		local connectsToOcean
 		local it = 0
 		repeat
 			if it == 0 then
 				if hex.onRiver[pairHex] or pairHex.onRiver[hex] then
-					EchoDebug("SEED ALREADY ON RIVER")
+					-- EchoDebug("SEED ALREADY ON RIVER")
 					break
 				end
 				if hex.onRiver[lastHex] or pairHex.onRiver[lastHex] or lastHex.onRiver[hex] or lastHex.onRiver[pairHex] then
-					EchoDebug("SEED ALREADY CONNECTS TO RIVER")
+					-- EchoDebug("SEED ALREADY CONNECTS TO RIVER")
 					break
 				end
 			end
@@ -2512,12 +2442,12 @@ function Space:DrawMajorRivers()
 			end
 			if newHex and ((hex.polygon ~= newHex.polygon and (hex.onRiver[newHex] or newHex.onRiver[hex])) or (pairHex.polygon ~= newHex.polygon and (pairHex.onRiver[newHex] or newHex.onRiver[pairHex]))) then
 				tRemove(self.minorRiverSeeds, #self.minorRiverSeeds)
-				EchoDebug("FLOWS INTO TO ANOTHER RIVER")
+				-- EchoDebug("FLOWS INTO TO ANOTHER RIVER")
 				break
 			end
 			if newHex and newHex.subPolygon.lake then
 				tRemove(self.minorRiverSeeds, #self.minorRiverSeeds)
-				EchoDebug("GOES BY A LAKE")
+				-- EchoDebug("GOES BY A LAKE")
 				break
 			end
 			local flowDirection = GetFlowDirection(direction, lastDirection)
@@ -2537,9 +2467,9 @@ function Space:DrawMajorRivers()
 				break
 			end
 			if hex.polygon == newHex.polygon and hex.subPolygon ~= newHex.subPolygon then
-				tInsert(self.minorRiverSeeds, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
+				tInsert(minorRiverSeedsToBe, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
 			elseif pairHex.polygon == newHex.polygon and pairHex.subPolygon ~= newHex.subPolygon then
-				tInsert(self.minorRiverSeeds, {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction)})
+				tInsert(minorRiverSeedsToBe, {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction)})
 			end
 			if hex.polygon ~= newHex.polygon then
 				lastHex = pairHex
@@ -2553,30 +2483,43 @@ function Space:DrawMajorRivers()
 				pairHex = newHex
 				direction = newDirectionPair
 			else
-				EchoDebug("NO WAY TO A POLYGON EDGE")
+				-- EchoDebug("NO WAY TO A POLYGON EDGE")
 				break
 			end
 			it = it + 1
 		until not newHex or it > 1000
-		EchoDebug(it)
+		-- EchoDebug(it)
+		local drawIt = Map.Rand(100, "major river chance") < self.majorRiverPercent
 		if connectsToOcean then
-			EchoDebug("major river connects to ocean, setting ofrivers...")
-			for f, flow in pairs(river) do
-				if flow.hex.ofRiver == nil then flow.hex.ofRiver = {} end
-				flow.hex.ofRiver[flow.direction] = flow.flowDirection
+			-- EchoDebug("major river connects to ocean, adding to possible rivers...")
+			if drawIt then
+				for f, flow in pairs(river) do
+					if flow.hex.ofRiver == nil then flow.hex.ofRiver = {} end
+					flow.hex.ofRiver[flow.direction] = flow.flowDirection
+				end
+				for mrsi, seed in pairs(minorRiverSeedsToBe) do
+					tInsert(self.minorRiverSeeds, seed)
+				end
+				drawnMajorRivers = drawnMajorRivers + 1
 			end
-		else
-			EchoDebug("major river does not connect to ocean, dropping")
+			undrawnMajorRivers = undrawnMajorRivers + 1
+		end
+		if not connectsToOcean or not drawIt then
+			-- EchoDebug("major river does not connect to ocean or dropped by chance, dropping")
 			for hex, pairHex in pairs(onRiver) do
 				hex.onRiver[pairHex] = nil
 				pairHex.onRiver[hex] = nil
 			end
 		end
-	end
+	until #self.majorRiverSeeds == 0
+	EchoDebug(drawnMajorRivers .. " major rivers drawn of " .. drawnMajorRivers + undrawnMajorRivers .. " possible")
 end
 
 function Space:DrawMinorRivers()
-	for is, seed in pairs(self.minorRiverSeeds) do
+	local minorRiverSeedsToRemain = mFloor( #self.minorRiverSeeds - ((self.minorRiverPercent / 100) * #self.minorRiverSeeds) )
+	EchoDebug(minorRiverSeedsToRemain .. " minor river seeds to remain")
+	repeat
+		local seed = tRemoveRandom(self.minorRiverSeeds)
 		local hex = seed.hex
 		local pairHex = seed.pairHex
 		local direction = seed.direction
@@ -2587,7 +2530,7 @@ function Space:DrawMinorRivers()
 		repeat
 			if it == 0 then
 				if hex.onRiver[pairHex] or pairHex.onRiver[hex] then
-					EchoDebug("SEED ALREADY ON RIVER")
+					-- EchoDebug("SEED ALREADY ON RIVER")
 					break
 				end
 			end
@@ -2606,7 +2549,7 @@ function Space:DrawMinorRivers()
 				end
 			end
 			if newHex and (not newHex.polygon.continent or newHex.subPolygon.lake) then
-				EchoDebug("WOULD CONNECT TO WATER")
+				-- EchoDebug("WOULD CONNECT TO WATER")
 				break
 			end
 			if newHex and ((hex.subPolygon ~= newHex.subPolygon and hex.onRiver[newHex]) or (pairHex.subPolygon ~= newHex.subPolygon and pairHex.onRiver[newHex])) then
@@ -2615,7 +2558,7 @@ function Space:DrawMinorRivers()
 					hex.onRiver[lastHex] = nil
 					if lastOfRiver then lastOfRiver.hex.ofRiver[lastOfRiver.direction] = nil end
 				end
-				EchoDebug("FLOWS FROM ANOTHER RIVER")
+				-- EchoDebug("FLOWS FROM ANOTHER RIVER")
 				break
 			end
 			local flowDirection = GetFlowDirection(direction, lastDirection)
@@ -2650,12 +2593,14 @@ function Space:DrawMinorRivers()
 				pairHex = newHex
 				direction = newDirectionPair
 			else
-				EchoDebug("NO WAY TO A SUBPOLYGON EDGE")
+				-- EchoDebug("NO WAY TO A SUBPOLYGON EDGE")
 				break
 			end
 			it = it + 1
 		until not newHex
-	end
+		-- EchoDebug(it)
+	until #self.minorRiverSeeds <= minorRiverSeedsToRemain or #self.minorRiverSeeds == 0
+	EchoDebug(#self.minorRiverSeeds .. " minor river seeds remaining")
 	EchoDebug(#self.tinyRiverSeeds .. " tiny river seeds")
 end
 

@@ -1,6 +1,5 @@
 - draw tiny rivers last, without any regard for polygon or subpolygon borders
-- add river chance (chance of a river seed being grown)
-	- rainfall modifies river chance?
+- rainfall modifies river chance?
 - add flood plains to deserts
 - optional roads?
 - make coastal ice not interfere with navigation?
@@ -8,6 +7,7 @@
 - does wonder placement fix work in game?
 
 DONE
+- add river chance (chance of a river seed being grown)
 - draw some minor (subpolygon border) rivers directly from the coast, after major rivers
 - draw major rivers from mountains (store the whole river, so that if it never connects to the coast, erase it)
 - re-add subpolygon minor rivers, including flowing out of smal llakes
