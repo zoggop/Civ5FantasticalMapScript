@@ -398,7 +398,7 @@ Hex = class(function(a, space, x, y, index)
 	a.subEdgeParts = {}
 	a.edges = {}
 	a.subEdges = {}
-	a.riverDirection = {}
+	a.onRiver = {}
 end)
 
 function Hex:Place(relax)
@@ -1497,8 +1497,8 @@ function Space:Compute()
 	self:FillRegions()
 	EchoDebug("finding potential rivers...")
 	self:FindPotentialRivers()
-	EchoDebug("picking major rivers...")
-	self:PickMajorRivers()
+	-- EchoDebug("picking major rivers...")
+	-- self:PickMajorRivers()
 	-- EchoDebug("picking minor rivers...")
 	-- self:PickMinorRivers()
 	EchoDebug("computing landforms...")
@@ -1507,8 +1507,10 @@ function Space:Compute()
 	self:ComputeOceanTemperatures()
 	EchoDebug("computing coasts...")
 	self:ComputeCoasts()
-	EchoDebug("computing rivers...")
-	self:ComputeRivers()
+	-- EchoDebug("computing rivers...")
+	-- self:ComputeRivers()
+	EchoDebug("drawing major rivers...")
+	self:DrawMajorRivers()
 end
 
 function Space:ComputeLandforms()
@@ -1580,65 +1582,6 @@ function Space:ComputeCoasts()
 				for hi, hex in pairs(subPolygon.hexes) do
 					if (ice and self:GimmeIce(subPolygon.oceanTemperature)) or (self.useMapLatitudes and self.polarExponent >= 1.0 and (hex.y == self.h or hex.y == 0)) then hex.featureType = featureIce end
 					hex.terrainType = terrainOcean
-				end
-			end
-		end
-	end
-end
-
-function Space:ComputeRivers()
-	for i, river in pairs(self.majorRivers) do
-		local low = river[1].drainsLow
-		for e, edge in pairs(river) do
-			local edgeFlowsLow = (e == 1 and edge.drainsLow) or edge.lowConnections[river[e-1]]
-			for se, subEdge in pairs(edge.orderedSubEdges) do
-				local subEdgeFlowsLow = not subEdge.superEdgeLow
-				for p, part in pairs(subEdge.path) do
-					local flowDirection
-					if edgeFlowsLow == subEdgeFlowsLow then
-						flowDirection = part.forwardFlowDirection
-					else
-						flowDirection = part.behindFlowDirection
-					end
-					if OfRiverDirection(part.direction) then
-						if part.hex.ofRiver == nil then part.hex.ofRiver = {} end
-						part.hex.ofRiver[OppositeDirection(part.direction)] = flowDirection
-					else
-						if part.pairHex.ofRiver == nil then part.pairHex.ofRiver = {} end
-						part.pairHex.ofRiver[part.direction] = flowDirection
-					end
-				end
-			end
-		end
-	end
-	if 1 then return nil end -- no minor rivers yet
-	for mr, majorRiver in pairs(self.majorRivers) do
-		local minorRivers = self.minorRivers[majorRiver]
-		if minorRivers ~= nil then
-			for r, river in pairs(minorRivers) do
-				for e, edge in ipairs(river) do
-					local low
-					if river[e+1] ~= nil then
-						low = edge.lowConnections[river[e+1]]
-					elseif river[e-1] ~= nil then
-						low = edge.highConnections[river[e-1]]
-					else
-						low = self.minorRiverForksLowHigh[river]
-					end
-					local from, to, inc = 1, #edge.path, 1
-					if low then from, to, inc = #edge.path, 1, -1 end
-					for p = from, to, inc do
-						local part = edge.path[p]
-						for h, hex in pairs(part.hexes) do
-							if edge.hexOfRiver[hex] then
-								if hex.ofRiver == nil then hex.ofRiver = {} end
-								for direction, yes in pairs(edge.hexOfRiver[hex]) do
-									hex.ofRiver[direction] = true
-								end
-								hex.riverDirection = part.nextDirection
-							end
-						end
-					end
 				end
 			end
 		end
@@ -2402,9 +2345,10 @@ function Space:FindPotentialRivers()
 					pdir = part.direction
 					mhex = part.forwardHex
 					mdir = part.forwardDirection
+					mpdir = part.forwardDirectionPair
 				end
 				if mhex and not mhex.polygon.continent then
-					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mdir, waterHex = mhex}
+					edge.drainsToWater = {hex = hex, pairHex = phex, direction = pdir, waterDirection = mdir, waterDirectionPair = mpdir, waterHex = mhex}
 					if lowHigh == 1 then edge.drainsLow = true else edge.drainsHigh = true end
 				end
 			end
@@ -2420,177 +2364,73 @@ function Space:FindPotentialRivers()
 		end
 	end
 	EchoDebug(#self.edgesDrain)
-	-- look for potential minor rivers (subedges)
-	--[[
-	self.subEdgesFork = {}
-	for i, edge in pairs(self.subEdges) do
-		edge.superEdge = edge.polygons[1].superPolygon.edges[edge.polygons[2].superPolygon]
-		if edge.polygons[1].superPolygon.continent and edge.polygons[2].superPolygon.continent and not edge.polygons[1].lake and not edge.polygons[2].lake then
-			edge.continental = true
-			local waterPolys = {}
-			for n, neighbor in pairs(edge.polygons[1].neighbors) do
-				if not neighbor.superPolygon.continent then
-					waterPolys[neighbor] = true
-				end
-			end
-			for n, neighbor in pairs(edge.polygons[2].neighbors) do
-				if waterPolys[neighbor] then
-					edge.drainsToWater = true
-					break
-				end
-			end
-			if not edge.drainsToWater then
-				edge.highForks, edge.lowForks, edge.forks = {}, {}, {}
-				for c, cedge in pairs(edge.highConnections) do
-					if cedge.polygons[1].superPolygon ~= cedge.polygons[2].superPolygon then
-						local superEdge = cedge.polygons[1].superPolygon.edges[cedge.polygons[2].superPolygon]
-						edge.highForks[superEdge] = true
-						edge.forks[superEdge] = true
-						if self.subEdgesFork[superEdge] == nil then self.subEdgesFork[superEdge] = {} end
-						self.subEdgesFork[superEdge][edge] = 2 -- 2 is high, 1 is low
-						edge.isFork = true
-					end
-				end
-				for c, cedge in pairs(edge.lowConnections) do
-					if cedge.polygons[1].superPolygon ~= cedge.polygons[2].superPolygon then
-						local superEdge = cedge.polygons[1].superPolygon.edges[cedge.polygons[2].superPolygon]
-						edge.lowForks[superEdge] = true
-						edge.forks[superEdge] = true
-						if self.subEdgesFork[superEdge] == nil then self.subEdgesFork[superEdge] = {} end
-						self.subEdgesFork[superEdge][edge] = 1 -- 2 is high, 1 is low
-						edge.isFork = true
-					end
-				end
-			end
-		end
-	end
-	]]--
 end
 
-function Space:CanBeOnTheMajorRiver(cedge, edge)
-	if cedge.continental and not cedge.river and not cedge.ismuthCross and (not edge or not cedge.drainsToWater) then
-		for ccedge, yes in pairs(cedge.connections) do
-			if ccedge ~= edge and ccedge.river then
-				return false
-			elseif ccedge.mountains then
-				return 1
-			end
-		end
-		return 2
-	end
-	return false
-end
-
-function Space:PickMajorRivers()
-	self.majorRiversMax = #self.edgesDrain * self.majorRiverRatio
-	local edgeBuffer = tDuplicate(self.edgesDrain)
-	while #edgeBuffer > 0 and #self.majorRivers < self.majorRiversMax do
-		local river = {}
-		local edge
+function Space:DrawMajorRivers()
+	for ie, edge in pairs(self.edgesDrain) do
+		local drain = edge.drainsToWater
+		local hex = drain.hex
+		local pairHex = drain.pairHex
+		local direction = drain.direction
+		local lastHex = drain.waterHex
+		local lastDirection = drain.waterDirection
+		local lastOfRiver
+		local it = 0
 		repeat
-			edge = tRemoveRandom(edgeBuffer)
-			if self:CanBeOnTheMajorRiver(edge) then
+			local newHex, newDirection, newDirectionPair
+			local neighs = {}
+			for d, nhex in pairs(hex:Neighbors()) do
+				if nhex ~= pairHex then
+					neighs[nhex] = d
+				end
+			end
+			for d, nhex in pairs(pairHex:Neighbors()) do
+				if neighs[nhex] and nhex ~= lastHex then
+					newHex = nhex
+					newDirection = neighs[nhex]
+					newDirectionPair = d
+				end
+			end
+			local inTheHills = newHex and (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
+			if newHex and (not newHex.polygon.continent or newHex.subPolygon.lake or newHex.plotType == plotMountain or inTheHills) then break end
+			if newHex and ((hex.polygon ~= newHex.polygon and hex.onRiver[newHex]) or (pairHex.polygon ~= newHex.polygon and pairHex.onRiver[newHex])) then
+				lastHex.onRiver[hex] = nil
+				hex.onRiver[lastHex] = nil
+				if lastOfRiver then lastOfRiver.hex.ofRiver[lastOfRiver.direction] = nil end
+				EchoDebug("CONNECTS TO ANOTHER RIVER")
 				break
+			end
+			local flowDirection = GetFlowDirection(direction, lastDirection)
+			EchoDebug(ie, it)
+			if OfRiverDirection(direction) then
+				if hex.ofRiver == nil then hex.ofRiver = {} end
+				hex.ofRiver[OppositeDirection(direction)] = flowDirection
+				lastOfRiver = { hex = hex, direction = OppositeDirection(direction), flowDirection = flowDirection }
 			else
-				edge = nil
+				if pairHex.ofRiver == nil then pairHex.ofRiver = {} end
+				pairHex.ofRiver[direction] = flowDirection
+				lastOfRiver = { hex = pairHex, direction = direction, flowDirection = flowDirection }
 			end
-		until #edgeBuffer == 0
-		if edge then
-			local n = 0
-			repeat
-				if n > 0 then
-					local upstream = {}
-					for cedge, yes in pairs(edge.connections) do
-						local can = self:CanBeOnTheMajorRiver(cedge, edge)
-						if can == 1 then
-							upstream = { cedge }
-						elseif can == 2 then
-							tInsert(upstream, cedge)
-						end
-					end
-					if #upstream == 0 then
-						edge = nil
-						break
-					end
-					edge = tGetRandom(upstream)
-				end
-				edge.majorRiver = true
-				edge.river = river
-				tInsert(river, edge)
-				n = n + 1
-			until not edge or edge.mountains
-			if #river > 0 then -- edge and edge.mountains and
-				EchoDebug(#river)
-				tInsert(self.majorRivers, river)
+			hex.onRiver[pairHex] = true
+			pairHex.onRiver[hex] = true
+			if not newHex then break end
+			if hex.polygon ~= newHex.polygon then
+				lastHex = pairHex
+				lastDirection = direction
+				pairHex = newHex
+				direction = newDirection
+			elseif pairHex.polygon ~= newHex.polygon then
+				lastHex = hex
+				lastDirection = OppositeDirection(direction)
+				hex = pairHex
+				pairHex = newHex
+				direction = newDirectionPair
 			else
-				for e, ed in pairs(river) do
-					ed.majorRiver = nil
-					ed.river = nil
-				end
+				EchoDebug("NO WAY TO A POLYGON EDGE")
+				break
 			end
-		end
-	end
-end
-
-function Space:CanBeOnTheMinorRiver(cedge, edge)
-	if cedge.continental and not cedge.river and not cedge.isFork and not cedge.drainsToWater and (not cedge.superEdge or (not cedge.superEdge.river and not cedge.superEdge.ismuthCross)) then
-		local badConnection = false
-		for ccedge, yes in pairs(cedge.connections) do
-			badConnection = ccedge ~= edge and (ccedge.river or (ccedge.superEdge and ccedge.superEdge.river))
-			if badConnection then break end
-		end
-		return not badConnection
-	end
-	return false
-end
-
-function Space:PickMinorRivers()
-	self.minorRiverForksLowHigh = {}
-	for mr, majorRiver in pairs(self.majorRivers) do
-		local subEdgeBuffer = {}
-		for e, edge in pairs(majorRiver) do
-			if self.subEdgesFork[edge] ~= nil then
-				for subEdge, lowHigh in pairs(self.subEdgesFork[edge]) do
-					tInsert(subEdgeBuffer, {subEdge = subEdge, lowHigh = lowHigh})
-				end
-			end
-		end
-		minorRiversMax = #subEdgeBuffer * self.minorRiverRatio
-		self.minorRivers[majorRiver] = {}
-		while #subEdgeBuffer > 0 and #self.minorRivers[majorRiver] < minorRiversMax do
-			local river = {}
-			local riverLength = mRandom(self.minorRiverLengthMin, self.minorRiverLengthMax)
-			local edgeContainer = tRemoveRandom(subEdgeBuffer)
-			local edge, lowHigh = edgeContainer.subEdge, edgeContainer.lowHigh
-			local n = 0
-			repeat
-				if n > 0 then
-					local downstream = {}
-					for cedge, yes in pairs(edge.connections) do
-						if self:CanBeOnTheMinorRiver(cedge, edge) then tInsert(downstream, cedge) end
-					end
-					if #downstream == 0 then
-						edge = nil
-						break
-					end
-					edge = tGetRandom(downstream)
-				end
-				edge.minorRiver = true
-				edge.river = river
-				tInsert(river, edge)
-				n = n + 1
-			until not edge or n > riverLength
-			if #river > 0 then
-				tInsert(self.minorRivers[majorRiver], river)
-				self.minorRiverForksLowHigh[river] = lowHigh
-			else
-				for e, ed in pairs(river) do
-					ed.minorRiver = nil
-					ed.river = nil
-				end
-			end
-		end
-		EchoDebug(#self.minorRivers[majorRiver])
+			it = it + 1
+		until not newHex
 	end
 end
 

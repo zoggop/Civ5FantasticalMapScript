@@ -1,12 +1,12 @@
-- fix edge-to-edge connections and thereby rivers
-- re-add subpolygon minor rivers, including flowing into and out of small lakes
 - add flood plains to deserts
+- re-add subpolygon minor rivers, including flowing into and out of small lakes
 - optional roads?
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- fix major river drawing
 - build subpolygons first (slowwww), and polygons built of closest subpolygons
 - mountain ranges based on subpolygons along the edge, so that they scale better
 - give rivers flow directions
