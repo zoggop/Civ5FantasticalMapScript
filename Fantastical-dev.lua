@@ -920,7 +920,7 @@ function SubEdge:FindConnections()
 			mut = mut + 1
 		end
 	end
-	if mut ~= 2 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(mut .. " mutual neighbors ", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
+	-- if mut ~= 2 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(mut .. " mutual neighbors ", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
 	local actual, fake = 0, 0
 	local lowHex = self.path[1].behindHex
 	local highHex = self.path[#self.path].forwardHex
@@ -940,7 +940,7 @@ function SubEdge:FindConnections()
 			end
 		end
 	end
-	if fake ~= 4 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(fake .. " fake connections", actual .. " actual connections", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
+	-- if fake ~= 4 and not (self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY) then EchoDebug(fake .. " fake connections", actual .. " actual connections", tostring(self.polygons[1].topY or self.polygons[1].bottomY or self.polygons[2].topY or self.polygons[2].bottomY)) end
 	--[[
 	for lowHigh = 1, 2 do
 		local hex, phex, mhex
@@ -1039,7 +1039,7 @@ function Edge:DetermineOrder()
 				routes = routes + 1
 			end
 		end
-		if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
+		-- if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
 		subEdge = newEdge or subEdge
 		it = it + 1
 	until not newEdge
@@ -1058,7 +1058,7 @@ function Edge:DetermineOrder()
 				routes = routes + 1
 			end
 		end
-		if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
+		-- if self.space.edges[1] == self then EchoDebug(routes .. " routes", subEdge.polygons[1].superPolygon, subEdge.polygons[2].superPolygon) end
 		subEdge = newEdge or subEdge
 	until not newEdge
 	self.highSubEdge = subEdge
@@ -1511,6 +1511,8 @@ function Space:Compute()
 	-- self:ComputeRivers()
 	EchoDebug("drawing major rivers...")
 	self:DrawMajorRivers()
+	EchoDebug("drawing minor rivers...")
+	self:DrawMinorRivers()
 end
 
 function Space:ComputeLandforms()
@@ -2322,7 +2324,7 @@ function Space:FindPotentialRivers()
 	self.regionEdgesDrain = {}
 	self.edgesDrain = {}
 	for i, edge in pairs(self.edges) do
-		if edge.polygons[1].continent and edge.polygons[2].continent and not edge.polygons[1].region.lakey and not edge.polygons[2].region.lakey then
+		if edge.polygons[1].continent and edge.polygons[2].continent then -- and not edge.polygons[1].region.lakey and not edge.polygons[2].region.lakey then
 			edge.continental = true
 			if edge.polygons[1].region ~= edge.polygons[2].region and edge.polygons[1].region and edge.polygons[2].region then
 				edge.regionEdge = true
@@ -2367,6 +2369,7 @@ function Space:FindPotentialRivers()
 end
 
 function Space:DrawMajorRivers()
+	self.minorRiverSeeds = {}
 	for ie, edge in pairs(self.edgesDrain) do
 		local drain = edge.drainsToWater
 		local hex = drain.hex
@@ -2391,9 +2394,82 @@ function Space:DrawMajorRivers()
 					newDirectionPair = d
 				end
 			end
-			local inTheHills = newHex and (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
-			if newHex and (not newHex.polygon.continent or newHex.subPolygon.lake or newHex.plotType == plotMountain or inTheHills) then break end
+			if newHex and not newHex.polygon.continent then break end
 			if newHex and ((hex.polygon ~= newHex.polygon and hex.onRiver[newHex]) or (pairHex.polygon ~= newHex.polygon and pairHex.onRiver[newHex])) then
+				lastHex.onRiver[hex] = nil
+				hex.onRiver[lastHex] = nil
+				if lastOfRiver then lastOfRiver.hex.ofRiver[lastOfRiver.direction] = nil end
+				tRemove(self.minorRiverSeeds, #self.minorRiverSeeds)
+				EchoDebug("CONNECTS TO ANOTHER RIVER")
+				break
+			end
+			local flowDirection = GetFlowDirection(direction, lastDirection)
+			EchoDebug(ie, it)
+			if OfRiverDirection(direction) then
+				if hex.ofRiver == nil then hex.ofRiver = {} end
+				hex.ofRiver[OppositeDirection(direction)] = flowDirection
+				lastOfRiver = { hex = hex, direction = OppositeDirection(direction), flowDirection = flowDirection }
+			else
+				if pairHex.ofRiver == nil then pairHex.ofRiver = {} end
+				pairHex.ofRiver[direction] = flowDirection
+				lastOfRiver = { hex = pairHex, direction = direction, flowDirection = flowDirection }
+			end
+			hex.onRiver[pairHex] = true
+			pairHex.onRiver[hex] = true
+			if not newHex then break end
+			local inTheHills = (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
+			if newHex.plotType == plotMountain or inTheHills or newHex.subPolygon.lake then break end
+			if hex.polygon == newHex.polygon and hex.subPolygon ~= newHex.subPolygon then
+				tInsert(self.minorRiverSeeds, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
+			elseif pairHex.polygon == newHex.polygon and pairHex.subPolygon ~= newHex.subPolygon then
+				tInsert(self.minorRiverSeeds, {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction)})
+			end
+			if hex.polygon ~= newHex.polygon then
+				lastHex = pairHex
+				lastDirection = direction
+				pairHex = newHex
+				direction = newDirection
+			elseif pairHex.polygon ~= newHex.polygon then
+				lastHex = hex
+				lastDirection = OppositeDirection(direction)
+				hex = pairHex
+				pairHex = newHex
+				direction = newDirectionPair
+			else
+				EchoDebug("NO WAY TO A POLYGON EDGE")
+				break
+			end
+			it = it + 1
+		until not newHex
+	end
+end
+
+function Space:DrawMinorRivers()
+	for is, seed in pairs(self.minorRiverSeeds) do
+		local hex = seed.hex
+		local pairHex = seed.pairHex
+		local direction = seed.direction
+		local lastHex = seed.lastHex
+		local lastDirection = seed.lastDirection
+		local lastOfRiver
+		local it = 0
+		repeat
+			local newHex, newDirection, newDirectionPair
+			local neighs = {}
+			for d, nhex in pairs(hex:Neighbors()) do
+				if nhex ~= pairHex then
+					neighs[nhex] = d
+				end
+			end
+			for d, nhex in pairs(pairHex:Neighbors()) do
+				if neighs[nhex] and nhex ~= lastHex then
+					newHex = nhex
+					newDirection = neighs[nhex]
+					newDirectionPair = d
+				end
+			end
+			if newHex and (not newHex.polygon.continent or newHex.subPolygon.lake) then break end
+			if newHex and ((hex.subPolygon ~= newHex.subPolygon and hex.onRiver[newHex]) or (pairHex.subPolygon ~= newHex.subPolygon and pairHex.onRiver[newHex])) then
 				lastHex.onRiver[hex] = nil
 				hex.onRiver[lastHex] = nil
 				if lastOfRiver then lastOfRiver.hex.ofRiver[lastOfRiver.direction] = nil end
@@ -2414,12 +2490,14 @@ function Space:DrawMajorRivers()
 			hex.onRiver[pairHex] = true
 			pairHex.onRiver[hex] = true
 			if not newHex then break end
-			if hex.polygon ~= newHex.polygon then
+			local inTheHills = (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
+			if newHex.plotType == plotMountain or inTheHills then break end
+			if hex.subPolygon ~= newHex.subPolygon then
 				lastHex = pairHex
 				lastDirection = direction
 				pairHex = newHex
 				direction = newDirection
-			elseif pairHex.polygon ~= newHex.polygon then
+			elseif pairHex.subPolygon ~= newHex.subPolygon then
 				lastHex = hex
 				lastDirection = OppositeDirection(direction)
 				hex = pairHex
@@ -2528,7 +2606,7 @@ function Space:AdjustMountains()
 	self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
 	EchoDebug(#self.mountainHexes, self.mountainArea)
 	-- first expand them 1.1 times their size
-	self:ResizeMountains(#self.mountainHexes * 1.1)
+	-- self:ResizeMountains(#self.mountainHexes * 1.1)
 	-- then adjust to the right amount
 	self:ResizeMountains(self.mountainArea)
 	for i, hex in pairs(self.mountainHexes) do

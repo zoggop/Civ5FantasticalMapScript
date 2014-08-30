@@ -1,11 +1,16 @@
+- draw major rivers from mountains (store the whole river, so that if it never connects to the coast, erase it)
+- draw some minor (subpolygon border) rivers directly from the coast, after major rivers
+- draw minor minor rivers last, without any regard for polygon or subpolygon borders
+- add river chance (chance of a river seed being grown)
+	- rainfall modifies river chance?
 - add flood plains to deserts
-- re-add subpolygon minor rivers, including flowing into and out of small lakes
 - optional roads?
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- re-add subpolygon minor rivers, including flowing out of smal llakes
 - fix major river drawing
 - build subpolygons first (slowwww), and polygons built of closest subpolygons
 - mountain ranges based on subpolygons along the edge, so that they scale better
