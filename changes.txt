@@ -7,6 +7,8 @@
 - does wonder placement fix work in game?
 
 DONE
+- prevent "lakes" from forming adjacent to ocean
+- allow lakes to flow into other lakes (store flow topologies to prevent both flowing into each other)
 - add river chance (chance of a river seed being grown)
 - draw some minor (subpolygon border) rivers directly from the coast, after major rivers
 - draw major rivers from mountains (store the whole river, so that if it never connects to the coast, erase it)
