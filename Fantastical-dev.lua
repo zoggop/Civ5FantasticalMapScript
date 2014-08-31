@@ -1517,6 +1517,8 @@ function Space:Compute()
 	self:DrawMajorRivers()
 	EchoDebug("drawing minor rivers...")
 	self:DrawMinorRivers()
+	EchoDebug("drawing tiny rivers...")
+	self:DrawTinyRivers()
 end
 
 function Space:ComputeLandforms()
@@ -2385,17 +2387,33 @@ function Space:FindRiverSeeds()
 				end
 			end
 			for nhex, d in pairs(subPolygonNeighs) do
+				local seed
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if oceanNeighs[nnhex] then
-						tInsert(self.minorRiverSeeds, { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex] })
+						if not seed then
+							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex] }
+						else
+							seed = nil
+						end
 					end
+				end
+				if seed then
+					tInsert(self.minorRiverSeeds, seed)
 				end
 			end
 			for nhex, d in pairs(hexNeighs) do
+				local seed
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if oceanNeighs[nnhex] then
-						tInsert(self.tinyRiverSeeds, { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex] })
+						if not seed then
+							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex] }
+						else
+							seed = nil
+						end
 					end
+				end
+				if seed then
+					tInsert(self.tinyRiverSeeds, seed)
 				end
 			end
 		end
@@ -2474,7 +2492,7 @@ function Space:DrawMajorRivers()
 				if newHex.subPolygon.lake then
 					EchoDebug("lake at " .. newHex.x .. ", " .. newHex.y)
 				else
-					EchoDebug("ocean at " .. newHex.x .. ", " .. newHex.y)
+					-- EchoDebug("ocean at " .. newHex.x .. ", " .. newHex.y)
 				end
 				connectsToOcean = newHex.subPolygon
 				break
@@ -2539,9 +2557,114 @@ end
 
 function Space:DrawMinorRivers()
 	local minorRiverSeedsToRemain = mFloor( #self.minorRiverSeeds - ((self.minorRiverPercent / 100) * #self.minorRiverSeeds) )
-	EchoDebug(minorRiverSeedsToRemain .. " minor river seeds to remain")
+	EchoDebug(minorRiverSeedsToRemain .. " minor river seeds to remain of " .. #self.minorRiverSeeds)
 	repeat
 		local seed = tRemoveRandom(self.minorRiverSeeds)
+		local hex = seed.hex
+		local pairHex = seed.pairHex
+		local direction = seed.direction
+		local lastHex = seed.lastHex
+		local lastDirection = seed.lastDirection
+		local lastOfRiver
+		local it = 0
+		local tinyRiverSeedsToBe = {}
+		repeat
+			if it == 0 then
+				if hex.onRiver[pairHex] or pairHex.onRiver[hex] then
+					-- EchoDebug("SEED ALREADY ON RIVER")
+					break
+				end
+			end
+			local newHex, newDirection, newDirectionPair
+			local neighs = {}
+			for d, nhex in pairs(hex:Neighbors()) do
+				if nhex ~= pairHex then
+					neighs[nhex] = d
+				end
+			end
+			for d, nhex in pairs(pairHex:Neighbors()) do
+				if neighs[nhex] and nhex ~= lastHex then
+					newHex = nhex
+					newDirection = neighs[nhex]
+					newDirectionPair = d
+				end
+			end
+			if newHex and not newHex.polygon.continent and not newHex.subPolygon.tinyIsland then
+				-- EchoDebug("WOULD FLOW FROM OCEAN")
+				if it > 0 then tRemove(tinyRiverSeedsToBe, #tinyRiverSeedsToBe) end
+				break
+			end
+			if newHex and newHex.subPolygon.lake then
+				if self.lakeConnections[newHex.subPolygon] then
+					-- EchoDebug("WOULD FLOW FROM AN ALREADY CONNECTED LAKE")
+					if it > 0 then tRemove(tinyRiverSeedsToBe, #tinyRiverSeedsToBe) end
+					break
+				end
+			end
+			if newHex and ((hex.subPolygon ~= newHex.subPolygon and hex.onRiver[newHex]) or (pairHex.subPolygon ~= newHex.subPolygon and pairHex.onRiver[newHex])) then
+				if it > 0 then
+					lastHex.onRiver[hex] = nil
+					hex.onRiver[lastHex] = nil
+					if lastOfRiver then lastOfRiver.hex.ofRiver[lastOfRiver.direction] = nil end
+					tRemove(tinyRiverSeedsToBe, #tinyRiverSeedsToBe)
+				end
+				-- EchoDebug("FLOWS FROM ANOTHER RIVER")
+				break
+			end
+			local flowDirection = GetFlowDirection(direction, lastDirection)
+			if OfRiverDirection(direction) then
+				if hex.ofRiver == nil then hex.ofRiver = {} end
+				hex.ofRiver[OppositeDirection(direction)] = flowDirection
+				lastOfRiver = { hex = hex, direction = OppositeDirection(direction), flowDirection = flowDirection }
+			else
+				if pairHex.ofRiver == nil then pairHex.ofRiver = {} end
+				pairHex.ofRiver[direction] = flowDirection
+				lastOfRiver = { hex = pairHex, direction = direction, flowDirection = flowDirection }
+			end
+			hex.onRiver[pairHex] = true
+			pairHex.onRiver[hex] = true
+			if not newHex then break end
+			local inTheHills = (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
+			if newHex.plotType == plotMountain or inTheHills then break end
+			if hex.subPolygon == newHex.subPolygon then
+				tInsert(tinyRiverSeedsToBe, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
+			elseif pairHex.subPolygon == newHex.subPolygon then
+				tInsert(tinyRiverSeedsToBe, {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction)})
+			end
+			if hex.subPolygon ~= newHex.subPolygon then
+				lastHex = pairHex
+				lastDirection = direction
+				pairHex = newHex
+				direction = newDirection
+			elseif pairHex.subPolygon ~= newHex.subPolygon then
+				lastHex = hex
+				lastDirection = OppositeDirection(direction)
+				hex = pairHex
+				pairHex = newHex
+				direction = newDirectionPair
+			else
+				-- EchoDebug("NO WAY TO A SUBPOLYGON EDGE")
+				break
+			end
+			it = it + 1
+		until not newHex or it > 1000
+		if hex.onRiver[pairHex] and newHex then
+			for trsi, tseed in pairs(tinyRiverSeedsToBe) do tInsert(self.tinyRiverSeeds, tseed) end
+			if newHex.subPolygon.lake then
+				EchoDebug("connecting lake ", newHex.subPolygon, "to", seed.toLake or seed.lastHex.subPolygon, tostring(seed.toLake or seed.lastHex.subPolygon))
+				self.lakeConnections[newHex.subPolygon] = seed.toLake or seed.lastHex.subPolygon
+			end
+		end
+		-- EchoDebug(it)
+	until #self.minorRiverSeeds <= minorRiverSeedsToRemain or #self.minorRiverSeeds == 0
+	EchoDebug(#self.minorRiverSeeds .. " minor river seeds remaining")
+end
+
+function Space:DrawTinyRivers()
+	local tinyRiverSeedsToRemain = mFloor( #self.tinyRiverSeeds - ((self.tinyRiverPercent / 100) * #self.tinyRiverSeeds) )
+	EchoDebug(tinyRiverSeedsToRemain .. " tiny river seeds to remain of " .. #self.tinyRiverSeeds)
+	repeat
+		local seed = tRemoveRandom(self.tinyRiverSeeds)
 		local hex = seed.hex
 		local pairHex = seed.pairHex
 		local direction = seed.direction
@@ -2570,17 +2693,15 @@ function Space:DrawMinorRivers()
 					newDirectionPair = d
 				end
 			end
-			if newHex and not newHex.polygon.continent then
+			if newHex and not newHex.polygon.continent and not newHex.subPolygon.tinyIsland then
 				-- EchoDebug("WOULD FLOW FROM OCEAN")
 				break
 			end
 			if newHex and newHex.subPolygon.lake then
-				if self.lakeConnections[newHex.subPolygon] then
-					-- EchoDebug("WOULD FLOW FROM AN ALREADY CONNECTED LAKE")
-					break
-				end
+				-- EchoDebug("WOULD FLOW FROM A LAKE")
+				break
 			end
-			if newHex and ((hex.subPolygon ~= newHex.subPolygon and hex.onRiver[newHex]) or (pairHex.subPolygon ~= newHex.subPolygon and pairHex.onRiver[newHex])) then
+			if newHex and hex.onRiver[newHex] or pairHex.onRiver[newHex] then
 				if it > 0 then
 					lastHex.onRiver[hex] = nil
 					hex.onRiver[lastHex] = nil
@@ -2604,38 +2725,26 @@ function Space:DrawMinorRivers()
 			if not newHex then break end
 			local inTheHills = (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
 			if newHex.plotType == plotMountain or inTheHills then break end
-			if hex.subPolygon == newHex.polygon then
-				tInsert(self.tinyRiverSeeds, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
-			elseif pairHex.subPolygon == newHex.subPolygon then
-				tInsert(self.tinyRiverSeeds, {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction)})
-			end
-			if hex.subPolygon ~= newHex.subPolygon then
+			if hex.subPolygon == newHex.subPolygon then
 				lastHex = pairHex
 				lastDirection = direction
 				pairHex = newHex
 				direction = newDirection
-			elseif pairHex.subPolygon ~= newHex.subPolygon then
+			elseif pairHex.subPolygon == newHex.subPolygon then
 				lastHex = hex
 				lastDirection = OppositeDirection(direction)
 				hex = pairHex
 				pairHex = newHex
 				direction = newDirectionPair
 			else
-				-- EchoDebug("NO WAY TO A SUBPOLYGON EDGE")
+				-- EchoDebug("NO WAY)
 				break
 			end
 			it = it + 1
 		until not newHex or it > 1000
-		if hex.onRiver[pairHex] and newHex then
-			if newHex.subPolygon.lake then
-				EchoDebug("connecting lake ", newHex.subPolygon, "to", seed.toLake or seed.lastHex.subPolygon, tostring(seed.toLake or seed.lastHex.subPolygon))
-				self.lakeConnections[newHex.subPolygon] = seed.toLake or seed.lastHex.subPolygon
-			end
-		end
 		-- EchoDebug(it)
-	until #self.minorRiverSeeds <= minorRiverSeedsToRemain or #self.minorRiverSeeds == 0
-	EchoDebug(#self.minorRiverSeeds .. " minor river seeds remaining")
-	EchoDebug(#self.tinyRiverSeeds .. " tiny river seeds")
+	until #self.tinyRiverSeeds <= tinyRiverSeedsToRemain or #self.tinyRiverSeeds == 0
+	EchoDebug(#self.tinyRiverSeeds .. " tiny river seeds remaining")
 end
 
 function Space:PickCoasts()
