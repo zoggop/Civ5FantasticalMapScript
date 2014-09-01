@@ -343,6 +343,7 @@ local function SetConstants()
 	featureIce = FeatureTypes.FEATURE_ICE
 	featureMarsh = FeatureTypes.FEATURE_MARSH
 	featureOasis = FeatureTypes.FEATURE_OASIS
+	featureFloodPlains = FeatureTypes.FEATURE_FLOOD_PLAINS
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
 
 	for thisFeature in GameInfo.Features() do
@@ -539,6 +540,14 @@ function Hex:SetFeature()
 	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
+	if self.terrainType == terrainDesert and self.plotType == plotLand then
+		local on
+		for pairHex, yes in pairs(self.onRiver) do
+			on = true
+			break
+		end
+		if on then self.featureType = featureFloodPlains end
+	end
 	self.plot:SetFeatureType(self.featureType)
 end
 
@@ -2423,6 +2432,7 @@ end
 
 function Space:DrawMajorRivers()
 	self.lakeConnections = {}
+	if #self.majorRiverSeeds == 0 then return end
 	local drawnMajorRivers = 0
 	local undrawnMajorRivers = 0
 	repeat
@@ -2558,6 +2568,7 @@ end
 function Space:DrawMinorRivers()
 	local minorRiverSeedsToRemain = mFloor( #self.minorRiverSeeds - ((self.minorRiverPercent / 100) * #self.minorRiverSeeds) )
 	EchoDebug(minorRiverSeedsToRemain .. " minor river seeds to remain of " .. #self.minorRiverSeeds)
+	if #self.minorRiverSeeds == 0 then return end
 	repeat
 		local seed = tRemoveRandom(self.minorRiverSeeds)
 		local hex = seed.hex
@@ -2663,6 +2674,7 @@ end
 function Space:DrawTinyRivers()
 	local tinyRiverSeedsToRemain = mFloor( #self.tinyRiverSeeds - ((self.tinyRiverPercent / 100) * #self.tinyRiverSeeds) )
 	EchoDebug(tinyRiverSeedsToRemain .. " tiny river seeds to remain of " .. #self.tinyRiverSeeds)
+	if #self.tinyRiverSeeds == 0 then return end
 	repeat
 		local seed = tRemoveRandom(self.tinyRiverSeeds)
 		local hex = seed.hex

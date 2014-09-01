@@ -1,12 +1,12 @@
 - adjust river generation chances
 - rainfall modifies river chance?
-- add flood plains to deserts
 - draw optional 'ancient roads'
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- add flood plains to deserts
 - draw tiny rivers last, without any regard for polygon or subpolygon borders
 - prevent "lakes" from forming adjacent to ocean
 - allow lakes to flow into other lakes (store flow topologies to prevent both flowing into each other)
