@@ -324,6 +324,9 @@ local function SetConstants()
 
 	DirConvert = { [DirW] = DirectionTypes.DIRECTION_WEST, [DirNW] = DirectionTypes.DIRECTION_NORTHWEST, [DirNE] = DirectionTypes.DIRECTION_NORTHEAST, [DirE] = DirectionTypes.DIRECTION_EAST, [DirSE] = DirectionTypes.DIRECTION_SOUTHEAST, [DirSW] = DirectionTypes.DIRECTION_SOUTHWEST }
 
+	routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
+	EchoDebug("ROAD ROUTETYPE ID: " .. routeRoad)
+
 	plotOcean = PlotTypes.PLOT_OCEAN
 	plotLand = PlotTypes.PLOT_LAND
 	plotHills = PlotTypes.PLOT_HILLS
@@ -560,6 +563,13 @@ function Hex:SetRiver()
 	-- for d, fd in pairs(self.ofRiver) do
 		-- EchoDebug(DirName(d), FlowDirName(fd))
 	-- end
+end
+
+function Hex:SetRoad()
+	if self.plot == nil then return end
+	if not self.road then return end
+	-- self.plot:SetFeatureType(featureFallout)
+	self.plot:SetRouteType(routeRoad)
 end
 
 function Hex:EdgeCount()
@@ -1355,9 +1365,9 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.majorRiverPercent = 100 -- percent of total major (polygon level) rivers possible to actually create
-	a.minorRiverPercent = 100 -- percent of total minor (subpolygon level) rivers possible to actually create
-	a.tinyRiverPercent = 100 -- percent of total tiny (hex level) rivers possible to actually create
+	a.majorRiverPercent = 50 -- percent of total major (polygon level) rivers possible to actually create
+	a.minorRiverPercent = 20 -- percent of total minor (subpolygon level) rivers possible to actually create
+	a.tinyRiverPercent = 20 -- percent of total tiny (hex level) rivers possible to actually create
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
@@ -1387,6 +1397,7 @@ Space = class(function(a)
 	a.lakeRegionPercent = 8 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 10 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 40 -- in those lake regions, what's the maximum percentage of water in their collection
+	a.roadCount = 10 -- how many polygon-to-polygon roads
 	a.falloutEnabled = false -- place fallout on the map?
 	----------------------------------
 	-- DEFINITIONS: --
@@ -1528,6 +1539,8 @@ function Space:Compute()
 	self:DrawMinorRivers()
 	EchoDebug("drawing tiny rivers...")
 	self:DrawTinyRivers()
+	EchoDebug("drawing roads...")
+	self:DrawRoads()
 end
 
 function Space:ComputeLandforms()
@@ -1651,6 +1664,12 @@ end
 function Space:SetRivers()
 	for i, hex in pairs(self.hexes)do
 		hex:SetRiver()
+	end
+end
+
+function Space:SetRoads()
+	for i, hex in pairs(self.hexes) do
+		hex:SetRoad()
 	end
 end
 
@@ -2636,7 +2655,7 @@ function Space:DrawMinorRivers()
 			pairHex.onRiver[hex] = true
 			if not newHex then break end
 			local inTheHills = (hex.plotType == plotMountain or hex.plotType == plotHills) and (pairHex.plotType == plotMountain or pairHex.plotType == plotHills) and (newHex.plotType == plotMountain or newHex.plotType == plotHills)
-			if newHex.plotType == plotMountain or inTheHills then break end
+			if newHex.plotType == plotMountain or inTheHills or newHex.subPolygon.lake then break end
 			if hex.subPolygon == newHex.subPolygon then
 				tInsert(tinyRiverSeedsToBe, {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction})
 			elseif pairHex.subPolygon == newHex.subPolygon then
@@ -2757,6 +2776,75 @@ function Space:DrawTinyRivers()
 		-- EchoDebug(it)
 	until #self.tinyRiverSeeds <= tinyRiverSeedsToRemain or #self.tinyRiverSeeds == 0
 	EchoDebug(#self.tinyRiverSeeds .. " tiny river seeds remaining")
+end
+
+function Space:DrawRoad(origHex, destHex)
+	local hex = origHex
+	local it = 0
+	repeat
+		if hex.plotType == plotLand or hex.plotType == plotHills then
+			hex.road = true
+		end
+		hex.invisibleRoad = true
+		if hex == destHex then break end
+		local xdist, ydist = self:WrapDistanceSigned(hex.x, hex.y, destHex.x, destHex.y)
+		local directions
+		if xdist > 1 then
+			directions = { DirNE, DirE, DirSE }
+		elseif xdist < -1 then
+			directions = { DirNW, DirW, DirSW }
+		elseif ydist > 0 then
+			directions = { DirNE, DirNW }
+		elseif ydist < 0 then
+			directions = { DirSE, DirSW }
+		end
+		local leastCost = 10
+		local leastHex
+		for direction, nhex in pairs(hex:Neighbors(directions)) do
+			if nhex.plotType == plotMountain then
+				cost = 3
+			elseif nhex.plotType == plotOcean then
+				cost = 2
+			elseif nhex.plotType == plotHills then
+				cost = 1
+			else
+				cost = 0
+			end
+			if cost < leastCost then
+				leastCost = cost
+				leastHex = nhex
+			end
+		end
+		hex = leastHex or hex
+		it = it + 1
+	until not leastHex or it > 1000
+	EchoDebug(it)
+end
+
+function Space:DrawRoads()
+	if self.roadCount == 0 then return end
+	local drawnRoads = 0
+	repeat
+		local polygon
+		repeat
+			polygon = tGetRandom(self.polygons)
+		until polygon.continent
+		for n, neighbor in pairs(polygon.neighbors) do
+			if neighbor.continent and (not polygon.roads or not polygon.roads[neighbor]) then
+				toPolygon = neighbor
+				break
+			end
+		end
+		if toPolygon then
+			self:DrawRoad(self:GetHexByXY(polygon.x, polygon.y), self:GetHexByXY(toPolygon.x, toPolygon.y))
+			if polygon.roads == nil then polygon.roads = {} end
+			if toPolygon.roads == nil then toPolygon.roads = {} end
+			polygon.roads[toPolygon] = true
+			toPolygon.roads[polygon] = true
+			EchoDebug("road from ", polygon, " to " , toPolygon)
+			drawnRoads = drawnRoads + 1
+		end
+	until drawnRoads >= self.roadCount
 end
 
 function Space:PickCoasts()
@@ -2948,6 +3036,22 @@ function Space:ClosestThing(this, things)
 	return closestThing
 end
 
+function Space:WrapDistanceSigned(x1, y1, x2, y2)
+	local xdist = x2 - x1
+	local ydist = y2 - y1
+	if self.wrapX then
+		if mAbs(xdist) > self.halfWidth then
+			xdist = x2 + (self.w - x1)
+		end
+	end
+	if self.wrapY then
+		if mAbs(ydist) > self.halfHeight then
+			ydist = y2 + (self.h - y1)
+		end
+	end
+	return xdist, ydist
+end
+
 function Space:WrapDistance(x1, y1, x2, y2)
 	local xdist = mAbs(x1 - x2)
 	local ydist = mAbs(y1 - y2)
@@ -3090,6 +3194,8 @@ end
 function AddFeatures()
 	print("Setting Feature Types (Fantastical) ...")
 	mySpace:SetFeatures()
+	print("Setting roads instead (Fantastical) ...")
+	mySpace:SetRoads()
 end
 
 function AddRivers()
