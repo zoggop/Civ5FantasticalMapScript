@@ -1,5 +1,6 @@
-- adjust river generation chances
-- rainfall modifies river chance?
+- do lake rivers first, attempting to find a lake connection for each
+- fix desert flood plain addition
+- river chance based on rainfall
 - get setroutetype to work
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
