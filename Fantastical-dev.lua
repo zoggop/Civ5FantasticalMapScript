@@ -521,6 +521,7 @@ function Hex:IsNeighbor(hex)
 end
 
 function Hex:SetPlot()
+	if self.plotType == nil then EchoDebug("nil plotType at " .. self.x .. ", " .. self.y) end
 	if self.plot == nil then return end
 	self.plot:SetPlotType(self.plotType)
 end
@@ -583,6 +584,10 @@ function Hex:EdgeCount()
 		self.edgeCount = self.edgeCount + 1
 	end
 	return self.edgeCount
+end
+
+function Hex:Locate()
+	return self.x .. ", " .. self.y
 end
 
 ------------------------------------------------------------------------------
@@ -1139,7 +1144,6 @@ Region = class(function(a, space)
 	a.area = 0
 	a.hillCount = 0
 	a.mountainCount = 0
-	a.lakeCount = 0
 	a.featureFillCounts = {}
 	for featureType, feature in pairs(FeatureDictionary) do
 		a.featureFillCounts[featureType] = 0
@@ -1303,11 +1307,10 @@ function Region:CreateElement(temperature, rainfall, lake)
 		plotType = plotMountain
 		featureType = featureNone
 		self.mountainCount = self.mountainCount + 1
-	elseif lake and self.lakeCount < mCeil(self.totalSize * (self.lakeyness / 100)) then
+	elseif lake then
 		plotType = plotOcean
 		terrainType = terrainCoast -- will become coast later
 		featureType = featureNone
-		self.lakeCount = self.lakeCount + 1
 	elseif hill and bestFeature.hill and self.hillCount < mCeil(self.totalSize * (self.hillyness / 100)) then
 		plotType = plotHills
 		self.hillCount = self.hillCount + 1
@@ -1331,7 +1334,7 @@ function Region:Fill()
 					end
 				end
 			end
-			if subCollection.lake then EchoDebug("LAKE", #subPolygon.hexes, subPolygon, polygon) end
+			if subCollection.lake then EchoDebug("LAKE", #subPolygon.hexes .. " hexes ", subPolygon, polygon) end
 			subPolygon.temperature = subCollection.temperature
 			subPolygon.rainfall = subCollection.rainfall
 			subPolygon.lake = subCollection.lake
@@ -1340,7 +1343,7 @@ function Region:Fill()
 				if hex.plotType ~= plotOcean then
 					if element.plotType == plotOcean then
 						hex.lake = true
-						EchoDebug("lake hex at ", hex.x .. ", " .. hex.y)
+						EchoDebug("lake hex at ", hex:Locate())
 					end
 					hex.plotType = element.plotType
 					if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
@@ -1540,6 +1543,16 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
+	for i, subPolygon in pairs(self.subPolygons) do
+		if #subPolygon.hexes == 0 then
+			EchoDebug("subpolygon with no hexes!")
+		end
+	end
+	local got = {}
+	for i, polygon in pairs(self.polygons) do
+		if got[polygon] then EchoDebug("duplicate polygon " .. tostring(polygon)) end
+		got[polygon] = true
+	end
 	EchoDebug("filling regions...")
 	self:FillRegions()
 	EchoDebug("computing landforms...")
@@ -2280,7 +2293,7 @@ function Space:PickMountainRanges()
 			if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
 			edge = nextEdge
 		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges or coastCount > coastPrescription or interiorCount > interiorPrescription
-		EchoDebug("new range", #range, tostring(coastRange))
+		-- EchoDebug("new range", #range, tostring(coastRange))
 		for ire, redge in pairs(range) do
 			for ise, subEdge in pairs(redge.subEdges) do
 				for isp, subPolygon in pairs(subEdge.polygons) do
@@ -2293,7 +2306,7 @@ function Space:PickMountainRanges()
 		end
 		tInsert(self.mountainRanges, range)
 	end
-	EchoDebug(interiorCount, coastCount)
+	EchoDebug(interiorCount .. " interior ranges ", coastCount .. " coastal ranges")
 end
 
 function Space:PickRegions()
@@ -2324,7 +2337,7 @@ function Space:PickRegions()
 					if #polygon.neighbors == 0 then break end
 					local candidates = {}
 					for ni, neighbor in pairs(polygon.neighbors) do
-						if neighbor.continent == continent then
+						if neighbor.continent == continent and neighbor.region == nil then
 							tInsert(candidates, neighbor)
 						end
 					end
@@ -2342,6 +2355,7 @@ function Space:PickRegions()
 						candidate = tRemoveRandom(candidates)
 					end
 					if candidate == nil then break end
+					if candidate.region then EchoDebug("DUPLICATE REGION POLYGON") end
 					candidate.region = region
 					tInsert(region.polygons, candidate)
 					region.area = region.area + #candidate.hexes
@@ -2704,7 +2718,9 @@ function Space:InkRiver(river, seed, seedSpawns, done)
 		flow.hex.ofRiver[flow.direction] = flow.flowDirection
 		flow.hex.onRiver[flow.pairHex] = true
 		flow.pairHex.onRiver[flow.hex] = true
-		-- EchoDebug(flow.hex.x .. ", " .. flow.hex.y, " / ", flow.pairHex.x .. ", " .. flow.pairHex.y)
+		-- if flow.hex.plotType == plotOcean or flow.pairHex.plotType == plotOcean then
+			EchoDebug(flow.hex.x .. ", " .. flow.hex.y .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake), " / ", flow.pairHex.x .. ", " .. flow.pairHex.y .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake))
+		-- end
 	end
 	for nit, newseeds in pairs(seedSpawns) do
 		for nsi, newseed in pairs(newseeds) do

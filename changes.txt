@@ -1,12 +1,13 @@
-- do lake rivers first, attempting to find a lake connection for each
-- fix desert flood plain addition
-- river chance based on rainfall
 - get setroutetype to work
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- fix duplicate region polygons
+- river chance based on rainfall
+- fix desert flood plain addition
+- do lake rivers first, attempting to find a lake connection for each
 - draw optional 'ancient roads' (can't set routetype yet though)
 - add flood plains to deserts
 - draw tiny rivers last, without any regard for polygon or subpolygon borders
