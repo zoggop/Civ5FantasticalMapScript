@@ -996,29 +996,6 @@ function SubEdge:FindConnections()
 	]]--
 end
 
-function SubEdge:FloodFillSuperEdge(superEdge)
-	if self.superEdge then return end
-	if self.polygons[1].superPolygon == self.polygons[2].superPolygon then return end
-	if not superEdge then
-		superEdge = Edge(self.polygons[1].superPolygon, self.polygons[2].superPolygon)
-		superEdge:AddSubEdge(self)
-	else
-		if (self.polygons[1].superPolygon == superEdge.polygons[1] and self.polygons[2].superPolygon == superEdge.polygons[2]) or (self.polygons[2].superPolygon == superEdge.polygons[1] and self.polygons[1].superPolygon == superEdge.polygons[2]) then
-			superEdge:AddSubEdge(self)
-		else
-			return
-		end
-	end
-	local cons = 0
-	for cedge, yes in pairs(self.connections) do
-		if cedge:FloodFillSuperEdge(superEdge) == superEdge then cons = cons + 1 end
-	end
-	if superEdge == self.space.edges[1] then
-		EchoDebug(cons .. " connections")
-	end
-	return superEdge
-end
-
 ------------------------------------------------------------------------------
 
 Edge = class(function(a, polygon1, polygon2)
@@ -1342,7 +1319,7 @@ function Region:Fill()
 					if filledHexes[hex] then EchoDebug("DUPE REGION FILL HEX at " .. hex:Locate()) end
 					if element.plotType == plotOcean then
 						hex.lake = true
-						EchoDebug("lake hex at ", hex:Locate())
+						-- EchoDebug("lake hex at ", hex:Locate())
 					end
 					hex.plotType = element.plotType
 					if element.plotType == plotMountain then tInsert(self.space.mountainHexes, hex) end
@@ -1385,14 +1362,13 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.majorRiverPercent = 100 -- percent of total major (polygon level) rivers possible to actually create
-	a.minorRiverPercent = 100 -- percent of total minor (subpolygon level) rivers possible to actually create
-	a.tinyRiverPercent = 100 -- percent of total tiny (hex level) rivers possible to actually create
+	a.riverMultiplier = 0.4 -- modifies rainfall effect on river generation. 0 is no rivers, 1 is many, 2 is way too many
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
-	a.mountainRangeMult = 1.3 -- higher mult means more scattered mountains
+	a.mountainRangeMult = 1.3 -- higher mult means more (globally) scattered mountains
+	a.mountainCoreTenacity = 9 -- 0 to 10, higher is more range-like mountains, less widely scattered
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.coastDiceAmount = 2 -- how many dice does each polygon get for coastal expansion
@@ -1415,9 +1391,9 @@ Space = class(function(a)
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
 	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
-	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
-	a.lakeynessMin = 25 -- in those lake regions, what's the minimum percentage of water in their collection
-	a.lakeynessMax = 75 -- in those lake regions, what's the maximum percentage of water in their collection
+	a.lakeRegionPercent = 15 -- of 100 how many regions will have little lakes
+	a.lakeynessMin = 10 -- in those lake regions, what's the minimum percentage of water in their collection
+	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.roadCount = 10 -- how many polygon-to-polygon roads
 	a.falloutEnabled = false -- place fallout on the map?
 	----------------------------------
@@ -1431,14 +1407,13 @@ Space = class(function(a)
 	a.edges = {}
 	a.subEdges = {}
 	a.mountainRanges = {}
-	a.majorRivers = {}
-	a.minorRivers = {}
 	a.bottomYPolygons = {}
 	a.bottomXPolygons = {}
 	a.topYPolygons = {}
 	a.topXPolygons = {}
 	a.hexes = {}
     a.mountainHexes = {}
+    a.mountainCoreHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
     a.lakeSubPolygons = {}
@@ -2241,7 +2216,7 @@ function Space:PickMountainRanges()
 		repeat
 			edge = tRemoveRandom(edgeBuffer)
 			if (edge.polygons[1].continent or edge.polygons[2].continent) and not edge.mountains then
-				if edge.polygons[1].continent and edge.polygons[2].continent and interiorCount < interiorPrescription then
+				if edge.polygons[1].continent and edge.polygons[2].continent  and edge.polygons[1].region ~= edge.polygons[2].region and interiorCount < interiorPrescription then
 					coastRange = false
 					break
 				elseif coastCount < coastPrescription then
@@ -2264,7 +2239,7 @@ function Space:PickMountainRanges()
 				if (nextEdge.polygons[1].continent or nextEdge.polygons[2].continent) and not nextEdge.mountains then
 					if coastRange and (not nextEdge.polygons[1].continent or not nextEdge.polygons[2].continent) then
 						okay = true
-					elseif not coastRange and nextEdge.polygons[1].continent and nextEdge.polygons[2].continent then
+					elseif not coastRange and nextEdge.polygons[1].continent and nextEdge.polygons[2].continent and nextEdge.polygons[1].region ~= nextEdge.polygons[2].region then
 						okay = true
 					end
 				end
@@ -2288,6 +2263,13 @@ function Space:PickMountainRanges()
 		-- EchoDebug("new range", #range, tostring(coastRange))
 		for ire, redge in pairs(range) do
 			for ise, subEdge in pairs(redge.subEdges) do
+				for ih, hex in pairs(subEdge.hexes) do
+					if hex.plotType ~= plotOcean then
+						hex.mountainRangeCore = true
+						hex.mountainRange = true
+						tInsert(self.mountainCoreHexes, hex)
+					end
+				end
 				for isp, subPolygon in pairs(subEdge.polygons) do
 					if not subPolygon.lake then
 						subPolygon.mountainRange = true
@@ -2620,7 +2602,7 @@ function Space:DrawRiver(seed)
 					end
 				end
 			elseif seed.minor then
-				tiny, toHills, avoidConnection, avoidWater, doneAnywhere = true, true, true, true, true
+				tiny, toHills, avoidConnection, avoidWater, doneAnywhere, alwaysDraw = true, true, true, true, true
 				if hex.subPolygon == newHex.subPolygon then
 					spawnNew = true
 				end
@@ -2737,7 +2719,7 @@ function Space:FindLakeFlow(seeds)
 		local river, done, seedSpawns = self:DrawRiver(seed)
 		if done then
 			if done.subPolygon.lake then
-				EchoDebug("found lake-to-lake river")
+				-- EchoDebug("found lake-to-lake river")
 				self:InkRiver(river, seed, seedSpawns, done)
 				self:FindLakeFlow(self.lakeRiverSeeds[done.subPolygon])
 				return
@@ -2747,7 +2729,7 @@ function Space:FindLakeFlow(seeds)
 		end
 	end
 	if toOcean then
-		EchoDebug("found lake-to-ocean river")
+		-- EchoDebug("found lake-to-ocean river")
 		self:InkRiver(toOcean.river, toOcean.seed, toOcean.seedSpawns, toOcean.done)
 	end
 end
@@ -2762,7 +2744,7 @@ function Space:DrawLakeRivers()
 end
 
 function Space:DrawRivers(seeds)
-	local seedBoxes = { "majorRiverSeeds", } -- "minorRiverSeeds", "tinyRiverSeeds" }
+	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds" }
 	for i, box in pairs(seedBoxes) do
 		local seeds = self[box]
 		EchoDebug("drawing " .. box .. " (" .. #seeds .. ") ...")
@@ -2772,9 +2754,11 @@ function Space:DrawRivers(seeds)
 			for key, value in pairs(seed) do list = list .. key .. ": " .. tostring(value) .. ", " end
 			-- EchoDebug("drawing river seed #" .. si, list)
 			local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
+			local rainfall = endRainfall or seed.rainfall
+			if seed.tiny then rainfall = rainfall * 1.5  end
 			if (seed.doneAnywhere and river and #river > 0) or done then
 				-- EchoDebug("river is done, drawing...")
-				local drawIt = seed.alwaysDraw or Map.Rand(100, "river chance") < (endRainfall or seed.rainfall) * 0.67
+				local drawIt = seed.alwaysDraw or Map.Rand(100, "river chance") < rainfall * self.riverMultiplier
 				-- EchoDebug(endRainfall or seed.rainfall, " rainfall ", (endRainfall or seed.rainfall) * 0.67, tostring(drawIt))
 				if drawIt then
 					EchoDebug("drawn")
@@ -2904,13 +2888,17 @@ function Space:ResizeMountains(prescribedArea)
 	if #self.mountainHexes > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainHexes)
-			if Map.Rand(10, "hill dice") < self.hillChance then
-				hex.plotType = plotHills
-				if hex.featureType and not FeatureDictionary[hex.featureType].hill then
-					hex.featureType = featureNone
-				end
+			if hex.mountainRangeCore and #self.mountainHexes > #self.mountainCoreHexes and Map.Rand(11, "core mountain remove") < self.mountainCoreTenacity then
+				tInsert(self.mountainHexes, hex)
 			else
-				hex.plotType = plotLand
+				if Map.Rand(10, "hill dice") < self.hillChance then
+					hex.plotType = plotHills
+					if hex.featureType and not FeatureDictionary[hex.featureType].hill then
+						hex.featureType = featureNone
+					end
+				else
+					hex.plotType = plotLand
+				end
 			end
 		until #self.mountainHexes <= prescribedArea
 	elseif #self.mountainHexes < prescribedArea then
