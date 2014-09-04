@@ -165,7 +165,7 @@ local OptionDictionary = {
 	{ name = "World Wrap", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 1,
 	values = {
 			[1] = { name = "Globe (Wraps East-West)", values = {true, false} },
-			[2] = { name = "Region (Does Not Wrap)", values = {false, false} },
+			[2] = { name = "Realm (Does Not Wrap)", values = {false, false} },
 			-- [3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
 			-- sadly wrapY does not work
 		}
