@@ -532,16 +532,6 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
-	--[[
-	for edge, yes in pairs(self.edges) do
-		if edge.drainsToWater then
-			if self == edge.drainsToWater.hex or self == edge.drainsToWater.pairHex then
-				self.plot:SetFeatureType(featureFallout)
-				return
-			end
-		end
-	end
-	]]--
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	if self.terrainType == terrainDesert and self.plotType == plotLand then
@@ -1160,7 +1150,7 @@ function Region:CreateCollection()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
 	if self.mountainous then self.mountainousness = mRandom(self.space.mountainousnessMin, self.space.mountainousnessMax) end
-	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent
+	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent or #self.space.lakeSubPolygons < self.space.minLakes
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
 	-- EchoDebug(self.latitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
@@ -1267,6 +1257,10 @@ function Region:CreateElement(temperature, rainfall, lake)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
 	local hill = mRandom(1, 100) < self.hillyness
+	if lake then
+		mountain = false
+		hill = false
+	end
 	if hill then
 		temperature = mMax(temperature * 0.9, 0)
 		rainfall = mMin(rainfall * 1.1, 100)
@@ -1319,6 +1313,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 end
 
 function Region:Fill()
+	local filledHexes = {}
 	for i, polygon in pairs(self.polygons) do
 		for spi, subPolygon in pairs(polygon.subPolygons) do
 			local subCollection = tGetRandom(self.collection)
@@ -1334,13 +1329,17 @@ function Region:Fill()
 					end
 				end
 			end
-			if subCollection.lake then EchoDebug("LAKE", #subPolygon.hexes .. " hexes ", subPolygon, polygon) end
+			if subCollection.lake then
+				tInsert(self.space.lakeSubPolygons, subPolygon)
+				EchoDebug("LAKE", #subPolygon.hexes .. " hexes ", subPolygon, polygon)
+			end
 			subPolygon.temperature = subCollection.temperature
 			subPolygon.rainfall = subCollection.rainfall
 			subPolygon.lake = subCollection.lake
 			for hi, hex in pairs(subPolygon.hexes) do
 				local element = tGetRandom(subCollection.elements)
 				if hex.plotType ~= plotOcean then
+					if filledHexes[hex] then EchoDebug("DUPE REGION FILL HEX at " .. hex:Locate()) end
 					if element.plotType == plotOcean then
 						hex.lake = true
 						EchoDebug("lake hex at ", hex:Locate())
@@ -1354,6 +1353,7 @@ function Region:Fill()
 					else
 						hex.featureType = featureNone
 					end
+					filledHexes[hex] = true
 				elseif subCollection.lake then
 					EchoDebug("lake hex already ocean plot at " .. hex.x .. ", " .. hex.y)
 				end
@@ -1414,9 +1414,10 @@ Space = class(function(a)
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
+	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
 	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
-	a.lakeynessMin = 20 -- in those lake regions, what's the minimum percentage of water in their collection
-	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
+	a.lakeynessMin = 25 -- in those lake regions, what's the minimum percentage of water in their collection
+	a.lakeynessMax = 75 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.roadCount = 10 -- how many polygon-to-polygon roads
 	a.falloutEnabled = false -- place fallout on the map?
 	----------------------------------
@@ -1440,6 +1441,7 @@ Space = class(function(a)
     a.mountainHexes = {}
     a.tinyIslandPolygons = {}
     a.deepHexes = {}
+    a.lakeSubPolygons = {}
 end)
 
 function Space:SetOptions(optDict)
@@ -1531,8 +1533,6 @@ function Space:Compute()
     self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
-    EchoDebug("picking mountain ranges...")
-    self:PickMountainRanges()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 	if not self.useMapLatitudes then
@@ -1543,18 +1543,10 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
-	for i, subPolygon in pairs(self.subPolygons) do
-		if #subPolygon.hexes == 0 then
-			EchoDebug("subpolygon with no hexes!")
-		end
-	end
-	local got = {}
-	for i, polygon in pairs(self.polygons) do
-		if got[polygon] then EchoDebug("duplicate polygon " .. tostring(polygon)) end
-		got[polygon] = true
-	end
 	EchoDebug("filling regions...")
 	self:FillRegions()
+	EchoDebug("picking mountain ranges...")
+    self:PickMountainRanges()
 	EchoDebug("computing landforms...")
 	self:ComputeLandforms()
 	EchoDebug("computing ocean temperatures...")
@@ -2297,9 +2289,11 @@ function Space:PickMountainRanges()
 		for ire, redge in pairs(range) do
 			for ise, subEdge in pairs(redge.subEdges) do
 				for isp, subPolygon in pairs(subEdge.polygons) do
-					subPolygon.mountainRange = true
-					for hi, hex in pairs(subPolygon.hexes) do
-						hex.mountainRange = true
+					if not subPolygon.lake then
+						subPolygon.mountainRange = true
+						for hi, hex in pairs(subPolygon.hexes) do
+							if hex.plotType ~= plotOcean then hex.mountainRange = true end
+						end
 					end
 				end
 			end
@@ -2392,13 +2386,14 @@ function Space:FindRiverSeeds()
 	local lakeCount = 0
 	for ih, hex in pairs(self.hexes) do
 		if (hex.polygon.continent and not hex.subPolygon.lake) or hex.subPolygon.tinyIsland then
-			local neighs, polygonNeighs, subPolygonNeighs, hexNeighs, oceanNeighs, lakeNeighs, mountainNeighs = {}, {}, {}, {}, {}, {}, {}
+			local neighs, polygonNeighs, subPolygonNeighs, hexNeighs, oceanNeighs, lakeNeighs, mountainNeighs, dryNeighs = {}, {}, {}, {}, {}, {}, {}, {}
 			for d, nhex in pairs(hex:Neighbors()) do
 				if nhex.subPolygon.lake then
 					lakeNeighs[nhex] = d
 				elseif nhex.plotType == plotOcean then
 					oceanNeighs[nhex] = d
 				else
+					dryNeighs[nhex] = d
 					if nhex.polygon ~= hex.polygon then
 						polygonNeighs[nhex] = d
 					end
@@ -2415,7 +2410,7 @@ function Space:FindRiverSeeds()
 				neighs[nhex] = d
 			end
 			local hexInHills = hex.plotType == plotMountain or hex.plotType == plotHills
-			for nhex, d in pairs(neighs) do
+			for nhex, d in pairs(dryNeighs) do
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if lakeNeighs[nnhex] then
 						if self.lakeRiverSeeds[nnhex.subPolygon] == nil then
@@ -2718,9 +2713,7 @@ function Space:InkRiver(river, seed, seedSpawns, done)
 		flow.hex.ofRiver[flow.direction] = flow.flowDirection
 		flow.hex.onRiver[flow.pairHex] = true
 		flow.pairHex.onRiver[flow.hex] = true
-		-- if flow.hex.plotType == plotOcean or flow.pairHex.plotType == plotOcean then
-			EchoDebug(flow.hex.x .. ", " .. flow.hex.y .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake), " / ", flow.pairHex.x .. ", " .. flow.pairHex.y .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake))
-		-- end
+		-- EchoDebug(flow.hex:Locate() .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake) .. " " .. tostring(flow.hex.mountainRange), " / ", flow.pairHex:Locate() .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake).. " " .. tostring(flow.pairHex.mountainRange))
 	end
 	for nit, newseeds in pairs(seedSpawns) do
 		for nsi, newseed in pairs(newseeds) do

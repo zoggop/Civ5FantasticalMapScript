@@ -1,9 +1,11 @@
+- make sure minor and tiny rivers work
 - get setroutetype to work
 - make coastal ice not interfere with navigation?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- fix major rivers flowing past lakes
 - fix duplicate region polygons
 - river chance based on rainfall
 - fix desert flood plain addition
