@@ -1,9 +1,14 @@
-- get setroutetype to work
+- better finding of connections from lake to lake? (pathfinding)
+- control amount of polar landmass?
 - make coastal ice not interfere with navigation?
+- is it possible to put roads on the map with a map script?
 - clean up: don't want minkowski distance or manhatten distance
 - does wonder placement fix work in game?
 
 DONE
+- control over amount of river tiles
+- add minor and tiny river seeds (nonforks) starting from hills/mountains or heavy rainfall and end in water, like major rivers
+- make sure river flow directions are working
 - make mountain ranges more clumpy again by taking away the hexes along the edge last
 - fix major rivers flowing past lakes
 - fix duplicate region polygons

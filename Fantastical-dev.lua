@@ -1346,11 +1346,10 @@ Space = class(function(a)
 	a.wrapX = true -- globe wraps horizontally?
 	a.wrapY = false -- globe wraps vertically?
 	a.polygonCount = 140 -- how many polygons (map scale)
-	a.minkowskiOrder = 3 -- higher == more like manhatten distance, lower (> 1) more like euclidian distance, < 1 weird cross shapes
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
-	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity)
+	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
@@ -1362,7 +1361,10 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.riverMultiplier = 0.4 -- modifies rainfall effect on river generation. 0 is no rivers, 1 is many, 2 is way too many
+	a.riverLandRatio = 0.18 -- target percentage of land hexes that are next to a river
+	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
+	a.riverRainThreshold = 20 -- rivers must have this much rainfall to ever be inked
+	a.riverSpawnRainfall = 95 -- how much rainfall spawns a river seed even without mountains/hills
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
@@ -1391,9 +1393,9 @@ Space = class(function(a)
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
 	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
-	a.lakeRegionPercent = 15 -- of 100 how many regions will have little lakes
-	a.lakeynessMin = 10 -- in those lake regions, what's the minimum percentage of water in their collection
-	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
+	a.lakeRegionPercent = 13 -- of 100 how many regions will have little lakes
+	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
+	a.lakeynessMax = 60 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.roadCount = 10 -- how many polygon-to-polygon roads
 	a.falloutEnabled = false -- place fallout on the map?
 	----------------------------------
@@ -1456,7 +1458,6 @@ function Space:Compute()
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
     if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
     self.nonOceanPolygons = self.polygonCount
-	self.inverseMinkowskiOrder = 1 / self.minkowskiOrder
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
@@ -2391,7 +2392,6 @@ function Space:FindRiverSeeds()
 				end
 				neighs[nhex] = d
 			end
-			local hexInHills = hex.plotType == plotMountain or hex.plotType == plotHills
 			for nhex, d in pairs(dryNeighs) do
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if lakeNeighs[nnhex] then
@@ -2405,24 +2405,13 @@ function Space:FindRiverSeeds()
 				end
 			end
 			for nhex, d in pairs(polygonNeighs) do
-				local rainfall = mFloor((hex.polygon.region.rainfallAvg + nhex.polygon.region.rainfallAvg) / 2)
-				local nhexInHills = nhex.plotType == plotMountain or nhex.plotType == plotHills
+				local rainfall = mMin(hex.polygon.region.rainfallAvg, nhex.polygon.region.rainfallAvg) -- mFloor((hex.polygon.region.rainfallAvg + nhex.polygon.region.rainfallAvg) / 2)
 				local seed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if neighs[nnhex] then
-						local nnhexInHills = nnhex.plotType == plotMountain or nnhex.plotType == plotHills
-						local hills = 0
-						if nnhexInHills then hills = hills + 1 end
-						if nhexInHills then hills = hills + 1 end
-						if hexInHills then hills = hills + 1 end
-						local inTheHills = hills >= 2
+						local inTheHills = self:HillsOrMountains(hex, nhex, nnhex) >= 2
 						if mountainNeighs[nnhex] or inTheHills then
 							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, major = true, dontConnect = true, avoidConnection = true, toWater = true, spawnSeeds = true, growsDownstream = true }
-							if mountainNeighs[nnhex] then
-								seed.mountain = true
-							elseif inTheHills then
-								seed.hills = true
-							end
 						end
 						if oceanNeighs[nnhex] then
 							connectsToOcean = true
@@ -2437,35 +2426,69 @@ function Space:FindRiverSeeds()
 				end
 			end
 			for nhex, d in pairs(subPolygonNeighs) do
-				local rainfall = mFloor((hex.subPolygon.rainfall + nhex.subPolygon.rainfall) / 2)
-				local seed
+				local oceanSeed, hillSeed, rainSeed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
+					local rainfall = mMin(hex.subPolygon.rainfall, nhex.subPolygon.rainfall, nnhex.subPolygon.rainfall or 100)
 					if oceanNeighs[nnhex] then
-						if not seed then
-							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, avoidWater = true, toHills = true, spawnSeeds = true }
+						if not oceanSeed then
+							oceanSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, avoidWater = true, toHills = true, spawnSeeds = true }
 						else
-							seed = nil
+							oceanSeed = nil
+						end
+						connectsToOcean = true
+					end
+					if neighs[nnhex] then
+						local inTheHills = self:HillsOrMountains(hex, nhex, nnhex) >= 2
+						if mountainNeighs[nnhex] or inTheHills then
+							hillSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, toWater = true, spawnSeeds = true, growsDownstream = true }
+						end
+						if rainfall > self.riverSpawnRainfall then
+							rainSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, toWater = true, spawnSeeds = true, growsDownstream = true }
 						end
 					end
+					if lakeNeighs[nnhex] then
+						connectsToLake = true
+					end
 				end
-				if seed then
-					tInsert(self.minorRiverSeeds, seed)
+				if oceanSeed then
+					tInsert(self.minorRiverSeeds, oceanSeed)
+				elseif hillSeed and not connectsToOcean and not connectsToLake then
+					tInsert(self.minorRiverSeeds, hillSeed)
+				elseif rainSeed and not connectsToOcean and not connectsToLake then
+					tInsert(self.minorRiverSeeds, rainSeed)
 				end
 			end
 			for nhex, d in pairs(hexNeighs) do
-				local rainfall = mFloor((hex.subPolygon.rainfall + nhex.subPolygon.rainfall) / 2)
-				local seed
+				local oceanSeed, hillSeed, rainSeed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
+					local rainfall = mMin(hex.subPolygon.rainfall, nhex.subPolygon.rainfall, nnhex.subPolygon.rainfall or 100)
 					if oceanNeighs[nnhex] then
-						if not seed then
-							seed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, avoidWater = true, toHills = true }
+						if not oceanSeed then
+							oceanSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, avoidWater = true, toHills = true, doneAnywhere = true }
 						else
-							seed = nil
+							oceanSeed = nil
+						end
+						connectsToOcean = true
+					end
+					if neighs[nnhex] then
+						local inTheHills = self:HillsOrMountains(hex, nhex, nnhex) >= 2
+						if mountainNeighs[nnhex] or inTheHills then
+							hillSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, toWater = true, growsDownstream = true }
+						end
+						if rainfall > self.riverSpawnRainfall then
+							rainSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, toWater = true, growsDownstream = true }
 						end
 					end
+					if lakeNeighs[nnhex] then
+						connectsToLake = true
+					end
 				end
-				if seed then
-					tInsert(self.tinyRiverSeeds, seed)
+				if oceanSeed then
+					tInsert(self.tinyRiverSeeds, oceanSeed)
+				elseif hillSeed and not connectsToOcean and not connectsToLake then
+					tInsert(self.tinyRiverSeeds, hillSeed)
+				elseif rainSeed and not connectsToOcean and not connectsToLake then
+					tInsert(self.tinyRiverSeeds, rainSeed)
 				end
 			end
 		end
@@ -2586,7 +2609,7 @@ function Space:DrawRiver(seed)
 			local minor, tiny, toWater, toHills, avoidConnection, avoidWater, growsDownstream, dontConnect, doneAnywhere
 			local spawnNew, spawnNewPair, spawnLast, spawnLastPair
 			if seed.major then
-				minor, toHills, avoidConnection, avoidWater, doneAnywhere = true, true, true, true, true
+				minor, toHills, avoidConnection, avoidWater = true, true, true, true
 				if hex.polygon == newHex.polygon and hex.subPolygon ~= newHex.subPolygon then
 					spawnNew = true
 				end
@@ -2619,16 +2642,16 @@ function Space:DrawRiver(seed)
 				end
 			end
 			if spawnNew then
-				tInsert(seedSpawns[it], {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction, rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere})
+				tInsert(seedSpawns[it], {hex = hex, pairHex = newHex, direction = newDirection, lastHex = pairHex, lastDirection = direction, rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere, fork = true})
 			end
 			if spawnNewPair then
-				tInsert(seedSpawns[it], {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction), rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere})
+				tInsert(seedSpawns[it], {hex = pairHex, pairHex = newHex, direction = newDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction), rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere, fork = true})
 			end
 			if spawnLast then
-				tInsert(seedSpawns[it], {hex = hex, pairHex = lastHex, direction = lastDirection, lastHex = pairHex, lastDirection = direction, rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere})
+				tInsert(seedSpawns[it], {hex = hex, pairHex = lastHex, direction = lastDirection, lastHex = pairHex, lastDirection = direction, rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere, fork = true})
 			end
 			if spawnLastPair then
-				tInsert(seedSpawns[it], {hex = pairHex, pairHex = lastHex, direction = lastDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction), rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere})
+				tInsert(seedSpawns[it], {hex = pairHex, pairHex = lastHex, direction = lastDirectionPair, lastHex = hex, lastDirection = OppositeDirection(direction), rainfall = seed.rainfall, minor = minor, tiny = tiny, toWater = toWater, toHills = toHills, avoidConnection = avoidConnection, avoidWater = avoidWater, growsDownstream = growsDownstream, dontConnect = dontConnect, doneAnywhere = doneAnywhere, fork = true})
 			end
 		end
 		-- decide which direction for the river to flow into next
@@ -2683,7 +2706,7 @@ function Space:DrawRiver(seed)
 	until not newHex or it > 1000
 	local endRainfall
 	if not seed.growsDownstream and river and #river > 0 then
-		endRainfall = mCeil((river[#river].hex.subPolygon.rainfall + river[#river].pairHex.subPolygon.rainfall) / 2)
+		endRainfall = mMin(river[#river].hex.subPolygon.rainfall, river[#river].pairHex.subPolygon.rainfall) -- mCeil((river[#river].hex.subPolygon.rainfall + river[#river].pairHex.subPolygon.rainfall) / 2)
 	end
 	-- EchoDebug(it)
 	return river, done, seedSpawns, endRainfall
@@ -2695,14 +2718,18 @@ function Space:InkRiver(river, seed, seedSpawns, done)
 		flow.hex.ofRiver[flow.direction] = flow.flowDirection
 		flow.hex.onRiver[flow.pairHex] = true
 		flow.pairHex.onRiver[flow.hex] = true
+		if not flow.hex.isRiver then self.riverArea = self.riverArea + 1 end
+		if not flow.pairHex.isRiver then self.riverArea = self.riverArea + 1 end
+		flow.hex.isRiver = true
+		flow.pairHex.isRiver = true
 		-- EchoDebug(flow.hex:Locate() .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake) .. " " .. tostring(flow.hex.mountainRange), " / ", flow.pairHex:Locate() .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake).. " " .. tostring(flow.pairHex.mountainRange))
 	end
 	for nit, newseeds in pairs(seedSpawns) do
 		for nsi, newseed in pairs(newseeds) do
 			if newseed.minor then
-				tInsert(self.minorRiverSeeds, newseed)
+				tInsert(self.minorForkSeeds, newseed)
 			elseif newseed.tiny then
-				tInsert(self.tinyRiverSeeds, newseed)
+				tInsert(self.tinyForkSeeds, newseed)
 			end
 		end
 	end
@@ -2735,6 +2762,7 @@ function Space:FindLakeFlow(seeds)
 end
 
 function Space:DrawLakeRivers()
+	self.riverArea = 0
 	self.lakeConnections = {}
 	local lakeSeedBuffer = tDuplicate(self.lakeRiverSeeds)
 	while #lakeSeedBuffer > 0 do
@@ -2743,32 +2771,68 @@ function Space:DrawLakeRivers()
 	end
 end
 
-function Space:DrawRivers(seeds)
-	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds" }
-	for i, box in pairs(seedBoxes) do
-		local seeds = self[box]
-		EchoDebug("drawing " .. box .. " (" .. #seeds .. ") ...")
-		local drawn = 0
-		for si, seed in pairs(seeds) do
-			local list = ""
-			for key, value in pairs(seed) do list = list .. key .. ": " .. tostring(value) .. ", " end
-			-- EchoDebug("drawing river seed #" .. si, list)
-			local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
-			local rainfall = endRainfall or seed.rainfall
-			if seed.tiny then rainfall = rainfall * 1.5  end
-			if (seed.doneAnywhere and river and #river > 0) or done then
-				-- EchoDebug("river is done, drawing...")
-				local drawIt = seed.alwaysDraw or Map.Rand(100, "river chance") < rainfall * self.riverMultiplier
-				-- EchoDebug(endRainfall or seed.rainfall, " rainfall ", (endRainfall or seed.rainfall) * 0.67, tostring(drawIt))
-				if drawIt then
-					EchoDebug("drawn")
-					self:InkRiver(river, seed, seedSpawns, done)
-					drawn = drawn + 1
+function Space:DrawRivers()
+	self.minorForkSeeds, self.tinyForkSeeds = {}, {}
+	local laterRiverSeeds = {}
+	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds", "minorForkSeeds", "tinyForkSeeds" }
+	local prescribedRiverArea = self.riverLandRatio * self.filledArea
+	local drawn = 0
+	while self.riverArea < prescribedRiverArea do
+		local anyAreaAtAll
+		for i, box in pairs(seedBoxes) do
+			local seeds = self[box]
+			if #seeds > 0 then
+				anyAreaAtAll = true
+				local inked
+				local seed = tRemoveRandom(seeds)
+				-- local list = ""
+				-- for key, value in pairs(seed) do list = list .. key .. ": " .. tostring(value) .. ", " end
+				-- EchoDebug("drawing river seed #" .. si, list)
+				local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
+				local rainfall = endRainfall or seed.rainfall
+				if (seed.doneAnywhere and river and #river > 0) or done then
+					local drawIt = seed.alwaysDraw or (rainfall > self.riverRainThreshold and Map.Rand(100, "river chance") < rainfall * self.riverRainMultiplier)
+					-- EchoDebug(endRainfall or seed.rainfall, " rainfall ", (endRainfall or seed.rainfall) * 0.67, tostring(drawIt))
+					if drawIt then
+						self:InkRiver(river, seed, seedSpawns, done)
+						drawn = drawn + 1
+						inked = true
+					end
+				end
+				if not inked then
+					tInsert(laterRiverSeeds, seed)
 				end
 			end
 		end
-		EchoDebug(drawn .. " drawn")
+		if not anyAreaAtAll then
+			if #laterRiverSeeds > 0 then
+				EchoDebug("recycling unused river seeds")
+				for si, seed in pairs(laterRiverSeeds) do
+					if seed.major then
+						tInsert(self.majorRiverSeeds, seed)
+					elseif seed.minor then
+						if seed.fork then
+							tInsert(self.minorForkSeeds, seed)
+						else
+							tInsert(self.minorRiverSeeds, seed)
+						end
+					elseif seed.tiny then
+						if seed.fork then
+							tInsert(self.tinyForkSeeds, seed)
+						else
+							tInsert(self.tinyRiverSeeds, seed)
+						end
+					end
+				end
+			else
+				EchoDebug("no seeds available at all")			
+				break
+			end
+		end
 	end
+	local rlpercent = mFloor( (self.riverArea / self.filledArea) * 100 )
+	local rpercent = mFloor( (self.riverArea / self.iA) * 100 )
+	EchoDebug(drawn .. " drawn ", " river area: " .. self.riverArea, "(" .. rlpercent .. "% of land, " .. rpercent .. "% of map)")
 end
 
 function Space:DrawRoad(origHex, destHex)
@@ -3100,13 +3164,6 @@ function Space:HexDistance(x1, y1, x2, y2)
 		end
 	end
 	return (xdist + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
-end
-
-function Space:Minkowski(x1, y1, x2, y2, xdist, ydist)
-	if not xdist then
-		xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
-	end
-	return (xdist^self.minkowskiOrder + ydist^self.minkowskiOrder)^self.inverseMinkowskiOrder
 end
 
 function Space:GetHexByXY(x, y)
