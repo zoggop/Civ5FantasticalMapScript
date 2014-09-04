@@ -44,7 +44,13 @@ local tRemove = table.remove
 local randomNumbers = 0
 
 local function mRandom(lower, upper)
-	local divide = false
+	local hundredth
+	if mFloor(lower) ~= lower or mFloor(upper) ~= upper then
+		lower = mFloor(lower * 100)
+		upper = mFloor(upper * 100)
+		hundredth = true
+	end
+	local divide
 	if lower == nil then lower = 0 end
 	if upper == nil then
 		divide = true
@@ -58,6 +64,9 @@ local function mRandom(lower, upper)
 		number = Map.Rand((upper + 1) - lower, "Fantastical Map Script " .. randomNumbers) + lower
 	end
 	if divide then number = number / upper end
+	if hundredth then
+		number = number / 100
+	end
 	return number
 end
 
@@ -1353,7 +1362,7 @@ Space = class(function(a)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
-	a.polarContinentChance = 3 -- out of ten chances
+	a.polarMaxLandRatio = 0.15 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 9 -- of how many groups of kinds of tiles does a region consist, at maximum
@@ -1361,7 +1370,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.riverLandRatio = 0.18 -- target percentage of land hexes that are next to a river
+	a.riverLandRatio = 0.19
 	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
 	a.riverRainThreshold = 20 -- rivers must have this much rainfall to ever be inked
 	a.riverSpawnRainfall = 95 -- how much rainfall spawns a river seed even without mountains/hills
@@ -2093,6 +2102,9 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	for i, polygon in pairs(self.astronomyBasins[astronomyIndex]) do
 		tInsert(polygonBuffer, polygon)
 	end
+	local maxPolarPolygons = #polygonBuffer * self.polarMaxLandRatio
+	EchoDebug(maxPolarPolygons .. " maximum polar polygons of " .. #polygonBuffer .. " in astronomy basin")
+	local polarPolygonCount = 0
 	local islandPolygons = mCeil(#polygonBuffer * self.islandRatio)
 	local nonIslandPolygons = mMax(1, #polygonBuffer - islandPolygons)
 	local filledPolygons = 0
@@ -2155,8 +2167,9 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			end
 			local candidate
 			if #candidates == 0 then
-				if #polarCandidates > 0 then
+				if #polarCandidates > 0 and polarPolygonCount < maxPolarPolygons then
 					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
+					polarPolygonCount = polarPolygonCount + 1
 				else
 					-- when there are no immediate candidates
 					if #backlog > 0 then
@@ -2797,6 +2810,7 @@ function Space:DrawRivers()
 						self:InkRiver(river, seed, seedSpawns, done)
 						drawn = drawn + 1
 						inked = true
+						if self.riverArea >= prescribedRiverArea then break end
 					end
 				end
 				if not inked then
@@ -2804,9 +2818,9 @@ function Space:DrawRivers()
 				end
 			end
 		end
-		if not anyAreaAtAll then
+		if not anyAreaAtAll and self.riverArea < prescribedRiverArea then
 			if #laterRiverSeeds > 0 then
-				EchoDebug("recycling unused river seeds")
+				EchoDebug("(recycling unused river seeds...)")
 				for si, seed in pairs(laterRiverSeeds) do
 					if seed.major then
 						tInsert(self.majorRiverSeeds, seed)
