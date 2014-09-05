@@ -3234,7 +3234,7 @@ function GetMapScriptInfo()
 	tInsert(custOpts, resources)
 	return {
 		Name = "Fantastical (dev)",
-		Description = "Scribbles fantastical lands onto the world.",
+		Description = "Fantastical lands! Convoluted rivers! Epic mountain ranges!",
 		IconIndex = 5,
 		CustomOptions = custOpts,
 	}

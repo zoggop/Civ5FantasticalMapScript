@@ -1,4 +1,3 @@
-- find better icon?
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
 - is it possible to put roads on the map with a map script?

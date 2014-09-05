@@ -9,9 +9,17 @@ The map is a rendering of a polygonal world--a smaller map is just a lower resol
 
 It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based entirely upon latitude, with a little randomness.
 
+### [Steam Workshop](http://steamcommunity.com/sharedfiles/filedetails/?id=310024314)
+
 ![example map in World Builder](fantastical-worldbuilder.jpg)
 
 ![example map in game](fantastical-ingame.jpg)
+
+### Installation & Use
+
+Place Fantastical-dev.lua into Documents\my games\Sid Meier's Civilization 5\Maps\
+
+The map will show up as "Fantastical (dev)" in the game setup dialogue.
 
 ### Custom Options
 
