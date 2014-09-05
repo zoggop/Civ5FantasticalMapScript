@@ -1,9 +1,12 @@
+- find better icon?
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
 - is it possible to put roads on the map with a map script?
 - does wonder placement fix work in game?
 
 DONE
+- add random options to temperature, rainfall, world age, oceans, continents/ocean, and islands
+	- add keyrandom and valuerandom possibilites for optiondictionary
 - clean up: don't want minkowski distance
 - control amount of polar continent landmass
 - control over amount of river tiles

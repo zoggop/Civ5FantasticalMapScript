@@ -45,10 +45,12 @@ local randomNumbers = 0
 
 local function mRandom(lower, upper)
 	local hundredth
-	if mFloor(lower) ~= lower or mFloor(upper) ~= upper then
-		lower = mFloor(lower * 100)
-		upper = mFloor(upper * 100)
-		hundredth = true
+	if lower and upper then
+		if mFloor(lower) ~= lower or mFloor(upper) ~= upper then
+			lower = mFloor(lower * 100)
+			upper = mFloor(upper * 100)
+			hundredth = true
+		end
 	end
 	local divide
 	if lower == nil then lower = 0 end
@@ -176,6 +178,7 @@ local OptionDictionary = {
 			[2] = { name = "Two", values = {2} },
 			[3] = { name = "Three", values = {3} },
 			[4] = { name = "Four", values = {4} },
+			[5] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
@@ -184,6 +187,7 @@ local OptionDictionary = {
 			[2] = { name = "Two", values = {2} },
 			[3] = { name = "Three", values = {3} },
 			[4] = { name = "Four", values = {4} },
+			[5] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Islands", sortpriority = 4, keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
@@ -191,6 +195,7 @@ local OptionDictionary = {
 			[1] = { name = "Few", values = {10, 1, 0.25} },
 			[2] = { name = "Some", values = {33, 2, 0.5} },
 			[3] = { name = "Many", values = {80, 3, 0.75} },
+			[4] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "World Age", sortpriority = 5, keys = { "mountainRatio", "hillynessMax" }, default = 4,
@@ -201,6 +206,7 @@ local OptionDictionary = {
 			[4] = { name = "4 Billion Years", values = {0.04, 40} },
 			[5] = { name = "5 Billion Years", values = {0.02, 30} },
 			[6] = { name = "6 Billion Years", values = {0.0, 20} },
+			[7] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Climate Realism", sortpriority = 6, keys = { "useMapLatitudes" }, default = 1,
@@ -214,8 +220,9 @@ local OptionDictionary = {
 			[1] = { name = "Ice Age", values = {3, 0, 50} },
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
-			[4] = { name = "Warm", values = {1.1, 5, 100} },
-			[5] = { name = "Hot", values = {1.0, 20, 100} },
+			[4] = { name = "Hot", values = {1.1, 5, 100} },
+			[5] = { name = "Jurassic", values = {1.0, 20, 100} },
+			[6] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Rainfall", sortpriority = 8, keys = { "rainfallMidpoint" }, default = 3,
@@ -225,6 +232,7 @@ local OptionDictionary = {
 			[3] = { name = "Normal", values = {50} },
 			[4] = { name = "Wet", values = {60} },
 			[5] = { name = "Waterlogged", values = {90} },
+			[6] = { name = "Random", values = "values" },
 		}
 	},
 	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled" }, default = 1,
@@ -1433,8 +1441,24 @@ end)
 function Space:SetOptions(optDict)
 	for optionNumber, option in ipairs(optDict) do
 		local optionChoice = Map.GetCustomOption(optionNumber)
-		for valueNumber, key in ipairs(option.keys) do
-			EchoDebug(key, optionNumber, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
+		if option.values[optionChoice].values == "keys" then
+			optionChoice = mRandom(1, #option.values-1)
+		elseif option.values[optionChoice].values == "values" then
+			local lowValues = option.values[1].values
+			local highValues = option.values[#option.values-1].values
+			local randValues = {}
+			for valueNumber, key in pairs(option.keys) do
+				local low, high = lowValues[valueNumber], highValues[valueNumber]
+				local change = high - low
+				randValues[valueNumber] = low + (change * mRandom(1))
+				if mFloor(low) == low and mFloor(high) == high then
+					randValues[valueNumber] = mFloor(randValues[valueNumber])
+				end
+			end
+			option.values[optionChoice].values = randValues
+		end
+ 		for valueNumber, key in ipairs(option.keys) do
+			EchoDebug(key, option.name, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
 			self[key] = option.values[optionChoice].values[valueNumber]
 		end
 	end
@@ -2790,6 +2814,7 @@ function Space:DrawRivers()
 	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds", "minorForkSeeds", "tinyForkSeeds" }
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
 	local drawn = 0
+	local lastRecycleDrawn = 0
 	while self.riverArea < prescribedRiverArea do
 		local anyAreaAtAll
 		for i, box in pairs(seedBoxes) do
@@ -2809,6 +2834,7 @@ function Space:DrawRivers()
 					if drawIt then
 						self:InkRiver(river, seed, seedSpawns, done)
 						drawn = drawn + 1
+						lastRecycleDrawn = lastRecycleDrawn + 1
 						inked = true
 						if self.riverArea >= prescribedRiverArea then break end
 					end
@@ -2820,7 +2846,11 @@ function Space:DrawRivers()
 		end
 		if not anyAreaAtAll and self.riverArea < prescribedRiverArea then
 			if #laterRiverSeeds > 0 then
-				EchoDebug("(recycling unused river seeds...)")
+				if lastRecycleDrawn == 0 then
+					EchoDebug("none drawn from last recycle")
+					break
+				end
+				EchoDebug("(recycling " .. #laterRiverSeeds .. " unused river seeds...)")
 				for si, seed in pairs(laterRiverSeeds) do
 					if seed.major then
 						tInsert(self.majorRiverSeeds, seed)
@@ -2838,6 +2868,7 @@ function Space:DrawRivers()
 						end
 					end
 				end
+				lastRecycleDrawn = 0
 			else
 				EchoDebug("no seeds available at all")			
 				break
