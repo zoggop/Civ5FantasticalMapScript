@@ -3,7 +3,13 @@
 - is it possible to put roads on the map with a map script?
 - does wonder placement fix work in game?
 
-DONE
+DONE (v2)
+- fix excessive ice when climate realism on
+- add fallout options: a bit, contaminated soil, contaminated water
+- minimum amount of river area changes with amount of global rainfall
+- fix occasional errors in floodplains placement
+
+DONE (v1)
 - add random options to temperature, rainfall, world age, oceans, continents/ocean, and islands
 	- add keyrandom and valuerandom possibilites for optiondictionary
 - clean up: don't want minkowski distance

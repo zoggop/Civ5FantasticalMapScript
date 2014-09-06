@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 1
+-- version 2
 
 --------------------------------------------------------------
 if include == nil then
@@ -221,7 +221,7 @@ local OptionDictionary = {
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
 			[4] = { name = "Hot", values = {1.1, 5, 100} },
-			[5] = { name = "Jurassic", values = {1.0, 20, 100} },
+			[5] = { name = "Jurassic", values = {0.9, 20, 100} },
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
@@ -235,10 +235,13 @@ local OptionDictionary = {
 			[6] = { name = "Random", values = "values" },
 		}
 	},
-	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled" }, default = 1,
+	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
 	values = {
-			[1] = { name = "Off", values = {false} },
-			[2] = { name = "On", values = {true} },
+			[1] = { name = "None", values = {false, false, false} },
+			[2] = { name = "A Bit", values = {true, false, false} },
+			[3] = { name = "Contaminated Soil", values = {true, false, true} },
+			[4] = { name = "Contaminated Water", values = {true, true, false} },
+			[5] = { name = "Contaminated Everything", values = {true, true, true} },
 		}
 	},
 }
@@ -391,7 +394,7 @@ local function SetConstants()
 		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
 		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 20, limitRatio = 0.01, hill = false },
-		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
+		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 18, limitRatio = 0.75, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -428,7 +431,7 @@ function Hex:Place(relax)
 	tInsert(self.subPolygon.hexes, self)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
-		self.latitude = self.plot:GetLatitude()
+		self.latitude = self.space:GetPlotLatitude(self.plot)
 		if not self.space.wrapX then
 			self.latitude = self.space:RealmLatitude(self.y, self.latitude)
 		end
@@ -551,16 +554,19 @@ end
 function Hex:SetFeature()
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
-	if self.terrainType == terrainDesert and self.plotType == plotLand then
-		if self.ofRiver then
+	if self.plotType == plotMountain then
+		if self.space.falloutEnabled and mRandom(0, 100) < mMin(25, FeatureDictionary[featureFallout].percent) then
+			self.featureType = featureFallout
+		end
+	elseif self.isRiver then
+		if self.space.falloutEnabled and self.space.contaminatedWater and mRandom(0, 100) < FeatureDictionary[featureFallout].percent then
+			self.featureType = featureFallout
+		elseif self.terrainType == terrainDesert and self.plotType == plotLand then
 			self.featureType = featureFloodPlains
-			for ofDirection, flowDirection in pairs(self.ofRiver) do
-				local phex = self:Adjacent(OppositeDirection(ofDirection))
-				if phex.terrainType == terrainDesert and phex.plotType == plotLand then
-					phex.featureType = featureFloodPlains
-					phex.plot:SetFeatureType(phex.featureType)
-				end
-			end
+		end
+	elseif self.plot:IsCoastalLand() then
+		if self.space.falloutEnabled and self.space.contaminatedWater and mRandom(0, 100) < (100 - FeatureDictionary[featureFallout].percent) then
+			self.featureType = featureFallout
 		end
 	end
 	self.plot:SetFeatureType(self.featureType)
@@ -603,9 +609,9 @@ Polygon = class(function(a, space, x, y)
 	a.space = space
 	a.x = x or Map.Rand(space.iW, "random x")
 	a.y = y or Map.Rand(space.iH, "random y")
+	a.centerPlot = Map.GetPlot(a.x, a.y)
 	if space.useMapLatitudes then
-		local plot = Map.GetPlot(x, y)
-		a.latitude = plot:GetLatitude()
+		a.latitude = space:GetPlotLatitude(a.centerPlot)
 		if not space.wrapX then
 			a.latitude = space:RealmLatitude(a.y, a.latitude)
 		end
@@ -696,7 +702,7 @@ function Polygon:RelaxToCentroid()
 		if centroidY < 0 then centroidY = self.space.h + centroidY end
 		self.x, self.y = centroidX, centroidY
 		if self.space.useMapLatitudes then
-			self.latitude = Map.GetPlot(self.x, self.y):GetLatitude()
+			self.latitude = self.space:GetHexByXY(self.x, self.y).latitude
 			if not self.space.wrapX then
 				self.latitude = self.self.space:RealmLatitude(self.y, self.latitude)
 			end
@@ -1303,7 +1309,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 		plotType = plotHills
 		self.hillCount = self.hillCount + 1
 	end
-	return { plotType = plotType, terrainType = terrainType, featureType = featureType }
+	return { plotType = plotType, terrainType = terrainType, featureType = featureType, temperature = temperature, rainfall = rainfall }
 end
 
 function Region:Fill()
@@ -1347,6 +1353,8 @@ function Region:Fill()
 					else
 						hex.featureType = featureNone
 					end
+					hex.temperature = element.temperature
+					hex.rainfall = element.rainfall
 					filledHexes[hex] = true
 				elseif subCollection.lake then
 					EchoDebug("lake hex already ocean plot at " .. hex.x .. ", " .. hex.y)
@@ -1378,10 +1386,9 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.riverLandRatio = 0.19
+	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivres. modified by rainfall
 	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
-	a.riverRainThreshold = 20 -- rivers must have this much rainfall to ever be inked
-	a.riverSpawnRainfall = 95 -- how much rainfall spawns a river seed even without mountains/hills
+	a.riverSpawnRainfall = 85 -- how much rainfall spawns a river seed even without mountains/hills
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33
@@ -1413,8 +1420,10 @@ Space = class(function(a)
 	a.lakeRegionPercent = 13 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 60 -- in those lake regions, what's the maximum percentage of water in their collection
-	a.roadCount = 10 -- how many polygon-to-polygon roads
+	a.roadCount = 10 -- how many polygon-to-polygon roads (currently there's no method to actually put the roads on the map, just an algorithm to place where they would go)
 	a.falloutEnabled = false -- place fallout on the map?
+	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
+	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
 	----------------------------------
 	-- DEFINITIONS: --
 	a.oceans = {}
@@ -1476,6 +1485,7 @@ function Space:Compute()
     self.h = self.iH - 1
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
+    self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
     end
@@ -1491,6 +1501,19 @@ function Space:Compute()
     self.minNonOceanPolygons = mCeil(self.polygonCount * 0.1)
     if not self.wrapX and not self.wrapY then self.minNonOceanPolygons = mCeil(self.polygonCount * 0.67) end
     self.nonOceanPolygons = self.polygonCount
+    -- set fallout options
+	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
+    if self.contaminatedWater and self.contaminatedSoil then
+    	FeatureDictionary[featureFallout].percent = 70
+    	FeatureDictionary[featureFallout].rainfall = {0, 100}
+    elseif self.contaminatedWater then
+    	FeatureDictionary[featureFallout].percent = 70
+    	FeatureDictionary[featureFallout].rainfall = {65, 100}
+    elseif self.contaminatedSoil then
+    	FeatureDictionary[featureFallout].percent = 70
+    	FeatureDictionary[featureFallout].limitRatio = 0.85
+    	FeatureDictionary[featureFallout].rainfall = {0, 25}
+    end
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
@@ -1615,17 +1638,30 @@ function Space:ComputeCoasts()
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
 			if subPolygon.superPolygon.coastal then
 				subPolygon.coast = true
-				subPolygon.oceanTemperature = subPolygon.superPolygon.region.temperatureAvg
+				subPolygon.oceanTemperature = subPolygon.temperature -- subPolygon.superPolygon.region.temperatureAvg
 			else
+				local coastTempTotal = 0
+				local coastTotal = 0
+				local tempTotal = 0
+				local total = 0
 				for ni, neighbor in pairs(subPolygon.neighbors) do
 					if neighbor.superPolygon.continent or neighbor.tinyIsland then
 						subPolygon.coast = true
-						subPolygon.oceanTemperature = neighbor.superPolygon.region.temperatureAvg
-						break
+						coastTempTotal = coastTempTotal + neighbor.temperature
+						coastTotal = coastTotal + 1
+					elseif neighbor.coast then
+						tempTotal = tempTotal + (neighbor.temperature or neighbor.oceanTemperature or self:GetTemperature(neighbor.latitude))
+						total = total + 1
 					end
 				end
+				if coastTotal > 0 then
+					subPolygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
+				elseif total > 0 then
+					tempTotal = tempTotal + self:GetTemperature(subPolygon.latitude)
+					subPolygon.oceanTemperature = mCeil(tempTotal / (total + 1))
+				end
 			end
-			subPolygon.oceanTemperature = subPolygon.oceanTemperature or self:GetTemperature(subPolygon.latitude)
+			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or subPolygon.superPolygon.oceanTemperature or self:GetTemperature(subPolygon.latitude)
 			local ice = self:GimmeIce(subPolygon.oceanTemperature) -- subPolygon.oceanTemperature <= self.freezingTemperature
 			if subPolygon.coast then
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
@@ -1659,7 +1695,10 @@ function Space:ComputeOceanTemperatures()
 						div = div + 1
 					end
 				end
-				if div > 0 then polygon.latitude = latSum / div end
+				if div > 0 then
+					latSum = latSum + polygon.latitude
+					polygon.latitude = mCeil(latSum / (div + 1))
+				end
 			end
 			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
 		end
@@ -2404,6 +2443,7 @@ function Space:FindRiverSeeds()
 	self.minorRiverSeeds = {}
 	self.tinyRiverSeeds = {}
 	local lakeCount = 0
+	local rainSeedCount = 0
 	for ih, hex in pairs(self.hexes) do
 		if (hex.polygon.continent and not hex.subPolygon.lake) or hex.subPolygon.tinyIsland then
 			local neighs, polygonNeighs, subPolygonNeighs, hexNeighs, oceanNeighs, lakeNeighs, mountainNeighs, dryNeighs = {}, {}, {}, {}, {}, {}, {}, {}
@@ -2493,12 +2533,13 @@ function Space:FindRiverSeeds()
 					tInsert(self.minorRiverSeeds, hillSeed)
 				elseif rainSeed and not connectsToOcean and not connectsToLake then
 					tInsert(self.minorRiverSeeds, rainSeed)
+					rainSeedCount = rainSeedCount + 1
 				end
 			end
 			for nhex, d in pairs(hexNeighs) do
 				local oceanSeed, hillSeed, rainSeed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
-					local rainfall = mMin(hex.subPolygon.rainfall, nhex.subPolygon.rainfall, nnhex.subPolygon.rainfall or 100)
+					local rainfall = mMin(hex.rainfall, nhex.rainfall, nnhex.rainfall or 100)
 					if oceanNeighs[nnhex] then
 						if not oceanSeed then
 							oceanSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = oceanNeighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, avoidWater = true, toHills = true, doneAnywhere = true }
@@ -2526,10 +2567,12 @@ function Space:FindRiverSeeds()
 					tInsert(self.tinyRiverSeeds, hillSeed)
 				elseif rainSeed and not connectsToOcean and not connectsToLake then
 					tInsert(self.tinyRiverSeeds, rainSeed)
+					rainSeedCount = rainSeedCount + 1
 				end
 			end
 		end
 	end
+	EchoDebug(rainSeedCount .. " rain seeds") 
 	EchoDebug(lakeCount .. " lakes ", #self.majorRiverSeeds .. " major ", #self.minorRiverSeeds .. " minor ", #self.tinyRiverSeeds .. " tiny")
 end
 
@@ -2743,7 +2786,7 @@ function Space:DrawRiver(seed)
 	until not newHex or it > 1000
 	local endRainfall
 	if not seed.growsDownstream and river and #river > 0 then
-		endRainfall = mMin(river[#river].hex.subPolygon.rainfall, river[#river].pairHex.subPolygon.rainfall) -- mCeil((river[#river].hex.subPolygon.rainfall + river[#river].pairHex.subPolygon.rainfall) / 2)
+		endRainfall = mMin(river[#river].hex.rainfall, river[#river].pairHex.rainfall) -- mCeil((river[#river].hex.subPolygon.rainfall + river[#river].pairHex.subPolygon.rainfall) / 2)
 	end
 	-- EchoDebug(it)
 	return river, done, seedSpawns, endRainfall
@@ -2812,6 +2855,7 @@ function Space:DrawRivers()
 	self.minorForkSeeds, self.tinyForkSeeds = {}, {}
 	local laterRiverSeeds = {}
 	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds", "minorForkSeeds", "tinyForkSeeds" }
+	self.riverLandRatio = self.riverLandRatio * (self.rainfallMidpoint / 50)
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
 	local drawn = 0
 	local lastRecycleDrawn = 0
@@ -2829,7 +2873,7 @@ function Space:DrawRivers()
 				local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
 				local rainfall = endRainfall or seed.rainfall
 				if (seed.doneAnywhere and river and #river > 0) or done then
-					local drawIt = seed.alwaysDraw or (rainfall > self.riverRainThreshold and Map.Rand(100, "river chance") < rainfall * self.riverRainMultiplier)
+					local drawIt = seed.alwaysDraw or (Map.Rand(100, "river chance") < rainfall * self.riverRainMultiplier)
 					-- EchoDebug(endRainfall or seed.rainfall, " rainfall ", (endRainfall or seed.rainfall) * 0.67, tostring(drawIt))
 					if drawIt then
 						self:InkRiver(river, seed, seedSpawns, done)
@@ -3057,6 +3101,14 @@ end
 
 ----------------------------------
 -- INTERNAL FUNCTIONS: --
+
+function Space:GetPlotLatitude(plot)
+	if plot:GetY() > self.halfHeight then
+		return mCeil(plot:GetLatitude() * self.northLatitudeMult)
+	else
+		return plot:GetLatitude()
+	end
+end
 
 function Space:GetFakeLatitude(polygon)
 	if polygon then
