@@ -3,7 +3,15 @@
 - is it possible to put roads on the map with a map script?
 - does wonder placement fix work in game?
 
+DONE (v3)
+- fill in holes in ice
+- adjust ocean ice algo
+- on realistic globe maps, force polar regions to have polar latitudes
+- fix ocean ice showing up at the jungle latitude of a realistic realm
+- fix fatal error on realisic realm maps
+
 DONE (v2)
+- adjust latitude to fix north-south ice imbalance
 - fix excessive ice when climate realism on
 - add fallout options: a bit, contaminated soil, contaminated water
 - minimum amount of river area changes with amount of global rainfall

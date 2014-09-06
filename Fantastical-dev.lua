@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 2
+-- version 3
 
 --------------------------------------------------------------
 if include == nil then
@@ -217,7 +217,7 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", sortpriority = 7, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
-			[1] = { name = "Ice Age", values = {3, 0, 50} },
+			[1] = { name = "Ice Age", values = {2.5, 0, 45} },
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
 			[4] = { name = "Hot", values = {1.1, 5, 100} },
@@ -431,9 +431,10 @@ function Hex:Place(relax)
 	tInsert(self.subPolygon.hexes, self)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
-		self.latitude = self.space:GetPlotLatitude(self.plot)
-		if not self.space.wrapX then
-			self.latitude = self.space:RealmLatitude(self.y, self.latitude)
+		if self.space.wrapX then
+			self.latitude = self.space:GetPlotLatitude(self.plot)
+		else
+			self.latitude = self.space:RealmLatitude(self.y)
 		end
 		self:InsidePolygon(self.subPolygon)
 	end
@@ -613,7 +614,7 @@ Polygon = class(function(a, space, x, y)
 	if space.useMapLatitudes then
 		a.latitude = space:GetPlotLatitude(a.centerPlot)
 		if not space.wrapX then
-			a.latitude = space:RealmLatitude(a.y, a.latitude)
+			a.latitude = space:RealmLatitude(a.y)
 		end
 	end
 	a.subPolygons = {}
@@ -704,7 +705,7 @@ function Polygon:RelaxToCentroid()
 		if self.space.useMapLatitudes then
 			self.latitude = self.space:GetHexByXY(self.x, self.y).latitude
 			if not self.space.wrapX then
-				self.latitude = self.self.space:RealmLatitude(self.y, self.latitude)
+				self.latitude = self.space:RealmLatitude(self.y)
 			end
 		end
 	end
@@ -1213,6 +1214,13 @@ function Region:CreateCollection()
 end
 
 function Region:GetLatitude()
+	if self.space.useMapLatitudes and self.space.wrapX then
+		for i, polygon in pairs(self.polygons) do
+			if polygon.topY or polygon.bottomY then
+				return mFloor((polygon.latitude + 90) / 2)
+			end
+		end
+	end
 	local polygon = tGetRandom(self.polygons)
 	return mFloor(polygon.latitude)
 	--[[
@@ -1401,7 +1409,7 @@ Space = class(function(a)
 	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
 	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
 	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
-	a.freezingTemperature = 18 -- this temperature and below creates ice. temperature is 0 to 100
+	a.freezingTemperature = 15 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
@@ -1486,6 +1494,7 @@ function Space:Compute()
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
+    self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
     end
@@ -1624,7 +1633,7 @@ function Space:ComputeSeas()
 	-- ocean plots and tiny islands:
 	for pi, hex in pairs(self.hexes) do
 		if hex.polygon.continent == nil then
-			if hex.polygon.coastal and hex.subPolygon.tinyIsland then
+			if hex.subPolygon.tinyIsland then
 				hex.plotType = plotLand
 			else
 				hex.plotType = plotOcean
@@ -1649,24 +1658,38 @@ function Space:ComputeCoasts()
 						subPolygon.coast = true
 						coastTempTotal = coastTempTotal + neighbor.temperature
 						coastTotal = coastTotal + 1
-					elseif neighbor.coast then
-						tempTotal = tempTotal + (neighbor.temperature or neighbor.oceanTemperature or self:GetTemperature(neighbor.latitude))
+					elseif neighbor.coast and neighbor.temperature then
+						tempTotal = tempTotal + neighbor.temperature
 						total = total + 1
 					end
 				end
 				if coastTotal > 0 then
+					local add = subPolygon.superPolygon.oceanTemperature or self:GetTemperature(subPolygon.latitude)
+					coastTotal = coastTotal + 1
+					coastTempTotal = coastTempTotal + add
 					subPolygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
 				elseif total > 0 then
 					tempTotal = tempTotal + self:GetTemperature(subPolygon.latitude)
-					subPolygon.oceanTemperature = mCeil(tempTotal / (total + 1))
+					total = total + 1
+					if subPolygon.superPolygon.oceanTemperature then
+						tempTotal = tempTotal + subPolygon.superPolygon.oceanTemperature
+						total = total + 1
+					end
+					subPolygon.oceanTemperature = mCeil( tempTotal / total )
 				end
 			end
-			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or subPolygon.superPolygon.oceanTemperature or self:GetTemperature(subPolygon.latitude)
-			local ice = self:GimmeIce(subPolygon.oceanTemperature) -- subPolygon.oceanTemperature <= self.freezingTemperature
+			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or mFloor((subPolygon.superPolygon.oceanTemperature + self:GetTemperature(subPolygon.latitude)) / 2) or self:GetTemperature(subPolygon.latitude)
+			local ice
+			if subPolygon.lake then
+				ice = subPolygon.oceanTemperature <= self.freshFreezingTemperature
+			else
+				ice = subPolygon.oceanTemperature <= self.freezingTemperature
+			end
 			if subPolygon.coast then
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
 				for hi, hex in pairs(subPolygon.hexes) do
-					if (ice and self:GimmeIce(subPolygon.oceanTemperature)) or (self.useMapLatitudes and self.polarExponent >= 1.0 and (hex.y == self.h or hex.y == 0)) then
+					local forceIce = (self.useMapLatitudes and self.polarExponent >= 1.0 and hex.latitude == 90) or (not self.useMapLatitudes and hex.subPolygon.latitude > 85)
+					if forceIce or (ice and self:GimmeIce(subPolygon.oceanTemperature)) then
 						hex.featureType = featureIce
 					elseif atoll and mRandom(1, 100) < self.atollPercent then
 						hex.featureType = featureAtoll
@@ -1675,15 +1698,61 @@ function Space:ComputeCoasts()
 				end
 			else
 				for hi, hex in pairs(subPolygon.hexes) do
-					if (ice and self:GimmeIce(subPolygon.oceanTemperature)) or (self.useMapLatitudes and self.polarExponent >= 1.0 and (hex.y == self.h or hex.y == 0)) then hex.featureType = featureIce end
+					local forceIce = (self.useMapLatitudes and self.polarExponent >= 1.0 and hex.latitude == 90) or (not self.useMapLatitudes and hex.subPolygon.latitude > 85)
+					if forceIce or (ice and self:GimmeIce(subPolygon.oceanTemperature)) then
+						hex.featureType = featureIce
+					end
 					hex.terrainType = terrainOcean
 				end
+			end
+		end
+	end
+	-- fill in gaps in the ice
+	for i, subPolygon in pairs(self.subPolygons) do
+		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
+			for hi, hex in pairs(subPolygon.hexes) do
+				local surrounded = true
+				for d, nhex in pairs(hex:Neighbors()) do
+					if nhex.featureType ~= featureIce then
+						surrounded = false
+						break
+					end
+				end
+				if not surrounded then
+					local picked = {}
+					local chex = hex
+					for n = 1, 16 do
+						picked[chex] = true
+						local newHex
+						for d, nhex in pairs(chex:Neighbors()) do
+							if nhex.plotType ~= plotOcean then
+								newHex = true
+								break
+							elseif nhex.featureType ~= featureIce and not picked[nhex] then
+								newHex = nhex
+								break
+							end
+						end
+						if newHex == true then
+							break -- found land
+						elseif not newHex then
+							for chex, yes in pairs(picked) do
+								chex.featureType = featureIce
+							end
+							break
+						end
+						chex = newHex
+					end
+				end
+				if surrounded then hex.featureType = featureIce end
 			end
 		end
 	end
 end
 
 function Space:ComputeOceanTemperatures()
+	local avgOceanLat = 0
+	local totalLats = 0
 	for p, polygon in pairs(self.polygons) do
 		if polygon.continent == nil then
 			if not self.useMapLatitudes and polygon.oceanIndex == nil then
@@ -1700,8 +1769,18 @@ function Space:ComputeOceanTemperatures()
 					polygon.latitude = mCeil(latSum / (div + 1))
 				end
 			end
-			polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
+			totalLats = totalLats + 1
+			avgOceanLat = avgOceanLat + polygon.latitude
 		end
+	end
+	avgOceanLat = mFloor(avgOceanLat / totalLats)
+	local avgOceanTemp = self:GetTemperature(avgOceanLat)
+	EchoDebug(avgOceanLat .. " is average ocean latitude with temperature of " .. avgOceanTemp, " temperature at equator: " .. self:GetTemperature(0))
+	avgOceanTemp = mMax(avgOceanTemp, self.freezingTemperature + 5)
+	EchoDebug(" adjusted avg ocean temp: " .. avgOceanTemp)
+	for p, polygon in pairs(self.polygons) do
+		-- polygon.oceanTemperature = self:GetTemperature(polygon.latitude)
+		polygon.oceanTemperature = (self:GetTemperature(polygon.latitude) * 0.5) + (avgOceanTemp * 0.5)
 	end 
 end
 
@@ -3128,9 +3207,9 @@ function Space:GetFakeSubLatitude(latitudeStart)
 	return mRandom(0, 90)
 end
 
-function Space:RealmLatitude(y, latitude)
+function Space:RealmLatitude(y)
 	if self.realmHemisphere == 2 then y = self.h - y end
-	return mFloor(y * (90 / self.h))
+	return mCeil(y * (90 / self.h))
 end
 
 function Space:GetTemperature(latitude)

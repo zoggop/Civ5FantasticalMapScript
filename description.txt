@@ -6,10 +6,11 @@ It is possible to enable Climate Realism, but it's no Planet Simulator or Perfec
 
 [url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Project[/url]
 
-[url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]
+[url=https://github.com/zoggop/Civ5FantasticalMapScript/archive/master.zip]Download Project[/url]
 
-[b][i]Custom Options[/i][/b]
+[url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Download Lua File[/url]
 
+[h3]Custom Options[/h3]
 [b]World Wrap:[/b] The map can be either a [i]Globe[/i] with east-west wrapping, or a [i]Realm[/i] with no wrapping
 
 [b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]1[/i] to [i]4[/i]. (On [i]Realm[/i] maps this means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.)
@@ -20,6 +21,6 @@ It is possible to enable Climate Realism, but it's no Planet Simulator or Perfec
 
 [b]Climate Realism:[/b] [i]Off[/i] creates any kind of terrain wherever (including ice in the ocean). [i]On[/i] puts ice at the poles and creates an earth-like climate.
 
-[b]Fallout:[/b] [i]On[/i] places occasional areas of fallout on the map.
+[b]Fallout:[/b] [i]A Bit[/i] places occasional bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout near rivers, coasts, and in wet areas. [i]Contaminated Everything[/i] places fallout heavily everywhere.
 
 [b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Ice Age[/i] to [i]Jurassic[/i], and [b]Rainfall[/b] from [i]Wasteland[/i] to [i]Waterlogged[/i].
