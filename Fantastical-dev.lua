@@ -247,6 +247,7 @@ local OptionDictionary = {
 }
 
 local function GetCustomOptions()
+	EchoDebug(string.sub("hello, ", 1, -2))
 	local custOpts = {}
 	for i, option in ipairs(OptionDictionary) do
 		local opt = { Name = option.name, SortPriority = option.sortpriority, DefaultValue = option.default, Values = {} }
@@ -256,6 +257,25 @@ local function GetCustomOptions()
 		tInsert(custOpts, opt)
 	end
 	return custOpts
+end
+
+local function DatabaseInsert(tableName, values)
+	-- local sqlStatement = "INSERT INTO Ancient_Roads (x, y) VALUES (" .. self.x .. ", " .. self.y .. ");"
+	local valueString = ""
+	local nameString = ""
+	for name, value in pairs(values) do
+		nameString = nameString .. name .. ", "
+		valueString = valueString .. value .. ", "
+	end
+	nameString = string.sub(nameString, 1, -2)
+	valueString = stirng.sub(valueString, 1, -2)
+	DatabaseQuery("INSERT INTO " .. tableName .. "(" .. nameString ..") VALUES (" .. valueString .. ");")
+end
+
+local function DatabaseQuery(sqlStatement)
+	for whatever in DB.Query(sqlStatement) do
+		local stuff = whatever
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -1398,6 +1418,10 @@ function Region:Fill()
 				end
 			end
 		end
+	end
+	if self.space.mapLabelsEnabled then
+		local polygon = tGetRandom(self.polygons) do
+		DatabaseInsert("Fantasy_Map_Labels", {x = polygon.x, y = polygon.y, label = self:GetLabel()})
 	end
 end
 
@@ -2707,9 +2731,8 @@ function Space:FindRiverSeeds()
 end
 
 function Space:HillsOrMountains(...)
-	local hexes = {}
 	local hills = 0
-	for i, hex in pairs(hexes) do
+	for i, hex in pairs({...}) do
 		if hex.plotType == plotMountain or hex.plotType == plotHills then
 			hills = hills + 1
 		end
