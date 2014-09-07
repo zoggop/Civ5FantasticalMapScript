@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 4
+-- version 5
 
 --------------------------------------------------------------
 if include == nil then
@@ -345,7 +345,6 @@ local function SetConstants()
 	DirConvert = { [DirW] = DirectionTypes.DIRECTION_WEST, [DirNW] = DirectionTypes.DIRECTION_NORTHWEST, [DirNE] = DirectionTypes.DIRECTION_NORTHEAST, [DirE] = DirectionTypes.DIRECTION_EAST, [DirSE] = DirectionTypes.DIRECTION_SOUTHEAST, [DirSW] = DirectionTypes.DIRECTION_SOUTHWEST }
 
 	routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
-	EchoDebug("ROAD ROUTETYPE ID: " .. routeRoad)
 
 	plotOcean = PlotTypes.PLOT_OCEAN
 	plotLand = PlotTypes.PLOT_LAND
@@ -588,7 +587,11 @@ function Hex:SetRoad()
 	if self.plot == nil then return end
 	if not self.road then return end
 	-- self.plot:SetFeatureType(featureFallout)
-	self.plot:SetRouteType(routeRoad)
+	-- self.plot:SetRouteType(routeRoad)
+	local sqlStatement = "INSERT INTO Ancient_Roads (x, y) VALUES (" .. self.x .. ", " .. self.y .. ");"
+	for whatever in DB.Query(sqlStatement) do
+		EchoDebug(tostring(whatever))
+	end
 end
 
 function Hex:EdgeCount()
@@ -1454,7 +1457,7 @@ Space = class(function(a)
 	a.lakeRegionPercent = 13 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 60 -- in those lake regions, what's the maximum percentage of water in their collection
-	a.roadCount = 10 -- how many polygon-to-polygon roads (currently there's no method to actually put the roads on the map, just an algorithm to place where they would go)
+	a.roadCount = 8 -- how many polygon-to-polygon 'ancient' roads
 	a.falloutEnabled = false -- place fallout on the map?
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
 	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
@@ -1626,8 +1629,8 @@ function Space:Compute()
 	self:DrawLakeRivers()
 	EchoDebug("drawing rivers...")
 	self:DrawRivers()
-	-- EchoDebug("drawing roads...")
-	-- self:DrawRoads()
+	EchoDebug("drawing roads...")
+	self:DrawRoads()
 end
 
 function Space:ComputeLandforms()
@@ -1853,6 +1856,16 @@ function Space:SetRivers()
 end
 
 function Space:SetRoads()
+	if GameInfo.Ancient_Roads then
+		local sqlStatement = "DROP TABLE Ancient_Roads;"
+		for whatever in DB.Query(sqlStatement) do
+			EchoDebug(tostring(whatever))
+		end
+	end
+	local sqlStatement = "CREATE TABLE Ancient_Roads ( x integer DEFAULT 0, y integer DEFAULT 0 );"
+	for whatever in DB.Query(sqlStatement) do
+		EchoDebug(tostring(whatever))
+	end
 	for i, hex in pairs(self.hexes) do
 		hex:SetRoad()
 	end

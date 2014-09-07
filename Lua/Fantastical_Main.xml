@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context>
+	<Container ID="MapContainer"/>
+	<Instance Name="Map">
+		<WorldAnchor ID="Anchor">
+			<Label ID="Map" Anchor="C,C" Font="TwCenMT20" FontStyle="Shadow" ColorSet="Beige_Black_Alpha" />
+		</WorldAnchor>
+	</Instance>
+</Context>
