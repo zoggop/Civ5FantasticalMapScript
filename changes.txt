@@ -3,6 +3,10 @@
 - is it possible to put roads on the map with a map script?
 - does wonder placement fix work in game?
 
+DONE (v4)
+- fix ice hole fill algo
+- simplify ocean temp dynamics
+
 DONE (v3)
 - fill in holes in ice
 - adjust ocean ice algo
