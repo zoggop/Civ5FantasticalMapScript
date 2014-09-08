@@ -170,35 +170,109 @@ local LabelSyntaxes = {
 
 local LabelDictionary ={
 	Place = {
-		Land = { "Country", "Hole", "Vale" },
-		Ocean = { "Sea", "Shallows" },
-		Range = { "Mountains", "Range", "Sierra", "Crest" },
-		Mountains = { "Mountains", "Heights", "Highlands" },
+		Land = { "Country", "Vale" },
+		Sea = { "Sea", "Shallows", "Reef" },
+		Islet = { "Islet", "Key", "Cay" },
+		Island = { "Island", "Isle" },
+		Archipelago = { "Archipelago", },
+		Mountains = { "Heights", "Highlands" },
 		Hills = { "Hills", "Plateau", "Fell" },
 		Dunes = { "Dunes", "Sands", "Drift" },
 		Plains = { "Plain", "Prarie", "Steppe", "Flat", "Field" },
 		Forest = { "Forest", "Wood", "Grove", "Thicket" },
 		Jungle = { "Jungle", "Maze", "Tangle" },
-		Swamp = { "Swamp", "Marsh", "Down" }
+		Swamp = { "Swamp", "Marsh", "Down" },
+		Range = { "Mountains", "Range", "Sierra", "Crest" },
+		Ocean = { "Ocean", "Ocean", "Ocean", "Ocean" },
 	},
 	Noun = {
-		Unknown = { "Despair", "Light", "Mystery" },
+		Unknown = { "Despair", "Light" },
 		Hot = { "Brimstone", "The Sun", "The Anvil" },
 		Cold = { "Frost", "Snow", "Ice" },
 		Wet = { "Cloud", "Fog", "Monsoons" },
-		Dry = { "Dust", "Bones" }
+		Dry = { "Dust", "Bones" },
+		Big = { "The Ancients", "The Unfathomable" },
+		Small = { "Crossings" },
 	},
 	Adjective = {
 		Unknown = { "Enchanted", },
 		Hot = { "Fiery", "Burning", "Sunny" },
 		Cold = { "Snowy", "Icy", "Frigid" },
 		Wet = { "Damp", "Misty", "Stormy" },
-		Dry = { "Dusty", "Dry", "Parched" }
+		Dry = { "Dusty", "Dry", "Parched" },
+		Big = { "Elder", "Wide" },
+		Small = { "Lesser" },
 	}
 }
 
 local LabelDefinitions -- has to be set in SetConstants()
 
+local function EvaluateCondition(key, condition, thing)
+	if type(condition) == "boolean" then
+		return thing[key]
+	end
+	if thing[key] then
+		if type(condition) == "table" then
+			local met = false
+			for subKey, subCondition in pairs(condition) do
+				met = EvaluateCondition(subKey, subCondition, thing[key])
+				if not met then return false end
+			end
+			return met
+		elseif type(condition) ~= "boolean" then
+			if condition > 0 then
+				return thing[key] > condition
+			elseif condition < 0 then
+				return thing[key] < -condition
+			elseif condition == 0 then
+				return thing[key] == 0
+			end
+		else
+			return false
+		end
+	end
+end
+
+local function GetLabel(thing)
+	local syntax = tGetRandom(LabelSyntaxes)
+	local backIn = {}
+	local label = ""
+	for i, part in ipairs(syntax) do
+		if LabelDictionary[part] then
+			local thisKind
+			for kind, words in pairs(LabelDictionary[part]) do
+				if kind ~= "Unknown" and LabelDefinitions[kind] and #words > 0 then
+					local met = false
+					for key, condition in pairs(LabelDefinitions[kind]) do
+						met = EvaluateCondition(key, condition, thing)
+					end
+					if met then
+						thisKind = kind
+						break
+					end
+				end
+			end
+			if thisKind == "Plains" then
+				EchoDebug("plains jungle ratio: ", thing.featureRatios[featureJungle])
+			end
+			if not thisKind then thisKind = "Unknown" end
+			if LabelDictionary[part][thisKind] and #LabelDictionary[part][thisKind] > 0 then
+				local word = tRemoveRandom(LabelDictionary[part][thisKind])
+				tInsert(backIn, {part = part, kind = thisKind, word = word})
+				label = label .. word
+			else
+				for ib, recycle in pairs(backIn) do
+					tInsert(LabelDictionary[recycle.part][recycle.kind], recycle.word)
+				end
+				return nil
+			end
+		else
+			label = label .. part
+		end
+	end
+	EchoDebug(label)
+	return label
+end
 
 ------------------------------------------------------------------------------
 
@@ -317,6 +391,20 @@ local function DatabaseInsert(tableName, values)
 	nameString = string.sub(nameString, 1, -3)
 	valueString = string.sub(valueString, 1, -3)
 	DatabaseQuery("INSERT INTO " .. tableName .. " (" .. nameString ..") VALUES (" .. valueString .. ");")
+end
+
+local function LabelThing(thing, x, y)
+	if not thing then return end
+	x = x or thing.x
+	if not x then return end
+	y = y or thing.y
+	local label = GetLabel(thing)
+	if label then
+		DatabaseInsert("Fantastical_Map_Labels", {x = x, y = y, Label = label})
+		return true
+	else
+		return false
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -467,20 +555,27 @@ local function SetConstants()
 	end
 
 	LabelDefinitions = {
-		Ocean = { plotRatios = { [plotLand] = -0.2 } },
+		Sea = { plotRatios = { [plotLand] = -0.2 } },
 		Land = { plotRatios = { [plotOcean] = -0.21 } },
+		Islet = { continentSize = -2, },
+		Island = { continentSize = -4 },
+		Archipelago = { archipelago = true },
 		Mountains = { plotRatios = { [plotMountain] = 0.2 }, },
 		Hills = { plotRatios = { [plotHills] = 0.3 } },
 		Dunes = { plotRatios = { [plotHills] = 0.25 }, terrainRatios = { [terrainDesert] = 0.85 } },
 		Plains = { plotRatios = {[plotLand] = 0.85}, terrainRatios = {[terrainPlains] = 0.5}, featureRatios = {[featureForest] = -0.1, [featureJungle] = -0.1} },
 		Forest = { featureRatios = { [featureForest] = 0.35 } },
 		Jungle = { featureRatios = { [featureJungle] = 0.45 } },
-		Swamp = { featureRatios = { [featureMarsh] = 0.2 } },
+		Swamp = { featureRatios = { [featureMarsh] = 0.15 } },
+		Range = { rangeLength = 1 },
+		Ocean = { oceanSize = 1 },
 
 		Hot = { temperatureAvg = 75 },
 		Cold = { temperatureAvg = -20 },
 		Wet = { rainfallAvg = 80 },
 		Dry = { rainfallAvg = -15 },
+		Big = { oceanSize = 6 },
+		Small = { oceanSize = -7 }
 	}
 end
 
@@ -1479,27 +1574,42 @@ function Region:Fill()
 end
 
 function Region:Label()
+	if self.polygons[1].continent then
+		self.continentSize = #self.polygons[1].continent
+	end
 	self.plotCounts = {}
+	for i = -1, PlotTypes.NUM_PLOT_TYPES - 1 do
+		self.plotCounts[i] = 0
+	end
 	self.terrainCounts = {}
+	for i = -1, TerrainTypes.NUM_TERRAIN_TYPES - 1 do
+		self.terrainCounts[i] = 0
+	end
 	self.featureCounts = {}
-	count = 0
+	for i = -1, 21 do
+		self.featureCounts[i] = 0
+	end
+	local count = 0
+	local avgX = 0
+	local avgY = 0
 	for ip, polygon in pairs(self.polygons) do
 		for ih, hex in pairs(polygon.hexes) do
 			if hex.plotType then
-				if self.plotCounts[hex.plotType] == nil then self.plotCounts[hex.plotType] = 0 end
 				self.plotCounts[hex.plotType] = self.plotCounts[hex.plotType] + 1
 			end
 			if hex.terrainType then
-				if self.terrainCounts[hex.terrainType] == nil then self.terrainCounts[hex.terrainType] = 0 end
 				self.terrainCounts[hex.terrainType] = self.terrainCounts[hex.terrainType] + 1
 			end
 			if hex.featureType then
-				if self.featureCounts[hex.featureType] == nil then self.featureCounts[hex.featureType] = 0 end
 				self.featureCounts[hex.featureType] = self.featureCounts[hex.featureType] + 1
 			end
 			count = count + 1
+			avgX = avgX + hex.x
+			avgY = avgY + hex.y
 		end
 	end
+	avgX = mCeil(avgX / count)
+	avgY = mCeil(avgY / count)
 	self.plotRatios = {}
 	self.terrainRatios = {}
 	self.featureRatios = {}
@@ -1515,99 +1625,8 @@ function Region:Label()
 		self.featureRatios[featureType] = tcount / count
 		-- EchoDebug("feature", featureType, self.featureRatios[featureType])
 	end
-	local polygon = tGetRandom(self.polygons)
-	local label = self:GetLabel()
-	if label then
-		DatabaseInsert("Fantastical_Map_Labels", {x = polygon.x, y = polygon.y, Label = label})
-	end
-end
-
-function Region:GetLabel()
-	local syntax = tGetRandom(LabelSyntaxes)
-	local backIn = {}
-	local label = ""
-	for i, part in ipairs(syntax) do
-		if LabelDictionary[part] then
-			local thisKind
-			for kind, words in pairs(LabelDictionary[part]) do
-				if kind ~= "Unknown" and kind ~= "Range" and LabelDefinitions[kind] and #words > 0 then
-					local met = false
-					for key, condition in pairs(LabelDefinitions[kind]) do
-						if self[key] then
-							if type(condition) == "table" then
-								for subKey, subCondition in pairs(condition) do
-									if self[key][subKey] then
-										if subCondition > 0 then
-											if self[key][subKey] > subCondition then
-												met = true
-											else
-												met = false
-												break
-											end
-										elseif subCondition < 0 then
-											if self[key][subKey] < -subCondition then
-												met = true
-											else
-												met = false
-												break
-											end
-										end
-									else
-										met = false
-										break
-									end
-								end
-								if not met then break end
-							elseif type(self[key]) == "table" then
-								EchoDebug("region key is inappropriate table: ", key)
-								met = false
-								break
-							else
-								if condition > 0 then
-									if self[key] > condition then
-										met = true
-									else
-										met = false
-										break
-									end
-								elseif condition < 0 then
-									if self[key] < -condition then
-										met = true
-									else
-										met = false
-										break
-									end
-								end
-							end
-						else
-							EchoDebug("nil region key: ", key)
-							met = false
-							break
-						end
-					end
-					if met then
-						thisKind = kind
-						break
-					end
-				end
-			end
-			if not thisKind then thisKind = "Unknown" end
-			if LabelDictionary[part][thisKind] and #LabelDictionary[part][thisKind] > 0 then
-				local word = tRemoveRandom(LabelDictionary[part][thisKind])
-				tInsert(backIn, {part = part, kind = thisKind, word = word})
-				label = label .. word
-			else
-				for ib, recycle in pairs(backIn) do
-					tInsert(LabelDictionary[recycle.part][recycle.kind], recycle.word)
-				end
-				return nil
-			end
-		else
-			label = label .. part
-		end
-	end
-	EchoDebug(label)
-	return label
+	local label = LabelThing(self, avgX, avgY)
+	if label then return true end
 end
 
 ------------------------------------------------------------------------------
@@ -1670,7 +1689,9 @@ Space = class(function(a)
 	a.falloutEnabled = false -- place fallout on the map?
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
 	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
-	a.mapLabelsEnabled = true
+	a.mapLabelsEnabled = true -- add place names to the map?
+	a.regionLabelsMax = 100 -- maximum number of labelled regions
+	a.rangeLabelsMax = 100 -- maximum number of labelled mountain ranges
 	----------------------------------
 	-- DEFINITIONS: --
 	a.oceans = {}
@@ -1841,8 +1862,8 @@ function Space:Compute()
 	self:DrawRivers()
 	EchoDebug("drawing roads...")
 	self:DrawRoads()
-	EchoDebug("labelling regions...")
-	self:LabelRegions()
+	EchoDebug("labelling map...")
+	self:LabelMap()
 end
 
 function Space:ComputeLandforms()
@@ -2779,16 +2800,88 @@ function Space:FillRegions()
 	end
 end
 
-function Space:LabelRegions()
+function Space:LabelMap()
 	if GameInfo.Fantastical_Map_Labels then
 		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
 	end
 	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Label text DEFAULT null );")
+	EchoDebug("labelling regions...")
+	local regionsLabelled = 0
 	local regionBuffer = tDuplicate(self.regions)
 	repeat
 		local region = tRemoveRandom(regionBuffer)
-		region:Label()
-	until #regionBuffer == 0
+		if region:Label() then regionsLabelled = regionsLabelled + 1 end
+	until #regionBuffer == 0 or regionsLabelled >= self.regionLabelsMax
+	EchoDebug("labelling mountain ranges...")
+	local rangesLabelled = 0
+	local rangeBuffer = tDuplicate(self.mountainRanges)
+	repeat
+		local range = tRemoveRandom(rangeBuffer)
+		local temperatureAvg = 0
+		local rainfallAvg = 0
+		local tempCount = 0
+		local rainCount = 0
+		local x, y
+		for ie, edge in pairs(range) do
+			for ip, polygon in pairs(edge.polygons) do
+				if polygon.oceanTemperature then
+					temperatureAvg = temperatureAvg + polygon.oceanTemperature
+					tempCount = tempCount + 1
+				end
+			end
+			for ise, subEdge in pairs(edge.subEdges) do
+				for isp, subPolygon in pairs(subEdge.polygons) do
+					if subPolygon.temperature then
+						temperatureAvg = temperatureAvg + subPolygon.temperature
+						tempCount = tempCount + 1
+					end
+					if subPolygon.rainfall then
+						rainfallAvg = rainfallAvg + subPolygon.rainfall
+						rainCount = rainCount + 1
+					end
+					if not x then
+						for ih, hex in pairs(subPolygon.hexes) do
+							if hex.plotType == plotMountain then
+								x = hex.x
+								y = hex.y
+								break
+							end
+						end
+					end
+				end
+			end
+		end
+		if x then
+			temperatureAvg = temperatureAvg / tempCount
+			rainfallAvg = rainfallAvg / rainCount
+			EchoDebug("valid mountain range: ", #range, temperatureAvg, temperatureAvg)
+			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg }
+			if LabelThing(thing) then rangesLabelled = rangesLabelled + 1 end
+		end
+	until #rangeBuffer == 0 or rangesLabelled >= self.rangeLabelsMax
+	EchoDebug("labelling oceans...")
+	for i, ocean in pairs(self.oceans) do
+		EchoDebug("ocean size: ", #ocean)
+		local index = mCeil(#ocean/2)
+		local away = 1
+		local sub = false
+		local polygon = ocean[index]
+		while polygon.hasTinyIslands do
+			if sub then
+				index = index - away
+				away = away + 1
+			else
+				index = index + away
+				away = away + 1
+			end
+			sub = not sub
+			if index > #ocean or index < 1 then break end
+			polygon = ocean[index]
+			if not polygon.hasTinyIslands then break end
+		end
+		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y }
+		LabelThing(thing)
+	end
 end
 
 function Space:FindRiverSeeds()
