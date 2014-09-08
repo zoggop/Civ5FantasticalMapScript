@@ -1,6 +1,5 @@
 -- Fantastical_Main
 -- Author: zoggop
--- DateCreated: 1/4/2014
 --------------------------------------------------------------------
 include("FLuaVector")
 include("InstanceManager")
@@ -20,23 +19,20 @@ end
 --------------------------------------------------------------------
 function Initialize()
 	print("Initializing Fantastical_Main...")
-	--[[
-	for row in GameInfo.Map_Labels("MapName='Fantastical'") do
-		local plot = Map.GetPlot(row.LabelX, row.LabelY)
+	for row in GameInfo.Fantastical_Map_Labels() do
+		local plot = Map.GetPlot(row.x, row.y)
 		local instance = g_MapManager:GetInstance()
-		instance.Map:LocalizeAndSetText(row.Description)
+		instance.Map:LocalizeAndSetText(row.Label)
 		PlaceInWorld(instance.Anchor, GetWorldPos(plot))
 	end
-	print("+--Fantastical Map Labels Loaded--+")
-	]]--
+	print("Fantastical labels loaded.")
 	local routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
 	for row in GameInfo.Ancient_Roads() do
-		print(tostring(row))
 		print("road at " .. row.x .. ", " .. row.y)
 		local plot = Map.GetPlot(row.x, row.y)
 		plot:SetRouteType(routeRoad)
 	end
-	print("Fantastical Map Roads Set")
+	print("Fantastical roads set")
 end
 --------------------------------------------------------------------
 Initialize()

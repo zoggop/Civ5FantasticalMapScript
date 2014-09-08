@@ -163,6 +163,45 @@ end
 
 ------------------------------------------------------------------------------
 
+local LabelSyntaxes = {
+	{ "Place", " of ", "Noun" },
+	{ "Adjective", " ", "Place"},
+}
+
+local LabelDictionary ={
+	Place = {
+		Land = { "Country", "Hole", "Vale" },
+		Ocean = { "Sea", "Shallows" },
+		Range = { "Mountains", "Range", "Sierra", "Crest" },
+		Mountains = { "Mountains", "Heights", "Highlands" },
+		Hills = { "Hills", "Plateau", "Fell" },
+		Dunes = { "Dunes", "Sands", "Drift" },
+		Plains = { "Plain", "Prarie", "Steppe", "Flat", "Field" },
+		Forest = { "Forest", "Wood", "Grove", "Thicket" },
+		Jungle = { "Jungle", "Maze", "Tangle" },
+		Swamp = { "Swamp", "Marsh", "Down" }
+	},
+	Noun = {
+		Unknown = { "Despair", "Light", "Mystery" },
+		Hot = { "Brimstone", "The Sun", "The Anvil" },
+		Cold = { "Frost", "Snow", "Ice" },
+		Wet = { "Cloud", "Fog", "Monsoons" },
+		Dry = { "Dust", "Bones" }
+	},
+	Adjective = {
+		Unknown = { "Enchanted", },
+		Hot = { "Fiery", "Burning", "Sunny" },
+		Cold = { "Snowy", "Icy", "Frigid" },
+		Wet = { "Damp", "Misty", "Stormy" },
+		Dry = { "Dusty", "Dry", "Parched" }
+	}
+}
+
+local LabelDefinitions -- has to be set in SetConstants()
+
+
+------------------------------------------------------------------------------
+
 local OptionDictionary = {
 	{ name = "World Wrap", sortpriority = 1, keys = { "wrapX", "wrapY" }, default = 1,
 	values = {
@@ -247,7 +286,6 @@ local OptionDictionary = {
 }
 
 local function GetCustomOptions()
-	EchoDebug(string.sub("hello, ", 1, -2))
 	local custOpts = {}
 	for i, option in ipairs(OptionDictionary) do
 		local opt = { Name = option.name, SortPriority = option.sortpriority, DefaultValue = option.default, Values = {} }
@@ -259,23 +297,26 @@ local function GetCustomOptions()
 	return custOpts
 end
 
-local function DatabaseInsert(tableName, values)
-	-- local sqlStatement = "INSERT INTO Ancient_Roads (x, y) VALUES (" .. self.x .. ", " .. self.y .. ");"
-	local valueString = ""
-	local nameString = ""
-	for name, value in pairs(values) do
-		nameString = nameString .. name .. ", "
-		valueString = valueString .. value .. ", "
-	end
-	nameString = string.sub(nameString, 1, -2)
-	valueString = stirng.sub(valueString, 1, -2)
-	DatabaseQuery("INSERT INTO " .. tableName .. "(" .. nameString ..") VALUES (" .. valueString .. ");")
-end
-
 local function DatabaseQuery(sqlStatement)
 	for whatever in DB.Query(sqlStatement) do
 		local stuff = whatever
 	end
+end
+
+local function DatabaseInsert(tableName, values)
+	local valueString = ""
+	local nameString = ""
+	for name, value in pairs(values) do
+		nameString = nameString .. name .. ", "
+		if type(value) == "string" then
+			valueString = valueString .. "'" .. value .. "', "
+		else
+			valueString = valueString .. value .. ", "
+		end
+	end
+	nameString = string.sub(nameString, 1, -3)
+	valueString = string.sub(valueString, 1, -3)
+	DatabaseQuery("INSERT INTO " .. tableName .. " (" .. nameString ..") VALUES (" .. valueString .. ");")
 end
 
 ------------------------------------------------------------------------------
@@ -351,6 +392,7 @@ local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, feat
 local TerrainDictionary, FeatureDictionary
 
 local function SetConstants()
+	EchoDebug(string.sub("hello, ", 1, -3))
 
 	FlowDirN, FlowDirNE, FlowDirSE, FlowDirS, FlowDirSW, FlowDirNW = FlowDirectionTypes.FLOWDIRECTION_NORTH, FlowDirectionTypes.FLOWDIRECTION_NORTHEAST, FlowDirectionTypes.FLOWDIRECTION_SOUTHEAST, FlowDirectionTypes.FLOWDIRECTION_SOUTH, FlowDirectionTypes.FLOWDIRECTION_SOUTHWEST, FlowDirectionTypes.FLOWDIRECTION_NORTHWEST
 	FlowDirNames = {
@@ -423,6 +465,23 @@ local function SetConstants()
 	for featureType, feature in pairs(FeatureDictionary) do
 		if feature.featureType == nil then feature.featureType = featureType end
 	end
+
+	LabelDefinitions = {
+		Ocean = { plotRatios = { [plotLand] = -0.2 } },
+		Land = { plotRatios = { [plotOcean] = -0.21 } },
+		Mountains = { plotRatios = { [plotMountain] = 0.2 }, },
+		Hills = { plotRatios = { [plotHills] = 0.3 } },
+		Dunes = { plotRatios = { [plotHills] = 0.25 }, terrainRatios = { [terrainDesert] = 0.85 } },
+		Plains = { plotRatios = {[plotLand] = 0.85}, terrainRatios = {[terrainPlains] = 0.5}, featureRatios = {[featureForest] = -0.1, [featureJungle] = -0.1} },
+		Forest = { featureRatios = { [featureForest] = 0.35 } },
+		Jungle = { featureRatios = { [featureJungle] = 0.45 } },
+		Swamp = { featureRatios = { [featureMarsh] = 0.2 } },
+
+		Hot = { temperatureAvg = 75 },
+		Cold = { temperatureAvg = -20 },
+		Wet = { rainfallAvg = 80 },
+		Dry = { rainfallAvg = -15 },
+	}
 end
 
 ------------------------------------------------------------------------------
@@ -1413,16 +1472,142 @@ function Region:Fill()
 					hex.temperature = element.temperature
 					hex.rainfall = element.rainfall
 					filledHexes[hex] = true
-				elseif subCollection.lake then
-					EchoDebug("lake hex already ocean plot at " .. hex.x .. ", " .. hex.y)
 				end
 			end
 		end
 	end
-	if self.space.mapLabelsEnabled then
-		local polygon = tGetRandom(self.polygons) do
-		DatabaseInsert("Fantasy_Map_Labels", {x = polygon.x, y = polygon.y, label = self:GetLabel()})
+end
+
+function Region:Label()
+	self.plotCounts = {}
+	self.terrainCounts = {}
+	self.featureCounts = {}
+	count = 0
+	for ip, polygon in pairs(self.polygons) do
+		for ih, hex in pairs(polygon.hexes) do
+			if hex.plotType then
+				if self.plotCounts[hex.plotType] == nil then self.plotCounts[hex.plotType] = 0 end
+				self.plotCounts[hex.plotType] = self.plotCounts[hex.plotType] + 1
+			end
+			if hex.terrainType then
+				if self.terrainCounts[hex.terrainType] == nil then self.terrainCounts[hex.terrainType] = 0 end
+				self.terrainCounts[hex.terrainType] = self.terrainCounts[hex.terrainType] + 1
+			end
+			if hex.featureType then
+				if self.featureCounts[hex.featureType] == nil then self.featureCounts[hex.featureType] = 0 end
+				self.featureCounts[hex.featureType] = self.featureCounts[hex.featureType] + 1
+			end
+			count = count + 1
+		end
 	end
+	self.plotRatios = {}
+	self.terrainRatios = {}
+	self.featureRatios = {}
+	for plotType, tcount in pairs(self.plotCounts) do
+		self.plotRatios[plotType] = tcount / count
+		-- EchoDebug("plot", plotType, self.plotRatios[plotType])
+	end
+	for terrainType, tcount in pairs(self.terrainCounts) do
+		self.terrainRatios[terrainType] = tcount / count
+		-- EchoDebug("terrain", terrainType, self.terrainRatios[terrainType])
+	end
+	for featureType, tcount in pairs(self.featureCounts) do
+		self.featureRatios[featureType] = tcount / count
+		-- EchoDebug("feature", featureType, self.featureRatios[featureType])
+	end
+	local polygon = tGetRandom(self.polygons)
+	local label = self:GetLabel()
+	if label then
+		DatabaseInsert("Fantastical_Map_Labels", {x = polygon.x, y = polygon.y, Label = label})
+	end
+end
+
+function Region:GetLabel()
+	local syntax = tGetRandom(LabelSyntaxes)
+	local backIn = {}
+	local label = ""
+	for i, part in ipairs(syntax) do
+		if LabelDictionary[part] then
+			local thisKind
+			for kind, words in pairs(LabelDictionary[part]) do
+				if kind ~= "Unknown" and kind ~= "Range" and LabelDefinitions[kind] and #words > 0 then
+					local met = false
+					for key, condition in pairs(LabelDefinitions[kind]) do
+						if self[key] then
+							if type(condition) == "table" then
+								for subKey, subCondition in pairs(condition) do
+									if self[key][subKey] then
+										if subCondition > 0 then
+											if self[key][subKey] > subCondition then
+												met = true
+											else
+												met = false
+												break
+											end
+										elseif subCondition < 0 then
+											if self[key][subKey] < -subCondition then
+												met = true
+											else
+												met = false
+												break
+											end
+										end
+									else
+										met = false
+										break
+									end
+								end
+								if not met then break end
+							elseif type(self[key]) == "table" then
+								EchoDebug("region key is inappropriate table: ", key)
+								met = false
+								break
+							else
+								if condition > 0 then
+									if self[key] > condition then
+										met = true
+									else
+										met = false
+										break
+									end
+								elseif condition < 0 then
+									if self[key] < -condition then
+										met = true
+									else
+										met = false
+										break
+									end
+								end
+							end
+						else
+							EchoDebug("nil region key: ", key)
+							met = false
+							break
+						end
+					end
+					if met then
+						thisKind = kind
+						break
+					end
+				end
+			end
+			if not thisKind then thisKind = "Unknown" end
+			if LabelDictionary[part][thisKind] and #LabelDictionary[part][thisKind] > 0 then
+				local word = tRemoveRandom(LabelDictionary[part][thisKind])
+				tInsert(backIn, {part = part, kind = thisKind, word = word})
+				label = label .. word
+			else
+				for ib, recycle in pairs(backIn) do
+					tInsert(LabelDictionary[recycle.part][recycle.kind], recycle.word)
+				end
+				return nil
+			end
+		else
+			label = label .. part
+		end
+	end
+	EchoDebug(label)
+	return label
 end
 
 ------------------------------------------------------------------------------
@@ -1485,6 +1670,7 @@ Space = class(function(a)
 	a.falloutEnabled = false -- place fallout on the map?
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
 	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
+	a.mapLabelsEnabled = true
 	----------------------------------
 	-- DEFINITIONS: --
 	a.oceans = {}
@@ -1655,6 +1841,8 @@ function Space:Compute()
 	self:DrawRivers()
 	EchoDebug("drawing roads...")
 	self:DrawRoads()
+	EchoDebug("labelling regions...")
+	self:LabelRegions()
 end
 
 function Space:ComputeLandforms()
@@ -2589,6 +2777,18 @@ function Space:FillRegions()
 		region:CreateCollection()
 		region:Fill()
 	end
+end
+
+function Space:LabelRegions()
+	if GameInfo.Fantastical_Map_Labels then
+		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
+	end
+	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Label text DEFAULT null );")
+	local regionBuffer = tDuplicate(self.regions)
+	repeat
+		local region = tRemoveRandom(regionBuffer)
+		region:Label()
+	until #regionBuffer == 0
 end
 
 function Space:FindRiverSeeds()
@@ -3599,3 +3799,10 @@ function AssignStartingPlots:CanBeKrakatoa(x, y)
 	local plotIndex = y * iW + x + 1;
 	table.insert(self.krakatoa_list, plotIndex);
 end
+
+--[[
+for later reference:
+local activatedMods = Modding.GetActivatedMods();
+for i,v in ipairs(activatedMods) do
+	local title = Modding.GetModProperty(v.ID, v.Version, "Name");
+]]--
