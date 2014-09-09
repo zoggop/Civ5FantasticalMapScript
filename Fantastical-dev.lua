@@ -188,7 +188,7 @@ function select_link(chain, key)
   local t = 0
   for token in pairs(chain[key]) do
     t = t + chain[key][token]
-    if idx < t then return token end
+    if idx <= t then return token end
   end
   return '-'
 end
@@ -202,7 +202,7 @@ local function markov_name(chain)
     local c = select_link(chain,'initial')
     local name = c
     local last_c = c
-    while name:len() < name_len do
+    while name:len() <= name_len do
       c = select_link(chain,last_c)
       name = name .. c
       last_c = c
@@ -304,12 +304,13 @@ local LabelSyntaxes = {
 	{ "Place", " of ", "Noun" },
 	{ "Adjective", " ", "Place"},
 	{ "Name", " ", "Place"},
+	{ "Name", " ", "ProperPlace"},
 	{ "Adjective", " ", "Place", " of ", "Name"},
 }
 
 local LabelDictionary ={
 	Place = {
-		Land = { "Lands", "Vale" },
+		Land = { "Land" },
 		Sea = { "Sea", "Shallows", "Reef" },
 		Islet = { "Islet", "Key", "Cay" },
 		Island = { "Island", "Isle" },
@@ -320,14 +321,16 @@ local LabelDictionary ={
 		Plains = { "Plain", "Prarie", "Steppe", "Flat", "Field" },
 		Forest = { "Forest", "Wood", "Grove", "Thicket", "Veldt" },
 		Jungle = { "Jungle", "Maze", "Tangle" },
-		Swamp = { "Swamp", "Marsh", "Down", "Fen" },
-		Range = { "Mountains", "Range", "Crest" },
-		Ocean = { "Ocean", "Ocean", "Ocean", "Ocean" },
+		Swamp = { "Swamp", "Marsh", "Fen" },
+		Range = { "Mountains", "Crest" },
 		Waste = { "Waste", "Desolation" },
-		Grassland = { "Heath" },
+		Grassland = { "Heath", "Vale" },
+	},
+	ProperPlace = {
+		Ocean = { "Ocean", "Ocean", "Ocean", "Ocean" },
 	},
 	Noun = {
-		Unknown = { "Despair", "Light" },
+		Unknown = { "Despair", "Light", "Hazard", "Luck" },
 		Hot = { "The Sun", "The Anvil" },
 		Cold = { "Frost", "Crystal" },
 		Wet = { "Cloud", "Fog", "Monsoons" },
@@ -336,11 +339,11 @@ local LabelDictionary ={
 		Small = { "Crossings" },
 	},
 	Adjective = {
-		Unknown = { "Enchanted", },
-		Hot = { "Fiery", "Burning", "Sunny" },
+		Unknown = { "Lost", "Enchanted", "Dark" },
+		Hot = { "Brilliant", "Shining" },
 		Cold = { "Snowy", "Icy", "Frigid" },
-		Wet = { "Damp", "Misty", "Stormy" },
-		Dry = { "Dusty", "Dry", "Parched" },
+		Wet = { "Misty", "Murky", "Torrid" },
+		Dry = { "Parched" },
 		Big = { "Wide" },
 		Small = { "Lesser" },
 	}
@@ -350,7 +353,7 @@ local LabelDefinitions -- has to be set in SetConstants()
 
 local function EvaluateCondition(key, condition, thing)
 	if type(condition) == "boolean" then
-		if not condition then return not thing[key] end
+		if condition == false then return not thing[key] end
 		return thing[key]
 	end
 	if thing[key] then
@@ -376,35 +379,48 @@ local function EvaluateCondition(key, condition, thing)
 end
 
 local function GetLabel(thing)
-	local syntax = tGetRandom(LabelSyntaxes)
-	local backIn = {}
+	local metKinds = { Unknown = true }
+	for kind, conditions in pairs(LabelDefinitions) do
+		if EvaluateCondition(1, conditions, {thing}) then
+			metKinds[kind] = true
+		end
+	end
+	local goodSyntaxes = {}
+	local preparedSyntaxes = {}
+	for s, syntax in pairs(LabelSyntaxes) do
+		local goodSyntax = true
+		local preparedSyntax = {}
+		for i , part in pairs(syntax) do
+			if LabelDictionary[part] then
+				local goodPart = false
+				local partKinds = {}
+				for kind, words in pairs(LabelDictionary[part]) do
+					if metKinds[kind] and #words > 0 then
+						goodPart = true
+						tInsert(partKinds, kind)
+					end
+				end
+				if goodPart then
+					preparedSyntax[part] = partKinds
+				else
+					goodSyntax = false
+					break
+				end
+			end
+		end
+		if goodSyntax then
+			tInsert(goodSyntaxes, syntax)
+			preparedSyntaxes[syntax] = preparedSyntax
+		end
+	end
+	if #goodSyntaxes == 0 then return end
+	local syntax = tGetRandom(goodSyntaxes)
 	local label = ""
 	for i, part in ipairs(syntax) do
-		if LabelDictionary[part] then
-			local thisKind
-			for kind, words in pairs(LabelDictionary[part]) do
-				if kind ~= "Unknown" and LabelDefinitions[kind] and #words > 0 then
-					local met = false
-					for key, condition in pairs(LabelDefinitions[kind]) do
-						met = EvaluateCondition(key, condition, thing)
-					end
-					if met then
-						thisKind = kind
-						break
-					end
-				end
-			end
-			if not thisKind then thisKind = "Unknown" end
-			if LabelDictionary[part][thisKind] and #LabelDictionary[part][thisKind] > 0 then
-				local word = tRemoveRandom(LabelDictionary[part][thisKind])
-				tInsert(backIn, {part = part, kind = thisKind, word = word})
-				label = label .. word
-			else
-				for ib, recycle in pairs(backIn) do
-					tInsert(LabelDictionary[recycle.part][recycle.kind], recycle.word)
-				end
-				return nil
-			end
+		if preparedSyntaxes[syntax][part] then
+			local kind = tGetRandom(preparedSyntaxes[syntax][part])
+			local word = tRemoveRandom(LabelDictionary[part][kind])
+			label = label .. word
 		else
 			label = label .. part
 		end
@@ -494,6 +510,19 @@ local OptionDictionary = {
 			[3] = { name = "Contaminated Soil", values = {true, false, true} },
 			[4] = { name = "Contaminated Water", values = {true, true, false} },
 			[5] = { name = "Contaminated Everything", values = {true, true, true} },
+		}
+	},
+	{ name = "Ancient Roads", sortpriority = 10, keys = { "roadCount" }, default = 2,
+	values = {
+			[1] = { name = "None", values = {0} },
+			[2] = { name = "Some", values = {5} },
+			[3] = { name = "Many", values = {10} },
+		}
+	},
+	{ name = "Place Names", sortpriority = 11, keys = { "mapLabelsEnabled" }, default = 2,
+	values = {
+			[1] = { name = "Off", values = {false} },
+			[2] = { name = "On", values = {true} },
 		}
 	},
 }
@@ -692,18 +721,21 @@ local function SetConstants()
 	end
 
 	LabelDefinitions = {
-		Sea = { plotRatios = { [plotLand] = -0.2 } },
-		Land = { plotRatios = { [plotOcean] = -0.21 } },
+		Sea = { plotRatios = { [plotOcean] = 0.8 } },
+		Land = { plotRatios = { [plotLand] = 1.0 } },
 		Islet = { continentSize = -2, },
 		Island = { continentSize = -4 },
 		Archipelago = { archipelago = true },
 		Mountains = { plotRatios = { [plotMountain] = 0.2 }, },
-		Hills = { plotRatios = { [plotHills] = 0.3 } },
-		Dunes = { plotRatios = { [plotHills] = 0.25 }, terrainRatios = { [terrainDesert] = 0.85 } },
-		Plains = { plotRatios = {[plotLand] = 0.85}, terrainRatios = {[terrainPlains] = 0.5}, featureRatios = {[featureForest] = -0.1, [featureJungle] = -0.1} },
-		Forest = { featureRatios = { [featureForest] = 0.35 } },
+		Hills = { plotRatios = { [plotHills] = 0.35 } },
+		Dunes = { plotRatios = { [plotHills] = 0.3 }, terrainRatios = { [terrainDesert] = 0.85 } },
+		Plains = { plotRatios = {[plotLand] = 0.85}, terrainRatios = {[terrainPlains] = 0.5}, featureRatios = {[featureNone] = 0.85} },
+		Forest = { featureRatios = { [featureForest] = 0.4 } },
 		Jungle = { featureRatios = { [featureJungle] = 0.45 } },
 		Swamp = { featureRatios = { [featureMarsh] = 0.15 } },
+		Waste = { terrainRatios = {[terrainSnow] = 0.75}, featureRatios = {[featureNone] = 0.8} },
+		Grassland = { terrainRatios = {[terrainGrass] = 0.75}, featureRatios = {[featureNone] = 0.75} },
+
 		Range = { rangeLength = 1 },
 		Ocean = { oceanSize = 1 },
 
@@ -734,7 +766,6 @@ local function GetCityNames(numberOfCivs)
 	repeat
 		local cNames = {}
 		local civType = tRemoveRandom(civTypes)
-		EchoDebug(civType)
 		for value in GameInfo.Civilization_CityNames("CivilizationType='" .. civType .. "'") do
 			for k, v in pairs(value) do
 				-- TXT_KEY_CITY_NAME_ARRETIUM
@@ -750,6 +781,7 @@ local function GetCityNames(numberOfCivs)
 			end
 		end
 		if #cNames > 5 then
+			EchoDebug(civType)
 			cityNames[civType] = cNames
 			tInsert(civs, civType)
 			n = n + 1
@@ -2040,10 +2072,14 @@ function Space:Compute()
 	self:DrawLakeRivers()
 	EchoDebug("drawing rivers...")
 	self:DrawRivers()
-	EchoDebug("drawing roads...")
-	self:DrawRoads()
-	EchoDebug("labelling map...")
-	self:LabelMap()
+	if self.roadCount > 0 then
+		EchoDebug("drawing roads...")
+		self:DrawRoads()
+	end
+	if self.mapLabelsEnabled then
+		EchoDebug("labelling map...")
+		self:LabelMap()
+	end
 end
 
 function Space:ComputeLandforms()
@@ -2993,8 +3029,10 @@ function Space:LabelMap()
 		end
 	end
 	if GameInfo.Fantastical_Map_Labels then
+		EchoDebug("dropping old label table")
 		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
 	end
+	EchoDebug("creating label table")
 	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Label text DEFAULT null );")
 	EchoDebug("labelling regions...")
 	local regionsLabelled = 0
@@ -3045,14 +3083,13 @@ function Space:LabelMap()
 		if x then
 			temperatureAvg = temperatureAvg / tempCount
 			rainfallAvg = rainfallAvg / rainCount
-			EchoDebug("valid mountain range: ", #range, temperatureAvg, temperatureAvg)
+			-- EchoDebug("valid mountain range: ", #range, temperatureAvg, temperatureAvg)
 			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex }
 			if LabelThing(thing) then rangesLabelled = rangesLabelled + 1 end
 		end
 	until #rangeBuffer == 0 or rangesLabelled >= self.rangeLabelsMax
 	EchoDebug("labelling oceans...")
 	for i, ocean in pairs(self.oceans) do
-		EchoDebug("ocean size: ", #ocean)
 		local index = mCeil(#ocean/2)
 		local away = 1
 		local sub = false
@@ -3962,11 +3999,6 @@ local mySpace
 function GeneratePlotTypes()
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
-	-- name_set, name_types = GetCityNames(2)
-	-- for i = 1, 12 do
-		-- local type = tGetRandom(name_types)
-		-- EchoDebug(generate_name(type), type)
-	-- end
     mySpace = Space()
     mySpace:SetOptions(OptionDictionary)
     mySpace:Compute()

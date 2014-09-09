@@ -1,3 +1,4 @@
+- sometimes map labelling hangs, for unknown reason. fix it.
 - make new map of planet?
 	- modify continent determination to only give out africa and asia (map of planet uses these togeher on the same continent)
 	- modify dictionaries to only have grassland, plains, desert, and the only features are jungle and marsh. marsh can occur on a hill, jungle and marsh only occurs in grassland
@@ -7,6 +8,9 @@
 - does wonder placement fix work in game?
 
 Done (v5)
+- fix markov hang
+- add map label and road options
+- generate place names using markov chains of random civ's city names
 - add ocean labels
 - add mountain range labels
 - add region labels
