@@ -6,7 +6,7 @@ include("InstanceManager")
 --------------------------------------------------------------------
 g_Properties = {}
 --------------------------------------------------------------------
-local g_MapManager	= InstanceManager:new("Map", "Anchor", Controls.MapContainer)
+local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
 local g_WorldOffset = {x=0, y=0, z=0}
 --------------------------------------------------------------------
 function GetWorldPos(pPlot)
@@ -19,11 +19,20 @@ end
 --------------------------------------------------------------------
 function Initialize()
 	print("Initializing Fantastical_Main...")
-	for row in GameInfo.Fantastical_Map_Labels() do
+	local labelledPlots = {}
+	for row in DB.Query("SELECT * FROM Fantastical_Map_Labels") do
 		local plot = Map.GetPlot(row.x, row.y)
-		local instance = g_MapManager:GetInstance()
-		instance.Map:LocalizeAndSetText(row.Label)
-		PlaceInWorld(instance.Anchor, GetWorldPos(plot))
+		local westPlot = Map.PlotDirection(plot:GetX(), plot:GetY(), DirectionTypes.DIRECTION_WEST);
+		local eastPlot = Map.PlotDirection(plot:GetX(), plot:GetY(), DirectionTypes.DIRECTION_EAST);
+		if not labelledPlots[plot] and not labelledPlots[westPlot] and not labelledPlots[eastPlot] then
+			print(row.Label, row.Type, row.x .. ", " .. row.y)
+			local instance = g_MapManager:GetInstance()
+			instance[row.Type]:SetText(row.Label)
+			PlaceInWorld(instance.Anchor, GetWorldPos(plot))
+			labelledPlots[plot] = row
+			labelledPlots[westPlot] = row
+			labelledPlots[eastPlot] = row
+		end
 	end
 	print("Fantastical labels loaded.")
 	local routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
