@@ -17,9 +17,15 @@ It is possible to enable Climate Realism, but it's no Planet Simulator or Perfec
 
 ### Installation & Use
 
+#### Method One
+
 Place Fantastical-dev.lua into Documents\my games\Sid Meier's Civilization 5\Maps\
 
-The map will show up as "Fantastical (dev)" in the game setup dialogue.
+The map will show up as "Fantastical (dev)" in the game setup dialogue. Note that installing it this way will not allow Place Names or Ancient Roads.
+
+#### Method Two
+
+Subscribe to the [Steam Workshop](http://steamcommunity.com/sharedfiles/filedetails/?id=310024314). In Mods, enable Fantastical. The map will show up as "Fantastical".
 
 ### Custom Options
 
