@@ -3698,17 +3698,19 @@ end
 function Space:DrawRoad(origHex, destHex)
 	local hex = origHex
 	local it = 0
+	local picked = {}
 	repeat
 		if hex.plotType == plotLand or hex.plotType == plotHills then
 			hex.road = true
 		end
 		hex.invisibleRoad = true
+		picked[hex] = true
 		if hex == destHex then break end
 		local xdist, ydist = self:WrapDistanceSigned(hex.x, hex.y, destHex.x, destHex.y)
 		local directions
 		if xdist > 1 then
 			directions = { DirNE, DirE, DirSE }
-		elseif xdist < -1 then
+		elseif xdist < 1 then
 			directions = { DirNW, DirW, DirSW }
 		elseif ydist > 0 then
 			directions = { DirNE, DirNW }
@@ -3718,18 +3720,22 @@ function Space:DrawRoad(origHex, destHex)
 		local leastCost = 10
 		local leastHex
 		for direction, nhex in pairs(hex:Neighbors(directions)) do
-			if nhex.plotType == plotMountain then
-				cost = 3
-			elseif nhex.plotType == plotOcean then
-				cost = 2
-			elseif nhex.plotType == plotHills then
-				cost = 1
-			else
-				cost = 0
-			end
-			if cost < leastCost then
-				leastCost = cost
-				leastHex = nhex
+			if not picked[nhex] then
+				if nhex == destHex then
+					cost = -1
+				elseif nhex.plotType == plotMountain then
+					cost = 3
+				elseif nhex.plotType == plotOcean then
+					cost = 2
+				elseif nhex.plotType == plotHills then
+					cost = 1
+				else
+					cost = 0
+				end
+				if cost < leastCost then
+					leastCost = cost
+					leastHex = nhex
+				end
 			end
 		end
 		hex = leastHex or hex
@@ -3969,13 +3975,17 @@ function Space:WrapDistanceSigned(x1, y1, x2, y2)
 	local xdist = x2 - x1
 	local ydist = y2 - y1
 	if self.wrapX then
-		if mAbs(xdist) > self.halfWidth then
-			xdist = x2 + (self.w - x1)
+		if xdist > self.halfWidth then
+			xdist = xdist - self.w
+		elseif xdist < -self.halfWidth then
+			xdist = xdist + self.w
 		end
 	end
 	if self.wrapY then
-		if mAbs(ydist) > self.halfHeight then
-			ydist = y2 + (self.h - y1)
+		if ydist > self.halfHeight then
+			ydist = ydist - self.h
+		elseif ydist < -self.halfHeight then
+			ydist = ydist + self.h
 		end
 	end
 	return xdist, ydist
