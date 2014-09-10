@@ -4,7 +4,7 @@ The map is a rendering of a polygonal world--a smaller map is just a lower resol
 
 It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based entirely upon latitude, with a little randomness.
 
-[url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Project[/url]
+[url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Repository[/url]
 
 [url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]
 
@@ -20,5 +20,9 @@ It is possible to enable Climate Realism, but it's no Planet Simulator or Perfec
 [b]Climate Realism:[/b] [i]Off[/i] creates any kind of terrain wherever (including ice in the ocean). [i]On[/i] puts ice at the poles and creates an earth-like climate.
 
 [b]Fallout:[/b] [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
+
+[b]Ancient Roads:[/b] [i]Some[/i] and [i]Many[/i] produce preexisting road networks, in places flooded by water, overgrown with trees, and blocked by landslides.
+
+[b]Place Names:[/b] [i]On[/i] names regions, mountain ranges, lakes, rivers, oceans, and islands and shows those names on the map.
 
 [b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Ice Age[/i] to [i]Jurassic[/i], and [b]Rainfall[/b] from [i]Wasteland[/i] to [i]Waterlogged[/i].

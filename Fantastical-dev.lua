@@ -557,7 +557,7 @@ local OptionDictionary = {
 			[3] = { name = "Many", values = {10} },
 		}
 	},
-	{ name = "Place Names", sortpriority = 11, keys = { "mapLabelsEnabled" }, default = 2,
+	{ name = "Place Names", sortpriority = 11, keys = { "mapLabelsEnabled" }, default = 1,
 	values = {
 			[1] = { name = "Off", values = {false} },
 			[2] = { name = "On", values = {true} },

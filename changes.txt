@@ -7,17 +7,19 @@
 - does wonder placement fix work in game?
 
 Done (v5)
-- fix bug in markov
+- fix road drawing algo not finding destination
+- fix buggy markov names
+- label tiny islands
 - make ocean labels big
 - label major rivers (smaller text)
 - label lakes (smaller text)
 - fix markov hang
 - add map label and road options
 - generate place names using markov chains of random civ's city names
-- add ocean labels
-- add mountain range labels
-- add region labels
-- put roads on the map with adjunct lua
+- label oceans
+- label mountain ranges
+- label regions
+- put roads on the map with adjunct Fantastical_Main.lua
 
 DONE (v4)
 - fix ice hole fill algo
