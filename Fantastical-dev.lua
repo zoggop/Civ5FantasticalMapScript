@@ -355,8 +355,8 @@ local LabelDictionary ={
 		Cold = { "Frost", "Crystal" },
 		Wet = { "The Clouds", "Fog", "Monsoons" },
 		Dry = { "Dust", "Withering" },
-		Big = { "The Ancients", "The Unfathomable" },
-		Small = { "Crossings" },
+		Big = { "The Ancients" },
+		Small = { "The Needle" },
 	},
 	Adjective = {
 		Unknown = { "Lost", "Enchanted", "Dismal" },
@@ -364,7 +364,7 @@ local LabelDictionary ={
 		Cold = { "Snowy", "Icy", "Frigid" },
 		Wet = { "Misty", "Murky", "Torrid" },
 		Dry = { "Parched" },
-		Big = { "Wide" },
+		Big = { "Greater" },
 		Small = { "Lesser" },
 	}
 }
@@ -410,7 +410,6 @@ local function EvaluateCondition(key, condition, thing)
 end
 
 local function GetLabel(thing)
-	EchoDebug("attempting label...")
 	local metKinds = { Unknown = true }
 	for kind, conditions in pairs(LabelDefinitions) do
 		if EvaluateCondition(1, conditions, {thing}) then
@@ -1071,9 +1070,7 @@ end
 
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex or self.nearOcean then
-		self.astronomyIndex = (self.oceanIndex or 100) + 10
-		-- if self.space.astronomyBasins[self.astronomyIndex] == nil then self.space.astronomyBasins[self.astronomyIndex] = {} end
-		-- tInsert(self.space.astronomyBasins[self.astronomyIndex], self)
+		self.astronomyIndex = (self.oceanIndex or self.nearOcean) + 100
 		return nil
 	end
 	if self.astronomyIndex then return nil end
@@ -1831,6 +1828,9 @@ function Region:Label()
 		self.continentSize = #self.polygons[1].continent
 	end
 	self.astronomyIndex = self.polygons[1].astronomyIndex
+	if self.astronomyIndex >= 100 then
+		self.astronomyIndex = mRandom(1, self.space.totalAstronomyBasins)
+	end
 	self.plotCounts = {}
 	for i = -1, PlotTypes.NUM_PLOT_TYPES - 1 do
 		self.plotCounts[i] = 0
@@ -2773,8 +2773,13 @@ end
 
 function Space:FindAstronomyBasins()
 	for i, polygon in pairs(self.polygons) do
-		if polygon.oceanIndex == nil and polygon:NearOther(nil, "oceanIndex") then
-			polygon.nearOcean = true
+		if polygon.oceanIndex == nil then
+			for ni, neighbor in pairs(polygon.neighbors) do
+				if neighbor.oceanIndex then
+					polygon.nearOcean = neighbor.oceanIndex
+					break
+				end
+			end
 		end
 	end
 	local astronomyIndex = 1
@@ -2783,6 +2788,11 @@ function Space:FindAstronomyBasins()
 		if polygon:FloodFillAstronomy(astronomyIndex) then
 			astronomyIndex = astronomyIndex + 1
 			EchoDebug("astronomy basin #" .. astronomyIndex-1 .. " has " .. #self.astronomyBasins[astronomyIndex-1] .. " polygons")
+		end
+	end
+	for i, polygon in pairs(self.polygons) do
+		for si, subPolygon in pairs(polygon.subPolygons) do
+			subPolygon.astronomyIndex = polygon.astronomyIndex
 		end
 	end
 	self.totalAstronomyBasins = astronomyIndex - 1
@@ -2858,7 +2868,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			local candidates = {}
 			local polarCandidates = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
-				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 10 then
+				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 100 then
 					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY) then
 						tInsert(polarCandidates, neighbor)
 					else
@@ -3077,15 +3087,11 @@ end
 
 function Space:LabelMap()
 	EchoDebug("generating names...")
-	name_set, name_types = GetCityNames(self.totalAstronomyBasins + 1)
+	name_set, name_types = GetCityNames(self.totalAstronomyBasins)
 	LabelDictionary.Name = {}
-	for i, type in ipairs(name_types) do
-		LabelDictionary.Name[type] = name_list(type, 64)
-		if i > self.totalAstronomyBasins then
-			LabelDefinitions[type] = { astronomyIndex = false }
-		else
-			LabelDefinitions[type] = { astronomyIndex = i }
-		end
+	for i, name_type in ipairs(name_types) do
+		LabelDictionary.Name[name_type] = name_list(name_type, 100)
+		LabelDefinitions[name_type] = { astronomyIndex = i }
 	end
 	if GameInfo.Fantastical_Map_Labels then
 		EchoDebug("dropping old label table")
@@ -3094,6 +3100,10 @@ function Space:LabelMap()
 	EchoDebug("creating label table")
 	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
 	EchoDebug("labelling oceans...")
+	local astronomyIndexBuffer = {}
+	for i = 1, self.totalAstronomyBasins do
+		tInsert(astronomyIndexBuffer, i)
+	end
 	for i, ocean in pairs(self.oceans) do
 		local index = mCeil(#ocean/2)
 		local away = 1
@@ -3112,7 +3122,7 @@ function Space:LabelMap()
 			polygon = ocean[index]
 			if not polygon.hasTinyIslands then break end
 		end
-		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y }
+		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y, astronomyIndex = tRemoveRandom(astronomyIndexBuffer) }
 		LabelThing(thing)
 	end
 	EchoDebug("labelling lakes...")
@@ -3128,6 +3138,7 @@ function Space:LabelMap()
 	for negLength, river in pairsByKeys(riversByLength) do
 		local hex = river.path[mCeil(#river.path/2)].hex
 		river.x, river.y = hex.x, hex.y
+		river.astronomyIndex = hex.polygon.astronomyIndex
 		if LabelThing(river) then n = n + 1 end
 		if n == self.riverLabelsMax then break end
 	end
