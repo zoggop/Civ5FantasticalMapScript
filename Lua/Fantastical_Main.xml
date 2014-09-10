@@ -3,12 +3,12 @@
 	<Container ID="MapContainer"/>
 	<Instance Name="Map">
 		<WorldAnchor ID="Anchor">
-			<Label ID="Map" Anchor="C,C" Font="TwCenMT20" FontStyle="Shadow" ColorSet="Beige_Black_Alpha" />
-			<Label ID="MapSmallMedium" Anchor="C,C" Font="TwCenMT18" FontStyle="Shadow" ColorSet="Beige_Black_Alpha" />
-			<Label ID="MapWaterSmall" Anchor="C,C" Font="TwCenMT16" FontStyle="Shadow" Color0="200,200,255,255" Color1="Black,200" />
-			<Label ID="MapWaterSmallMedium" Anchor="C,C" Font="TwCenMT18" FontStyle="Shadow" Color0="200,200,255,255" Color1="Black,200" />
-			<Label ID="MapWaterMedium" Anchor="C,C" Font="TwCenMT20" FontStyle="Shadow" Color0="200,200,255,255" Color1="Black,200" />
-			<Label ID="MapWaterBig" Anchor="C,C" Font="TwCenMT24" FontStyle="Shadow" Color0="200,200,255,255" Color1="Black,200" />
+			<Label ID="Map" Anchor="C,C" Font="TwCenMT20" FontStyle="Stroke" ColorSet="Beige_Black_Alpha" />
+			<Label ID="MapSmallMedium" Anchor="C,C" Font="TwCenMT18" FontStyle="Stroke" ColorSet="Beige_Black_Alpha" />
+			<Label ID="MapWaterSmall" Anchor="C,C" Font="TwCenMT16" FontStyle="Stroke" Color0="200,200,255,255" Color1="Black,200" />
+			<Label ID="MapWaterSmallMedium" Anchor="C,C" Font="TwCenMT18" FontStyle="Stroke" Color0="200,200,255,255" Color1="Black,200" />
+			<Label ID="MapWaterMedium" Anchor="C,C" Font="TwCenMT20" FontStyle="Stroke" Color0="200,200,255,255" Color1="Black,200" />
+			<Label ID="MapWaterBig" Anchor="C,C" Font="TwCenMT24" FontStyle="Stroke" Color0="200,200,255,255" Color1="Black,200" />
 		</WorldAnchor>
 	</Instance>
 </Context>
