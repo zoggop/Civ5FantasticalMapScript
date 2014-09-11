@@ -377,7 +377,57 @@ local SpecialLabelTypes = {
 	Islet = "MapSmallMedium",
 }
 
+--[[
+local LabelSyntaxesCentauri = {
+	{ "Freshwater_Sea" },
+	{ "Sea_of_Pholus" },
+	{ "Howling_Straights" },
+	{ "Sea_of_Nessus" },
+	{ "Straight_of_Prometheus" },
+	{ "Landing_Bay" },
+	{ "Great_Northern_Ocean" },
+	{ "Straights_of_Zeus" },
+	{ "Eurytion_Bay" },
+	{  }
+}
+]]--
+
+local LabelSyntaxesCentauri = {
+	{ "Adjective", " ", "Place" },
+	{ "Place", " of ", "Noun" },
+	{ "Pre", " ", "Post"},
+}
+
+local LabelDictionaryCentauri = {
+	Place = {
+		Sea = { "Sea", "Sea", "Sea", "Sea", "Sea", "Sea" },
+		Straights = { "Straights", "Straights", "Straights" },
+		Bay = { "Bay", "Bay" },
+		Ocean = { "Ocean" },
+		Rift = { "Rift" },
+	},
+	Adjective = {
+		Unknown = { "Landing", "Eurytion" },
+		Freshwater = { "Freshwater" },
+		Cold = { "Howling", "Zeus" },
+		Northern = { "Great Northern" },
+		Southern = { "Great Southern" },
+		Marine = { "Great Marine" },
+	},
+	Noun = {
+		Unknown = { "Pholus", "Nessus", "Prometheus", "Mnesimache", "Chiron", "Unity" }
+	},
+	Pre = {
+		Cape = { "Cape" }
+	},
+	Post = {
+		Unknown = { "Storm" }
+	},
+}
+
 local LabelDefinitions -- has to be set in SetConstants()
+
+local LabelDefinitionsCentauri -- has to be set in Space:Compute()
 
 local function EvaluateCondition(key, condition, thing)
 	if type(condition) == "boolean" then
@@ -775,8 +825,8 @@ local function SetConstants()
 
 	FeatureDictionaryCentauri = {
 		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureJungle] = { temperature = {85, 100}, rainfall = {85, 100}, percent = 100, limitRatio = 0.9, hill = false },
-		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 33, limitRatio = 0.85, hill = true },
+		[featureJungle] = { temperature = {90, 100}, rainfall = {90, 100}, percent = 100, limitRatio = 0.95, hill = false },
+		[featureMarsh] = { temperature = {10, 90}, rainfall = {10, 90}, percent = 67, limitRatio = 0.95, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -2089,6 +2139,29 @@ function Space:Compute()
 			TerrainDictionary, FeatureDictionary = TerrainDictionaryCentauri, FeatureDictionaryCentauri
 			self.silverCount = mFloor(self.iA / 128)
 			self.spicesCount = mFloor(self.iA / 160)
+			self.polarMaxLandRatio = 0.0
+			-- all centauri definitions are for subPolygons
+			LabelDefinitionsCentauri = {
+				Sea = { tinyIsland = false, coast = false, superPolygon = {coastTotal = -1, continent = false} },
+				Straights = { tinyIsland = false, coast = true, superPolygon = {coastTotal = 2} },
+				Bay = { coast = true, superPolygon = {coastTotal = 3} },
+				Ocean = { coast = false, superPolygon = {coast = false} },
+				Cape = { coast = true, superPolygon = {coastTotal = -1} },
+				Rift = { superPolygon = {oceanIndex = 1} },
+				Freshwater = { lake = true },
+				Cold = { latitude = 75 },
+				Northern = { y = self.h * 0.75 },
+				Southern = { y = self.h * -0.75 },
+				Marine = { superPolygon = {oceanIndex = 1} },
+			}
+			self.badNaturalWonders = {}
+			local badWonderTypes = { FEATURE_LAKE_VICTORIA = true, FEATURE_KILIMANJARO = true, FEATURE_SOLOMONS_MINES = true, FEATURE_FUJI = true }
+			for f in GameInfo.Features() do
+				if badWonderTypes[f.Type] then
+					EchoDebug(f.ID, f.Type)
+					self.badNaturalWonders[f.ID] = true
+				end
+			end
 			break
 		end
 	end
@@ -2401,6 +2474,7 @@ function Space:ComputeOceanTemperatures()
 			if coastTotal > 0 then
 				polygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
 			end
+			polygon.coastTotal = coastTotal
 			polygon.oceanTemperature = polygon.oceanTemperature or self:GetOceanTemperature(polygon.latitude)
 		end
 	end 
@@ -2423,7 +2497,7 @@ function Space:MoveSilverAndSpices()
 	for i, hex in pairs(self.hexes) do
 		local resource = hex.plot:GetResourceType()
 		if resource == resourceSilver or resource == resourceSpices then
-			EchoDebug(resource, " found")
+			-- EchoDebug(resource, " found")
 			-- this plot has silver and spices, i.e. minerals and kelp
 			-- look for a nearby water plot
 			local destHex
@@ -2503,6 +2577,16 @@ function Space:MoveSilverAndSpices()
 		until (totalSilver >= self.silverCount and totalSpices >= self.spicesCount) or #subPolygonBuffer == 0
 	end
 	EchoDebug("silver: " .. totalSilver .. "/" .. self.silverCount, " spices: " .. totalSpices .. "/" .. self.spicesCount)
+end
+
+function Space:RemoveBadNaturalWonders()
+	for i, hex in pairs(self.hexes) do
+		local featureType = hex.plot:GetFeatureType()
+		if self.badNaturalWonders[featureType] then
+			hex.plot:SetFeatureType(featureNone)
+			EchoDebug("removed natural wonder feature ", featureType)
+		end
+	end
 end
 
 function Space:SetPlots()
@@ -3257,7 +3341,22 @@ function Space:FillRegions()
 	end
 end
 
+
 function Space:LabelMap()
+	if GameInfo.Fantastical_Map_Labels then
+		EchoDebug("dropping old label table")
+		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
+	end
+	EchoDebug("creating label table")
+	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
+	if self.centauri then
+		EchoDebug("giving centauri labels to subpolygons...")
+		LabelSyntaxes, LabelDictionary, LabelDefinitions = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri
+		for i, subPolygon in pairs(self.subPolygons) do
+			LabelThing(subPolygon)
+		end
+		return
+	end
 	EchoDebug("generating names...")
 	name_set, name_types = GetCityNames(self.totalAstronomyBasins)
 	LabelDictionary.Name = {}
@@ -3265,12 +3364,6 @@ function Space:LabelMap()
 		LabelDictionary.Name[name_type] = name_list(name_type, 100)
 		LabelDefinitions[name_type] = { astronomyIndex = i }
 	end
-	if GameInfo.Fantastical_Map_Labels then
-		EchoDebug("dropping old label table")
-		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
-	end
-	EchoDebug("creating label table")
-	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
 	EchoDebug("labelling oceans...")
 	local astronomyIndexBuffer = {}
 	for i = 1, self.totalAstronomyBasins do
@@ -3949,17 +4042,22 @@ function Space:PickCoasts()
 	self.coastArea = 0
 	self.coastalPolygonArea = 0
 	self.coastalPolygonCount = 0
+	self.polarMaxLandPercent = self.polarMaxLandRatio * 100
 	for i, polygon in pairs(self.polygons) do
 		if polygon.continent == nil then
 			if polygon.oceanIndex == nil and Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
-				polygon:PickTinyIslands()
-				tInsert(self.tinyIslandPolygons, polygon)
+				if not polygon.polar or mRandom(0, 100) < self.polarMaxLandPercent then
+					polygon:PickTinyIslands()
+					tInsert(self.tinyIslandPolygons, polygon)
+				end
 			elseif polygon.oceanIndex then
-				polygon:PickTinyIslands()
-				tInsert(self.tinyIslandPolygons, polygon)
+				if not polygon.polar or mRandom(0, 100) < self.polarMaxLandPercent then
+					polygon:PickTinyIslands()
+					tInsert(self.tinyIslandPolygons, polygon)
+				end
 			end
 		end
 	end
@@ -4318,6 +4416,8 @@ function DetermineContinents()
 		mySpace:SetContinentArtTypes()
 		EchoDebug("map is alpha centauri, moving minerals and kelp to the sea...")
 		mySpace:MoveSilverAndSpices()
+		EchoDebug("map is alpha centauri, removing non-centauri natural wonders...")
+		mySpace:RemoveBadNaturalWonders()
 	else
 		EchoDebug("using default continent stamper...")
 		Map.DefaultContinentStamper()
@@ -4326,7 +4426,7 @@ end
 
 -------------------------------------------------------------------------------
 
--- THE STUFF BELOW DOESN'T ACTUALLY DO ANYTHING IN WORLD BUILDER (AND IN GAME?)
+-- THE STUFF BELOW NEVER GETS CALLED, FOR REASONS I DON'T UNDERSTAND
 
 function AssignStartingPlots:CanBeReef(x, y)
 	-- Checks a candidate plot for eligibility to be the Great Barrier Reef.
