@@ -7,7 +7,7 @@ include("InstanceManager")
 --------------------------------------------------------------------
 g_Properties = {}
 --------------------------------------------------------------------
--- local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
+local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
 local g_WorldOffset = {x=0, y=0, z=0}
 --------------------------------------------------------------------
 function GetWorldPos(pPlot)

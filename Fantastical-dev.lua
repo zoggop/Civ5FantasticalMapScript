@@ -390,6 +390,7 @@ local LabelDictionaryCentauri = {
 		Freshwater = { "Freshwater Sea" },
 		Cape = { "Cape Storm" },
 		Isle = { "Isle of Deianira", "Isle of Dexamenus" },
+		Jungle = { "Monsoon Jungle" },
 	},
 	Place = {
 		Straights = { "Straights", "Straights", "Straights" },
@@ -2134,10 +2135,11 @@ function Space:Compute()
 				Straights = { tinyIsland = false, coastContinentsTotal = 2, superPolygon = {waterTotal = -2} },
 				Bay = { coast = true, coastTotal = 3, coastContinentsTotal = -1, superPolygon = {coastTotal = 3, coastContinentsTotal = -1, waterTotal = -1} },
 				Ocean = { coast = false, superPolygon = {coast = false, continent = false, oceanIndex = false} },
-				Cape = { coast = true, coastContinentsTotal = -1, superPolygon = {coastTotal = -1, coastContinentsTotal = -1, oceanIndex = false, } },
+				Cape = { coast = true, coastContinentsTotal = -1, superPolygon = {coastTotal = -1, coastContinentsTotal = 1, oceanIndex = false, } },
 				Rift = { superPolygon = {oceanIndex = 1, polar = false, region={coastal=false}} },
 				Freshwater = { superPolygon = {coastContinentsTotal = -1, coastTotal = 4, waterTotal = 0} },
 				Isle = { continentSize = -3 },
+				Jungle = { superPolygon = {continent = true, region = {temperatureAvg=95,rainfallAvg=95}} },
 				ColdCoast = { coast = true, latitude = 75 },
 				WarmCoast = { coast = true, latitude = -25 },
 				Northern = { coast = false, polar = false, y = self.h * 0.7 },
@@ -2589,15 +2591,17 @@ function Space:MoveSilverAndSpices()
 end
 
 function Space:RemoveBadNaturalWonders()
+	local labelledTypes = {}
 	for i, hex in pairs(self.hexes) do
 		local featureType = hex.plot:GetFeatureType()
 		if self.badNaturalWonders[featureType] then
 			hex.plot:SetFeatureType(featureNone)
 			EchoDebug("removed natural wonder feature ", self.badNaturalWonders[featureType])
-		elseif self.centauriNaturalWonders[featureType] then -- it's a centauri wonder
-			EchoDebug(self.centauriNaturalWonders[featureType] .. " is centauri wonder")
+		elseif self.centauriNaturalWonders[featureType] and not labelledTypes[featureType] then -- it's a centauri wonder
 			if self.mapLabelsEnabled then
+				EchoDebug("adding label", self.centauriNaturalWonders[featureType])
 				DatabaseInsert("Fantastical_Map_Labels", {x = hex.x, y = hex.y, Type = "Map", Label = self.centauriNaturalWonders[featureType]})
+				labelledTypes[featureType] = true
 			end
 		end
 	end
@@ -3371,7 +3375,9 @@ function Space:LabelMap()
 		local polygonBuffer = tDuplicate(self.polygons)
 		repeat
 			local polygon = tRemoveRandom(polygonBuffer)
-			for i, subPolygon in pairs(polygon.subPolygons) do
+			local subPolygonBuffer = tDuplicate(polygon.subPolygons)
+			repeat
+				local subPolygon = tRemoveRandom(subPolygonBuffer)
 				if not subPolygon.superPolygon.continent and not subPolygon.tinyIsland then
 					subPolygon.coastContinentsTotal = 0
 					subPolygon.coastTotal = 0
@@ -3390,8 +3396,8 @@ function Space:LabelMap()
 					subPolygon.continentSize = #subPolygon.superPolygon.continent
 				end
 				if LabelThing(subPolygon) then break end
-			end
-		until #subPolygonBuffer == 0
+			until #subPolygonBuffer == 0
+		until #polygonBuffer == 0
 		return
 	end
 	EchoDebug("generating names...")
@@ -4375,6 +4381,9 @@ function GetMapScriptInfo()
 	return {
 		Name = "Fantastical (dev)",
 		Description = "Fantastical lands! Convoluted rivers! Epic mountain ranges!",
+		IsAdvancedMap = 0,
+		SupportsMultiplayer = true,
+		SortIndex = 1,
 		IconAtlas = "WORLDTYPE_FANTASTICAL_ATLAS",
 		IconIndex = 0,
 		CustomOptions = custOpts,
