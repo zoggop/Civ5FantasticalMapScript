@@ -1,4 +1,3 @@
-- implement map icon
 - make new map of planet:
 	- change wonder conditions for: uranium flats (?), monsoon jungle (fountain of youth), sunny mesa (sri pada), geothermal shallows (old faithful)
 - better finding of connections from lake to lake? (pathfinding)
@@ -6,6 +5,8 @@
 - does wonder placement fix work in game?
 
 Done (v6)
+- centauri mod activation sets map option defaults
+- implement map icon
 - create map icon
 - make new map of planet:
 	- modify label dictionaries

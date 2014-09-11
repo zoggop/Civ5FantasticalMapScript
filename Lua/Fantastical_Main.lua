@@ -7,7 +7,7 @@ include("InstanceManager")
 --------------------------------------------------------------------
 g_Properties = {}
 --------------------------------------------------------------------
-local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
+-- local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
 local g_WorldOffset = {x=0, y=0, z=0}
 --------------------------------------------------------------------
 function GetWorldPos(pPlot)
@@ -29,7 +29,7 @@ function Initialize()
 			if not labelledPlots[plot] and not labelledPlots[westPlot] and not labelledPlots[eastPlot] then
 				print(row.Label, row.Type, row.x .. ", " .. row.y)
 				local instance = g_MapManager:GetInstance()
-				instance[row.Type]:SetText(row.Label)
+				instance[row.Type]:LocalizeAndSetText(row.Label)
 				PlaceInWorld(instance.Anchor, GetWorldPos(plot))
 				labelledPlots[plot] = row
 				labelledPlots[westPlot] = row
