@@ -377,21 +377,40 @@ local SpecialLabelTypes = {
 	Islet = "MapSmallMedium",
 }
 
---[[
 local LabelSyntaxesCentauri = {
-	{ "Freshwater_Sea" },
-	{ "Sea_of_Pholus" },
-	{ "Howling_Straights" },
-	{ "Sea_of_Nessus" },
-	{ "Straight_of_Prometheus" },
-	{ "Landing_Bay" },
-	{ "Great_Northern_Ocean" },
-	{ "Straights_of_Zeus" },
-	{ "Eurytion_Bay" },
-	{  }
+	{ "FullPlace" },
+	{ "Adjective", " ", "Place" },
 }
-]]--
 
+local LabelDictionaryCentauri = {
+	FullPlace = {
+		Sea = { "Sea of Pholus", "Sea of Nessus", "Sea of Mnesimache", "Sea of Chiron", "Sea of Unity" },
+		Bay = { "Landing Bay", "Eurytion Bay" },
+		Rift = { "Great Marine Rift" },
+		Freshwater = { "Freshwater Sea" },
+	},
+	Place = {
+		Straights = { "Straights", "Straights", "Straights" },
+		Ocean = { "Ocean" },
+	},
+	Adjective = {
+		ColdCoast = { "Howling", "Zeus" },
+		WarmCoast = { "Prometheus" },
+		Northern = { "Great Northern" },
+		Southern = { "Great Southern" },
+	},
+}
+
+local SpecialLabelTypesCentauri = {
+	Ocean = "MapWaterMedium",
+	Freshwater = "MapWaterMedium",
+	Sea = "MapWaterMedium",
+	Bay = "MapWaterMedium",
+	Rift = "MapWaterBig",
+	Straights = "MapWaterMedium",
+}
+
+--[[
 local LabelSyntaxesCentauri = {
 	{ "Adjective", " ", "Place" },
 	{ "Place", " of ", "Noun" },
@@ -424,6 +443,7 @@ local LabelDictionaryCentauri = {
 		Unknown = { "Storm" }
 	},
 }
+]]--
 
 local LabelDefinitions -- has to be set in SetConstants()
 
@@ -2143,16 +2163,16 @@ function Space:Compute()
 			-- all centauri definitions are for subPolygons
 			LabelDefinitionsCentauri = {
 				Sea = { tinyIsland = false, coast = false, superPolygon = {coastTotal = -1, continent = false} },
-				Straights = { tinyIsland = false, coast = true, superPolygon = {coastTotal = 2} },
-				Bay = { coast = true, superPolygon = {coastTotal = 3} },
-				Ocean = { coast = false, superPolygon = {coast = false} },
+				Straights = { tinyIsland = false, coast = true, superPolygon = {coastTotal = -2, coastContinentsTotal = 2} },
+				Bay = { coast = true, superPolygon = {coastTotal = 3, coastContinentsTotal = -1} },
+				Ocean = { coast = false, superPolygon = {coast = false, continent = false} },
 				Cape = { coast = true, superPolygon = {coastTotal = -1} },
 				Rift = { superPolygon = {oceanIndex = 1} },
 				Freshwater = { lake = true },
-				Cold = { latitude = 75 },
+				ColdCoast = { latitude = 75, coast = true },
+				WarmCoast = { latitude = -25, coast = true },
 				Northern = { y = self.h * 0.75 },
 				Southern = { y = self.h * -0.75 },
-				Marine = { superPolygon = {oceanIndex = 1} },
 			}
 			self.badNaturalWonders = {}
 			local badWonderTypes = { FEATURE_LAKE_VICTORIA = true, FEATURE_KILIMANJARO = true, FEATURE_SOLOMONS_MINES = true, FEATURE_FUJI = true }
@@ -2464,11 +2484,17 @@ function Space:ComputeOceanTemperatures()
 		if polygon.continent == nil then
 			local coastTempTotal = 0
 			local coastTotal = 0
+			local coastalContinents = {}
+			polygon.coastContinentsTotal = 0
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continent then
 					polygon.coast = true
 					coastTempTotal = coastTempTotal + neighbor.region.temperatureAvg
 					coastTotal = coastTotal + 1
+					if not coastalContinents[neighbor.continent] then
+						coastalContinents[neighbor.continent] = true
+						polygon.coastContinentsTotal = polygon.coastContinentsTotal + 1
+					end
 				end
 			end
 			if coastTotal > 0 then
