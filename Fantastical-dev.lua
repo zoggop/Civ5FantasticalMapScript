@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 5
+-- version 6
 
 --------------------------------------------------------------
 if include == nil then
@@ -684,8 +684,15 @@ local plotOcean, plotLand, plotHills, plotMountain
 local terrainOcean, terrainCoast, terrainGrass, terrainPlains, terrainDesert, terrainTundra, terrainSnow
 local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, featureFallout, featureAtoll
 local TerrainDictionary, FeatureDictionary
+local TerrainDictionaryCentauri, FeatureDictionaryCentauri
+local artOcean, artAmerica, artAsia, artAfrica, artEurope
+local resourceSilver, resourceSpices
 
 local function SetConstants()
+	artOcean, artAmerica, artAsia, artAfrica, artEurope = 0, 1, 2, 3, 4
+
+	resourceSilver, resourceSpices = 16, 22
+
 	FlowDirN, FlowDirNE, FlowDirSE, FlowDirS, FlowDirSW, FlowDirNW = FlowDirectionTypes.FLOWDIRECTION_NORTH, FlowDirectionTypes.FLOWDIRECTION_NORTHEAST, FlowDirectionTypes.FLOWDIRECTION_SOUTHEAST, FlowDirectionTypes.FLOWDIRECTION_SOUTH, FlowDirectionTypes.FLOWDIRECTION_SOUTHWEST, FlowDirectionTypes.FLOWDIRECTION_NORTHWEST
 	FlowDirNames = {
 		[FlowDirN] = "North",
@@ -755,6 +762,28 @@ local function SetConstants()
 		if terrain.terrainType == nil then terrain.terrainType = terrainType end
 	end
 	for featureType, feature in pairs(FeatureDictionary) do
+		if feature.featureType == nil then feature.featureType = featureType end
+	end
+
+	-- for Alpha Centauri Maps:
+
+	TerrainDictionaryCentauri = {
+		[terrainGrass] = { temperature = {0, 100, 60}, rainfall = {20, 100, 50}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainPlains] = { temperature = {40, 60}, rainfall = {20, 100, 40}, features = { featureNone, } },
+		[terrainDesert] = { temperature = {0, 100}, rainfall = {0, 20, 0}, features = { featureNone, } },
+	}
+
+	FeatureDictionaryCentauri = {
+		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
+		[featureJungle] = { temperature = {85, 100}, rainfall = {85, 100}, percent = 100, limitRatio = 0.9, hill = false },
+		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 33, limitRatio = 0.85, hill = true },
+	}
+
+	-- doing it this way just so the declarations above are shorter
+	for terrainType, terrain in pairs(TerrainDictionaryCentauri) do
+		if terrain.terrainType == nil then terrain.terrainType = terrainType end
+	end
+	for featureType, feature in pairs(FeatureDictionaryCentauri) do
 		if feature.featureType == nil then feature.featureType = featureType end
 	end
 
@@ -1018,6 +1047,19 @@ function Hex:SetRoad()
 	end
 end
 
+function Hex:SetContinentArtType()
+	if self.plot == nil then return end
+	if self.polygon.region then
+		self.plot:SetContinentArtType(self.polygon.region.artType)
+	else
+		if self.plotType == plotOcean then
+			self.plot:SetContinentArtType(artOcean)
+		else
+			self.plot:SetContinentArtType(tGetRandom(self.space.artContinents))
+		end
+	end
+end
+
 function Hex:EdgeCount()
 	if self.edgeCount then return self.edgeCount end
 	self.edgeCount = 0
@@ -1229,6 +1271,27 @@ function Polygon:PickTinyIslands()
 			self.hasTinyIslands = true
 		end
 	end
+end
+
+function Polygon:EmptyCoastHex()
+	local hexPossibilities = {}
+	local destHex
+	for isph, sphex in pairs(self.hexes) do
+		if sphex.plotType == plotOcean and sphex.featureType ~= featureIce and sphex.featureType ~= featureAtoll and sphex.terrainType == terrainCoast then
+			for d, nhex in pairs(sphex:Neighbors()) do
+				if nhex.plotType ~= plotOcean then
+					destHex = sphex
+					break
+				end
+			end
+			if destHex then break end
+			tInsert(hexPossibilities, sphex)
+		end
+	end
+	if not destHex and #hexPossibilities > 0 then
+		destHex = tGetRandom(hexPossibilities)
+	end
+	return destHex
 end
 
 ------------------------------------------------------------------------------
@@ -1568,6 +1631,9 @@ Region = class(function(a, space)
 	a.featureFillCounts = {}
 	for featureType, feature in pairs(FeatureDictionary) do
 		a.featureFillCounts[featureType] = 0
+	end
+	if space.centauri then
+		a.artType = tGetRandom(space.artContinents)
 	end
 end)
 
@@ -2014,6 +2080,18 @@ function Space:Compute()
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
+    local activatedMods = Modding.GetActivatedMods()
+	for i,v in ipairs(activatedMods) do
+		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
+		if title == "Alpha Centauri Maps" then
+			self.centauri = true
+			self.artContinents = { artAsia, artAfrica }
+			TerrainDictionary, FeatureDictionary = TerrainDictionaryCentauri, FeatureDictionaryCentauri
+			self.silverCount = mFloor(self.iA / 128)
+			self.spicesCount = mFloor(self.iA / 160)
+			break
+		end
+	end
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
@@ -2339,6 +2417,94 @@ function Space:GimmeIce(temperature)
 	return mRandom(1, 100) < 100 * (below / self.freezingTemperature)
 end
 
+function Space:MoveSilverAndSpices()
+	local totalSpices = 0
+	local totalSilver = 0
+	for i, hex in pairs(self.hexes) do
+		local resource = hex.plot:GetResourceType()
+		if resource == resourceSilver or resource == resourceSpices then
+			EchoDebug(resource, " found")
+			-- this plot has silver and spices, i.e. minerals and kelp
+			-- look for a nearby water plot
+			local destHex
+			-- look in hex neighbors
+			for d, nhex in pairs(hex:Neighbors()) do
+				if nhex.plotType == plotOcean and nhex.featureType ~= featureIce and nhex.featureType ~= featureAtoll and nhex.terrainType == terrainCoast then
+					destHex = nhex
+					break
+				end
+			end
+			if not destHex then
+				-- look in subpolygon neighbors
+				for isp, subPolygon in pairs(hex.subPolygon.neighbors) do
+					if (not subPolygon.superPolygon.continent and not subPolygon.tinyIsland) or subPolygon.lake then
+						destHex = subPolygon:EmptyCoastHex()
+						if destHex then break end
+					end
+				end
+			end
+			if not destHex then
+				-- look in polygon neighbors
+				for ip, polygon in pairs(hex.polygon.neighbors) do
+					if not polygon.continent or polygon.hasLakes then
+						for isp, subPolygon in pairs(polygon.subPolygons) do
+							if (not polygon.continent and not subPolygon.tinyIsland) or (polygon.hasLakes and subPolygon.lake) then
+								destHex = subPolygon:EmptyCoastHex()
+						if destHex then break end
+							end
+						end
+						break
+					end
+				end
+			end
+			-- move resource
+			hex.plot:SetResourceType(-1)
+			if destHex then
+				-- EchoDebug("found spot for " .. resource)
+				destHex.plot:SetResourceType(resource)
+				if resource == resourceSilver then
+					totalSilver = totalSilver + 1
+				elseif resource == resourceSpices then
+					totalSpices = totalSpices + 1
+				end
+			else
+				-- EchoDebug("no spot found for " .. resource)
+			end
+		end
+	end
+	-- add more if not enough
+	EchoDebug("silver: " .. totalSilver .. "/" .. self.silverCount, " spices: " .. totalSpices .. "/" .. self.spicesCount)
+	if totalSilver < self.silverCount or totalSpices < self.spicesCount then
+		local subPolygonBuffer = {}
+		for i, polygon in pairs(self.polygons) do
+			if not polygon.continent or polygon.hasLakes then
+				for isp, subPolygon in pairs(polygon.subPolygons) do
+					if (not polygon.continent and not subPolygon.tinyIsland) or (polygon.hasLakes and subPolygon.lake) then
+						tInsert(subPolygonBuffer, subPolygon)
+					end
+				end
+			end
+		end
+		repeat
+			local subPolygon = tRemoveRandom(subPolygonBuffer)
+			local destHex = subPolygon:EmptyCoastHex()
+			if destHex then
+				local silverSpices = mRandom(1, 2)
+				local resource
+				if (silverSpices == 1 and totalSilver < self.silverCount) or totalSpices >= self.spicesCount then
+					resource = resourceSilver
+					totalSilver = totalSilver + 1
+				else
+					resource = resourceSpices
+					totalSpices = totalSpices + 1
+				end
+				destHex.plot:SetResourceType(resource)
+			end
+		until (totalSilver >= self.silverCount and totalSpices >= self.spicesCount) or #subPolygonBuffer == 0
+	end
+	EchoDebug("silver: " .. totalSilver .. "/" .. self.silverCount, " spices: " .. totalSpices .. "/" .. self.spicesCount)
+end
+
 function Space:SetPlots()
 	for i, hex in pairs(self.hexes) do
 		hex:SetPlot()
@@ -2376,6 +2542,12 @@ function Space:SetRoads()
 	end
 	for i, hex in pairs(self.hexes) do
 		hex:SetRoad()
+	end
+end
+
+function Space:SetContinentArtTypes()
+	for i, hex in pairs(self.hexes) do
+		hex:SetContinentArtType()
 	end
 end
 
@@ -4139,6 +4311,19 @@ function AddLakes()
 	print("Adding No Lakes (lakes have already been added) (Fantastical)")
 end
 
+function DetermineContinents()
+	print("Determining continents for art purposes (Fantastical.lua)");
+	if mySpace.centauri then
+		EchoDebug("map is alpha centauri, using only Africa and Asia...")
+		mySpace:SetContinentArtTypes()
+		EchoDebug("map is alpha centauri, moving minerals and kelp to the sea...")
+		mySpace:MoveSilverAndSpices()
+	else
+		EchoDebug("using default continent stamper...")
+		Map.DefaultContinentStamper()
+	end
+end
+
 -------------------------------------------------------------------------------
 
 -- THE STUFF BELOW DOESN'T ACTUALLY DO ANYTHING IN WORLD BUILDER (AND IN GAME?)
@@ -4227,10 +4412,3 @@ function AssignStartingPlots:CanBeKrakatoa(x, y)
 	local plotIndex = y * iW + x + 1;
 	table.insert(self.krakatoa_list, plotIndex);
 end
-
---[[
-for later reference:
-local activatedMods = Modding.GetActivatedMods();
-for i,v in ipairs(activatedMods) do
-	local title = Modding.GetModProperty(v.ID, v.Version, "Name");
-]]--
