@@ -388,6 +388,7 @@ local LabelDictionaryCentauri = {
 		Bay = { "Landing Bay", "Eurytion Bay" },
 		Rift = { "Great Marine Rift" },
 		Freshwater = { "Freshwater Sea" },
+		Cape = { "Cape Storm" },
 	},
 	Place = {
 		Straights = { "Straights", "Straights", "Straights" },
@@ -403,47 +404,13 @@ local LabelDictionaryCentauri = {
 
 local SpecialLabelTypesCentauri = {
 	Ocean = "MapWaterMedium",
-	Freshwater = "MapWaterMedium",
-	Sea = "MapWaterMedium",
-	Bay = "MapWaterMedium",
+	Freshwater = "MapWaterSmallMedium",
+	Sea = "MapWaterSmallMedium",
+	Bay = "MapWaterSmallMedium",
 	Rift = "MapWaterBig",
-	Straights = "MapWaterMedium",
+	Straights = "MapWaterSmallMedium",
+	Cape = "MapWaterSmallMedium"
 }
-
---[[
-local LabelSyntaxesCentauri = {
-	{ "Adjective", " ", "Place" },
-	{ "Place", " of ", "Noun" },
-	{ "Pre", " ", "Post"},
-}
-
-local LabelDictionaryCentauri = {
-	Place = {
-		Sea = { "Sea", "Sea", "Sea", "Sea", "Sea", "Sea" },
-		Straights = { "Straights", "Straights", "Straights" },
-		Bay = { "Bay", "Bay" },
-		Ocean = { "Ocean" },
-		Rift = { "Rift" },
-	},
-	Adjective = {
-		Unknown = { "Landing", "Eurytion" },
-		Freshwater = { "Freshwater" },
-		Cold = { "Howling", "Zeus" },
-		Northern = { "Great Northern" },
-		Southern = { "Great Southern" },
-		Marine = { "Great Marine" },
-	},
-	Noun = {
-		Unknown = { "Pholus", "Nessus", "Prometheus", "Mnesimache", "Chiron", "Unity" }
-	},
-	Pre = {
-		Cape = { "Cape" }
-	},
-	Post = {
-		Unknown = { "Storm" }
-	},
-}
-]]--
 
 local LabelDefinitions -- has to be set in SetConstants()
 
@@ -838,15 +805,15 @@ local function SetConstants()
 	-- for Alpha Centauri Maps:
 
 	TerrainDictionaryCentauri = {
-		[terrainGrass] = { temperature = {0, 100, 60}, rainfall = {20, 100, 50}, features = { featureNone, featureJungle, featureMarsh } },
-		[terrainPlains] = { temperature = {40, 60}, rainfall = {20, 100, 40}, features = { featureNone, } },
-		[terrainDesert] = { temperature = {0, 100}, rainfall = {0, 20, 0}, features = { featureNone, } },
+		[terrainGrass] = { temperature = {0, 100, 50}, rainfall = {0, 100, 50}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainPlains] = { temperature = {20, 80, 40}, rainfall = {0, 80, 20}, features = { featureNone, } },
+		[terrainDesert] = { temperature = {0, 100}, rainfall = {0, 5, 0}, features = { featureNone, } },
 	}
 
 	FeatureDictionaryCentauri = {
 		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
 		[featureJungle] = { temperature = {90, 100}, rainfall = {90, 100}, percent = 100, limitRatio = 0.95, hill = false },
-		[featureMarsh] = { temperature = {10, 90}, rainfall = {10, 90}, percent = 67, limitRatio = 0.95, hill = true },
+		[featureMarsh] = { temperature = {10, 90}, rainfall = {10, 90}, percent =75, limitRatio = 0.95, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -2162,17 +2129,17 @@ function Space:Compute()
 			self.polarMaxLandRatio = 0.0
 			-- all centauri definitions are for subPolygons
 			LabelDefinitionsCentauri = {
-				Sea = { tinyIsland = false, coast = false, superPolygon = {coastTotal = -1, continent = false} },
-				Straights = { tinyIsland = false, coast = true, superPolygon = {coastTotal = -2, coastContinentsTotal = 2} },
-				Bay = { coast = true, superPolygon = {coastTotal = 3, coastContinentsTotal = -1} },
-				Ocean = { coast = false, superPolygon = {coast = false, continent = false} },
-				Cape = { coast = true, superPolygon = {coastTotal = -1} },
-				Rift = { superPolygon = {oceanIndex = 1} },
-				Freshwater = { lake = true },
-				ColdCoast = { latitude = 75, coast = true },
-				WarmCoast = { latitude = -25, coast = true },
-				Northern = { y = self.h * 0.75 },
-				Southern = { y = self.h * -0.75 },
+				Sea = { tinyIsland = false, superPolygon = {region = {coastal=true}} },
+				Straights = { tinyIsland = false, coastContinentsTotal = 2, superPolygon = {waterTotal = -2} },
+				Bay = { coast = true, coastTotal = 3, coastContinentsTotal = -1, superPolygon = {coastTotal = 3, coastContinentsTotal = -1, waterTotal = -1} },
+				Ocean = { coast = false, superPolygon = {coast = false, continent = false, oceanIndex = false} },
+				Cape = { coast = true, coastContinentsTotal = -1, superPolygon = {coastTotal = -1, coastContinentsTotal = -1, oceanIndex = false, } },
+				Rift = { superPolygon = {oceanIndex = 1, polar = false, region={coastal=false}} },
+				Freshwater = { superPolygon = {coastContinentsTotal = -1, coastTotal = 4, waterTotal = 0} },
+				ColdCoast = { coast = true, latitude = 75 },
+				WarmCoast = { coast = true, latitude = -25 },
+				Northern = { coast = false, polar = false, y = self.h * 0.7 },
+				Southern = { coast = false, polar = false, y = self.h * -0.3 },
 			}
 			self.badNaturalWonders = {}
 			local badWonderTypes = { FEATURE_LAKE_VICTORIA = true, FEATURE_KILIMANJARO = true, FEATURE_SOLOMONS_MINES = true, FEATURE_FUJI = true }
@@ -2486,6 +2453,7 @@ function Space:ComputeOceanTemperatures()
 			local coastTotal = 0
 			local coastalContinents = {}
 			polygon.coastContinentsTotal = 0
+			polygon.waterTotal = 0
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continent then
 					polygon.coast = true
@@ -2495,6 +2463,8 @@ function Space:ComputeOceanTemperatures()
 						coastalContinents[neighbor.continent] = true
 						polygon.coastContinentsTotal = polygon.coastContinentsTotal + 1
 					end
+				else
+					polygon.waterTotal = polygon.waterTotal + 1
 				end
 			end
 			if coastTotal > 0 then
@@ -3377,10 +3347,26 @@ function Space:LabelMap()
 	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
 	if self.centauri then
 		EchoDebug("giving centauri labels to subpolygons...")
-		LabelSyntaxes, LabelDictionary, LabelDefinitions = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri
-		for i, subPolygon in pairs(self.subPolygons) do
+		LabelSyntaxes, LabelDictionary, LabelDefinitions, SpecialLabelTypes = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri, SpecialLabelTypesCentauri
+		local subPolygonBuffer = tDuplicate(self.subPolygons)
+		repeat
+			local subPolygon = tRemoveRandom(subPolygonBuffer)
+			if not subPolygon.superPolygon.continent and not subPolygon.tinyIsland then
+				subPolygon.coastContinentsTotal = 0
+				subPolygon.coastTotal = 0
+				local coastalContinents = {}
+				for ni, neighbor in pairs(subPolygon.neighbors) do
+					if neighbor.superPolygon.continent then
+						if not coastalContinents[neighbor.superPolygon.continent] then
+							subPolygon.coastContinentsTotal = subPolygon.coastContinentsTotal + 1
+							coastalContinents[neighbor.superPolygon.continent] = true
+						end
+						subPolygon.coastTotal = subPolygon.coastTotal + 1
+					end
+				end
+			end
 			LabelThing(subPolygon)
-		end
+		until #subPolygonBuffer == 0
 		return
 	end
 	EchoDebug("generating names...")
