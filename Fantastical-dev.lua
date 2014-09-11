@@ -4350,7 +4350,8 @@ function GetMapScriptInfo()
 	return {
 		Name = "Fantastical (dev)",
 		Description = "Fantastical lands! Convoluted rivers! Epic mountain ranges!",
-		IconIndex = 5,
+		IconAtlas = "WORLDTYPE_FANTASTICAL_ATLAS",
+		IconIndex = 0,
 		CustomOptions = custOpts,
 	}
 end
@@ -4386,6 +4387,12 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+	for row in DB.Query("SELECT * FROM IconTextureAtlases WHERE Atlas = 'WORLDTYPE_FANTASTICAL_ATLAS';") do
+		for k, v in pairs(row) do
+			EchoDebug(k, v)
+		end
+	end
+	EchoDebug(GameInfo.IconTextureAtlases.WORLDTYPE_FANTASTICAL_ATLAS.ID)
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
