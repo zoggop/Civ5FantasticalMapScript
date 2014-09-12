@@ -1,10 +1,19 @@
-- make new map of planet?
-	- modify continent determination to only give out africa and asia (map of planet uses these togeher on the same continent)
-	- modify dictionaries to only have grassland, plains, desert, and the only features are jungle and marsh. marsh can occur on a hill, jungle and marsh only occurs in grassland
-	- modify label dictionaries
+- make new map of planet:
+	- change wonder conditions for: uranium flats (?), monsoon jungle (fountain of youth), sunny mesa (sri pada), geothermal shallows (old faithful)
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
+
+Done (v6)
+- centauri mod activation sets map option defaults
+- implement map icon
+- create map icon
+- make new map of planet:
+	- modify label dictionaries
+	- remove non-centauri wonders from map: lake victoria, king solomon's mines, mt kilamanjaro, mt fuji
+	- modify continent determination to only give out africa and asia (map of planet uses these togeher on the same continent)
+	- modify dictionaries to only have grassland, plains, desert, and the only features are jungle and marsh. marsh can occur on a hill, jungle and marsh only occurs in grassland
+	- place silver (minerals) and spices (kelp) in the ocean
 
 Done (v5)
 - fix road drawing algo not finding destination

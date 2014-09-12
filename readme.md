@@ -1,4 +1,4 @@
-# Fantastical
+# ![icon](fantastical_icon.png) Fantastical
 ## Map Script for Civilization 5
 
 Fantastical lands! Convoluted rivers! Epic mountain ranges!

@@ -4,6 +4,8 @@ The map is a rendering of a polygonal world--a smaller map is just a lower resol
 
 It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based entirely upon latitude, with a little randomness.
 
+This script (version 6) is compatible with [url=http://steamcommunity.com/sharedfiles/filedetails/?id=220026971]Alpha Centauri Maps[/url]. To create a map similar to Map of Planet, set [b]Oceans[/b] to [i]One[/i], [b]Continents/Ocean[/b] to [i]Three[/i], [b]Climate Realism[/b] to [i]On[/i], [b]Ancient Roads[/b] to [i]None[/i], and [b]Place Names[/b] to [i]On[/i].
+
 [url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Repository[/url]
 
 [url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]

@@ -1,5 +1,6 @@
--- Fantastical_Main
+-- Fantastical_Main, lua helper for Fantastical Map Script
 -- Author: zoggop
+-- version 6
 --------------------------------------------------------------------
 include("FLuaVector")
 include("InstanceManager")
@@ -28,7 +29,7 @@ function Initialize()
 			if not labelledPlots[plot] and not labelledPlots[westPlot] and not labelledPlots[eastPlot] then
 				print(row.Label, row.Type, row.x .. ", " .. row.y)
 				local instance = g_MapManager:GetInstance()
-				instance[row.Type]:SetText(row.Label)
+				instance[row.Type]:LocalizeAndSetText(row.Label)
 				PlaceInWorld(instance.Anchor, GetWorldPos(plot))
 				labelledPlots[plot] = row
 				labelledPlots[westPlot] = row
@@ -39,7 +40,7 @@ function Initialize()
 	else
 		print("no Fantastical_Map_Labels in GameInfo")
 	end
-	if GameInfo.Ancient_Roads thne
+	if GameInfo.Ancient_Roads then
 		local routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
 		for row in DB.Query("SELECT * FROM Ancient_Roads") do -- using the DB Query b/c gameinfo and the db sometimes differ inexplicably
 			print("road at " .. row.x .. ", " .. row.y)
