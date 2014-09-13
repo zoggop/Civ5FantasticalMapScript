@@ -3,22 +3,6 @@
 -- Author: zoggop
 -- version 7
 --------------------------------------------------------------------
-include("FLuaVector")
-include("InstanceManager")
---------------------------------------------------------------------
-g_Properties = {}
---------------------------------------------------------------------
-local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
-local g_WorldOffset = {x=0, y=0, z=0}
---------------------------------------------------------------------
-function GetWorldPos(pPlot)
-	return HexToWorld(ToHexFromGrid({x=pPlot:GetX(), y=pPlot:GetY()}))
-end
---------------------------------------------------------------------
-function PlaceInWorld(control, world)
-	control:SetWorldPosition(VecAdd(world, g_WorldOffset))
-end
---------------------------------------------------------------------
 function Initialize()
 	print("Initializing Fantastical_Main...")
 	if GameInfo.Ancient_Roads then

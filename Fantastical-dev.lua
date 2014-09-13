@@ -624,10 +624,11 @@ local function DatabaseQuery(sqlStatement)
 end
 
 local function CreateOrOverwriteTable(tableName, dataSql)
-	for whatever in DB.Query("SHOW TABLES LIKE '".. tableName .."';") do
+	-- for whatever in DB.Query("SHOW TABLES LIKE '".. tableName .."';") do
+	if GameInfo[tableName] then
 		EchoDebug("table " .. tableName .. " exists, dropping")
 		DatabaseQuery("DROP TABLE " .. tableName)
-		break
+		-- break
 	end
 	EchoDebug("creating table " .. tableName)
 	DatabaseQuery("CREATE TABLE " .. tableName .. " ( " .. dataSql .. " );")
@@ -2009,7 +2010,13 @@ function Region:Label()
 		self.featureRatios[featureType] = tcount / count
 		-- EchoDebug("feature", featureType, self.featureRatios[featureType])
 	end
-	local label = LabelThing(self, avgX, avgY)
+	local hexes = {}
+	for i, polygon in pairs(self.polygons) do
+		for h, hex in pairs(polygon.hexes) do
+			tInsert(hexes, hex)
+		end
+	end
+	local label = LabelThing(self, avgX, avgY, hexes)
 	if label then return true end
 end
 
@@ -3377,7 +3384,7 @@ end
 
 
 function Space:LabelMap()
-	CreateOrOverwriteTable("Fantastical_Map_Labels", "X integer DEFAULT 0, Y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null")
+	CreateOrOverwriteTable("Fantastical_Map_Labels", "X integer DEFAULT 0, Y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null, ID integer DEFAULT 0")
 	if self.centauri then
 		EchoDebug("giving centauri labels to subpolygons...")
 		LabelSyntaxes, LabelDictionary, LabelDefinitions, SpecialLabelTypes = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri, SpecialLabelTypesCentauri
@@ -3439,7 +3446,18 @@ function Space:LabelMap()
 			polygon = ocean[index]
 			if not polygon.hasTinyIslands then break end
 		end
-		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y, astronomyIndex = tRemoveRandom(astronomyIndexBuffer) }
+		local astronomyIndex
+		if #astronomyIndexBuffer == 0 then
+			astronomyIndex = 1
+		else
+			astronomyIndex = tRemoveRandom(astronomyIndexBuffer)
+		end
+		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y, astronomyIndex = astronomyIndex, hexes = {} }
+		for p, polygon in pairs(ocean) do
+			for h, hex in pairs(polygon.hexes) do
+				tInsert(thing.hexes, hex)
+			end
+		end
 		LabelThing(thing)
 	end
 	EchoDebug("labelling lakes...")
@@ -3454,6 +3472,11 @@ function Space:LabelMap()
 	local n = 0
 	for negLength, river in pairsByKeys(riversByLength) do
 		local hex = river.path[mCeil(#river.path/2)].hex
+		river.hexes = {}
+		for i, flow in pairs(river.path) do
+			tInsert(river.hexes, flow.hex)
+			tInsert(river.hexes, flow.pairHex)
+		end
 		river.x, river.y = hex.x, hex.y
 		river.astronomyIndex = hex.polygon.astronomyIndex
 		if LabelThing(river) then n = n + 1 end
@@ -3485,6 +3508,7 @@ function Space:LabelMap()
 		local tempCount = 0
 		local rainCount = 0
 		local x, y
+		local hexes = {}
 		for ie, edge in pairs(range) do
 			for ip, polygon in pairs(edge.polygons) do
 				if polygon.oceanTemperature then
@@ -3502,13 +3526,10 @@ function Space:LabelMap()
 						rainfallAvg = rainfallAvg + subPolygon.rainfall
 						rainCount = rainCount + 1
 					end
-					if not x then
-						for ih, hex in pairs(subPolygon.hexes) do
-							if hex.plotType == plotMountain then
-								x = hex.x
-								y = hex.y
-								break
-							end
+					for ih, hex in pairs(subPolygon.hexes) do
+						if hex.plotType == plotMountain then
+							tInsert(hexes, hex)
+							if not x then x, y = hex.x, hex.y end
 						end
 					end
 				end
@@ -3518,7 +3539,7 @@ function Space:LabelMap()
 			temperatureAvg = temperatureAvg / tempCount
 			rainfallAvg = rainfallAvg / rainCount
 			-- EchoDebug("valid mountain range: ", #range, temperatureAvg, temperatureAvg)
-			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex }
+			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex, hexes = hexes }
 			if LabelThing(thing) then rangesLabelled = rangesLabelled + 1 end
 		end
 		if rangesLabelled == self.rangeLabelsMax then break end

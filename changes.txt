@@ -1,8 +1,3 @@
-planned v7:
-- split map labels into a different mod
-- save and load map labels (see MOP_Main.lua)
-- pass map labels to Fantastical_Main.lua as sets of hexes, so that the labels only show once all hexes are revealed
-
 planned v8:
 - turn Fantastical.lua into a library that map scripts can include
 
@@ -13,6 +8,11 @@ low priority:
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
+
+Done (v7)
+- split map labels into a different mod
+- save and load map labels (see MOP_Main.lua)
+- pass map labels to Fantastical_Main.lua as sets of hexes, so that the labels only show once all hexes are revealed
 
 Done (v6)
 - implement map icon
