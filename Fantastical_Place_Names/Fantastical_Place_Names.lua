@@ -13,6 +13,7 @@ local g_SaveData	= Modding.OpenSaveData();
 local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
 local g_WorldOffset = {x=0, y=0, z=0}
 local labelledIDs = {}
+local labelledHexes = {}
 local tInsert = table.insert
 local function tDuplicate(sourceTable)
 	local duplicate = {}
@@ -23,7 +24,6 @@ local function tDuplicate(sourceTable)
 end
 --------------------------------------------------------------------
 function F_ActivePlayerTurnStart()
-	local labelledHexes = GetPersistentTable("Fantastical_Labelled_Hexes")
 	local teamID = Game.GetActiveTeam()
 	for i, ID in pairs(GetPersistentTable("Fantastical_Label_IDs")) do
 		if not labelledIDs[ID] then
@@ -37,7 +37,7 @@ function F_ActivePlayerTurnStart()
 				end
 			end
 			if allRevealed then
-				local labelled = (labelledHexes[label.X] and labelledHexes[label.X][label.Y]) or (labelledHexes[label.X-1] and labelledHexes[label.X+1][label.Y]) or (labelledHexes[label.X+1] and labelledHexes[label.X+1][label.Y])
+				local labelled = (labelledHexes[label.X] and labelledHexes[label.X][label.Y]) or (labelledHexes[label.X-1] and labelledHexes[label.X-1][label.Y]) or (labelledHexes[label.X+1] and labelledHexes[label.X+1][label.Y])
 				if not labelled then
 					print(label.Label, label.Type, label.X .. ", " .. label.Y)
 					local instance = g_MapManager:GetInstance()
@@ -55,7 +55,6 @@ function F_ActivePlayerTurnStart()
 			end
 		end
 	end
-	SetPersistentTable("Fantastical_Labelled_Hexes", labelledHexes)
 end
 Events.ActivePlayerTurnStart.Add( F_ActivePlayerTurnStart )
 --------------------------------------------------------------------
@@ -103,7 +102,6 @@ end
 function Initialize()
 	if not IsInitialized() then
 		print("Initializing Fantastical Place Names...")
-		SetPersistentTable("Fantastical_Labelled_Hexes", {})
 		if GameInfo.Fantastical_Map_Labels then
 			local IDs = {}
 			for row in DB.Query("SELECT * FROM Fantastical_Map_Labels") do -- using the DB Query b/c gameinfo and the db sometimes differ inexplicably
@@ -125,6 +123,7 @@ function Initialize()
 	else
 		print("Fantastical Place Names already initialized in savedata")
 	end
+	F_ActivePlayerTurnStart()
 end
 --------------------------------------------------------------------
 Initialize()
