@@ -1,6 +1,7 @@
 -- Fantastical_Main, lua helper for Fantastical Map Script
+-- adds roads
 -- Author: zoggop
--- version 6
+-- version 7
 --------------------------------------------------------------------
 include("FLuaVector")
 include("InstanceManager")
@@ -20,26 +21,6 @@ end
 --------------------------------------------------------------------
 function Initialize()
 	print("Initializing Fantastical_Main...")
-	local labelledPlots = {}
-	if GameInfo.Fantastical_Map_Labels then
-		for row in DB.Query("SELECT * FROM Fantastical_Map_Labels") do -- using the DB Query b/c gameinfo and the db sometimes differ inexplicably
-			local plot = Map.GetPlot(row.x, row.y)
-			local westPlot = Map.PlotDirection(plot:GetX(), plot:GetY(), DirectionTypes.DIRECTION_WEST);
-			local eastPlot = Map.PlotDirection(plot:GetX(), plot:GetY(), DirectionTypes.DIRECTION_EAST);
-			if not labelledPlots[plot] and not labelledPlots[westPlot] and not labelledPlots[eastPlot] then
-				print(row.Label, row.Type, row.x .. ", " .. row.y)
-				local instance = g_MapManager:GetInstance()
-				instance[row.Type]:LocalizeAndSetText(row.Label)
-				PlaceInWorld(instance.Anchor, GetWorldPos(plot))
-				labelledPlots[plot] = row
-				labelledPlots[westPlot] = row
-				labelledPlots[eastPlot] = row
-			end
-		end
-		print("Fantastical labels loaded.")
-	else
-		print("no Fantastical_Map_Labels in GameInfo")
-	end
 	if GameInfo.Ancient_Roads then
 		local routeRoad = GameInfo.Routes.ROUTE_ROAD.ID
 		for row in DB.Query("SELECT * FROM Ancient_Roads") do -- using the DB Query b/c gameinfo and the db sometimes differ inexplicably

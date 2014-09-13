@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 6
+-- version 7
 
 --------------------------------------------------------------
 if include == nil then
@@ -620,6 +620,17 @@ local function DatabaseQuery(sqlStatement)
 	for whatever in DB.Query(sqlStatement) do
 		local stuff = whatever
 	end
+	return rows
+end
+
+local function CreateOrOverwriteTable(tableName, dataSql)
+	for whatever in DB.Query("SHOW TABLES LIKE '".. tableName .."';") do
+		EchoDebug("table " .. tableName .. " exists, dropping")
+		DatabaseQuery("DROP TABLE " .. tableName)
+		break
+	end
+	EchoDebug("creating table " .. tableName)
+	DatabaseQuery("CREATE TABLE " .. tableName .. " ( " .. dataSql .. " );")
 end
 
 local function DatabaseInsert(tableName, values)
@@ -638,14 +649,26 @@ local function DatabaseInsert(tableName, values)
 	DatabaseQuery("INSERT INTO " .. tableName .. " (" .. nameString ..") VALUES (" .. valueString .. ");")
 end
 
-local function LabelThing(thing, x, y)
+local LabelIndex = 0
+
+local function InsertLabel(X, Y, Type, Label, hexes)
+	LabelIndex = LabelIndex + 1
+	DatabaseInsert("Fantastical_Map_Labels", {X = X, Y = Y, Type = Type, Label = Label, ID = LabelIndex})
+	local LabelTable = "Fantastical_Map_Label_ID_" .. LabelIndex
+	CreateOrOverwriteTable(LabelTable, "X integer DEFAULT 0, Y integer DEFAULT 0")
+	for i, hex in pairs(hexes) do
+		DatabaseInsert(LabelTable, {X = hex.x, Y = hex.y})
+	end
+end
+
+local function LabelThing(thing, x, y, hexes)
 	if not thing then return end
 	x = x or thing.x
 	if not x then return end
 	y = y or thing.y
 	local label, labelType = GetLabel(thing)
 	if label then
-		DatabaseInsert("Fantastical_Map_Labels", {x = x, y = y, Type = labelType, Label = label})
+		InsertLabel(x, y, labelType, label, hexes or thing.hexes)
 		return true
 	else
 		return false
@@ -2632,16 +2655,7 @@ function Space:SetRivers()
 end
 
 function Space:SetRoads()
-	if GameInfo.Ancient_Roads then
-		local sqlStatement = "DROP TABLE Ancient_Roads;"
-		for whatever in DB.Query(sqlStatement) do
-			EchoDebug(tostring(whatever))
-		end
-	end
-	local sqlStatement = "CREATE TABLE Ancient_Roads ( x integer DEFAULT 0, y integer DEFAULT 0 );"
-	for whatever in DB.Query(sqlStatement) do
-		EchoDebug(tostring(whatever))
-	end
+	CreateOrOverwriteTable("Ancient_Roads", "x integer DEFAULT 0, y integer DEFAULT 0")
 	for i, hex in pairs(self.hexes) do
 		hex:SetRoad()
 	end
@@ -3363,12 +3377,7 @@ end
 
 
 function Space:LabelMap()
-	if GameInfo.Fantastical_Map_Labels then
-		EchoDebug("dropping old label table")
-		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
-	end
-	EchoDebug("creating label table")
-	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
+	CreateOrOverwriteTable("Fantastical_Map_Labels", "X integer DEFAULT 0, Y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null")
 	if self.centauri then
 		EchoDebug("giving centauri labels to subpolygons...")
 		LabelSyntaxes, LabelDictionary, LabelDefinitions, SpecialLabelTypes = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri, SpecialLabelTypesCentauri
@@ -4421,6 +4430,7 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+	FantasticalLands = "HELLO THERE"
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
