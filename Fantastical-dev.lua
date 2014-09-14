@@ -596,12 +596,6 @@ local OptionDictionary = {
 			[3] = { name = "Many", values = {10} },
 		}
 	},
-	{ name = "Place Names", sortpriority = 11, keys = { "mapLabelsEnabled" }, default = 1,
-	values = {
-			[1] = { name = "Off", values = {false} },
-			[2] = { name = "On", values = {true} },
-		}
-	},
 }
 
 local function GetCustomOptions()
@@ -2152,7 +2146,11 @@ function Space:Compute()
     local activatedMods = Modding.GetActivatedMods()
 	for i,v in ipairs(activatedMods) do
 		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
-		if title == "Alpha Centauri Maps" then
+		if title == "Fantastical Place Names" then
+			EchoDebug("Fantastical Place Names enabled, labels will be generated")
+			self.mapLabelsEnabled = true
+		elseif title == "Alpha Centauri Maps" then
+			EchoDebug("Alpha Centauri Maps enabled, will create random Map of Planet")
 			self.centauri = true
 			self.artContinents = { artAsia, artAfrica }
 			TerrainDictionary, FeatureDictionary = TerrainDictionaryCentauri, FeatureDictionaryCentauri
@@ -2187,7 +2185,6 @@ function Space:Compute()
 				end
 
 			end
-			break
 		end
 	end
     self.freshFreezingTemperature = self.freezingTemperature * 1.12

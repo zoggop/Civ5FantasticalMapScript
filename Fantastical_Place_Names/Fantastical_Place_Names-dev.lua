@@ -1,8 +1,9 @@
 -- Fantastical Place Names, helper mod for Fantastical Map Script
 -- handles map labels
 -- Author: zoggop
--- version 7
+-- version 1
 --------------------------------------------------------------------
+print('Fantastical Place Names present')
 include("FLuaVector")
 include("InstanceManager")
 include("Serializer.lua")
@@ -107,12 +108,14 @@ function Initialize()
 			for row in DB.Query("SELECT * FROM Fantastical_Map_Labels") do -- using the DB Query b/c gameinfo and the db sometimes differ inexplicably
 				local label = tDuplicate(row)
 				label.Hexes = {}
-				for hex in DB.Query("SELECT * FROM Fantastical_Map_Label_ID_" .. label.ID .. ";") do
-					local xy = tDuplicate(hex)
-					tInsert(label.Hexes, xy)
+				if GameInfo["Fantastical_Map_Label_ID_" .. label.ID] then
+					for hex in DB.Query("SELECT * FROM Fantastical_Map_Label_ID_" .. label.ID .. ";") do
+						local xy = tDuplicate(hex)
+						tInsert(label.Hexes, xy)
+					end
+					SetPersistentTable("Fantastical_Map_Label_ID_" .. label.ID, label)
+					tInsert(IDs, label.ID)
 				end
-				SetPersistentTable("Fantastical_Map_Label_ID_" .. label.ID, label)
-				tInsert(IDs, label.ID)
 			end
 			SetPersistentTable("Fantastical_Label_IDs", IDs)
 			print("Fantastical labels loaded.")

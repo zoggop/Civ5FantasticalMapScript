@@ -1,3 +1,7 @@
+planned v7:
+- include bays and straights in noncentauri labelling
+- instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")
+
 planned v8:
 - turn Fantastical.lua into a library that map scripts can include
 
