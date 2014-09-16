@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 6
+-- version 7
 
 --------------------------------------------------------------
 if include == nil then
@@ -329,6 +329,9 @@ local LabelDictionary ={
 	Place = {
 		Land = { "Land" },
 		Sea = { "Sea", "Shallows", "Reef" },
+		Bay = { "Bay", "Cove", "Gulf" },
+		Straights = { "Straights", "Sound", "Channel" },
+		Cape = { "Cape" },
 		Islet = { "Key", "Cay", "Ait", "Key", "Cay", "Ait" },
 		Island = { "Island", "Isle" },
 		Mountains = { "Heights", "Highlands", "Spires", "Crags" },
@@ -344,6 +347,7 @@ local LabelDictionary ={
 	},
 	ProperPlace = {
 		Ocean = "Ocean",
+		InlandSea = "Sea",
 		River = "River",
 	},
 	PrePlace = {
@@ -373,6 +377,10 @@ local SpecialLabelTypes = {
 	Ocean = "MapWaterBig",
 	Lake = "MapWaterSmallMedium",
 	Sea = "MapWaterMedium",
+	InlandSea = "MapWaterMedium",
+	Bay = "MapWaterMedium",
+	Cape = "MapWaterMedium",
+	Straights = "MapWaterMedium",
 	River = "MapWaterSmall",
 	Islet = "MapSmallMedium",
 }
@@ -596,12 +604,6 @@ local OptionDictionary = {
 			[3] = { name = "Many", values = {10} },
 		}
 	},
-	{ name = "Place Names", sortpriority = 11, keys = { "mapLabelsEnabled" }, default = 1,
-	values = {
-			[1] = { name = "Off", values = {false} },
-			[2] = { name = "On", values = {true} },
-		}
-	},
 }
 
 local function GetCustomOptions()
@@ -620,6 +622,18 @@ local function DatabaseQuery(sqlStatement)
 	for whatever in DB.Query(sqlStatement) do
 		local stuff = whatever
 	end
+	return rows
+end
+
+local function CreateOrOverwriteTable(tableName, dataSql)
+	-- for whatever in DB.Query("SHOW TABLES LIKE '".. tableName .."';") do
+	if GameInfo[tableName] then
+		-- EchoDebug("table " .. tableName .. " exists, dropping")
+		DatabaseQuery("DROP TABLE " .. tableName)
+		-- break
+	end
+	-- EchoDebug("creating table " .. tableName)
+	DatabaseQuery("CREATE TABLE " .. tableName .. " ( " .. dataSql .. " );")
 end
 
 local function DatabaseInsert(tableName, values)
@@ -638,14 +652,26 @@ local function DatabaseInsert(tableName, values)
 	DatabaseQuery("INSERT INTO " .. tableName .. " (" .. nameString ..") VALUES (" .. valueString .. ");")
 end
 
-local function LabelThing(thing, x, y)
+local LabelIndex = 0
+
+local function InsertLabel(X, Y, Type, Label, hexes)
+	LabelIndex = LabelIndex + 1
+	DatabaseInsert("Fantastical_Map_Labels", {X = X, Y = Y, Type = Type, Label = Label, ID = LabelIndex})
+	local LabelTable = "Fantastical_Map_Label_ID_" .. LabelIndex
+	CreateOrOverwriteTable(LabelTable, "X integer DEFAULT 0, Y integer DEFAULT 0")
+	for i, hex in pairs(hexes) do
+		DatabaseInsert(LabelTable, {X = hex.x, Y = hex.y})
+	end
+end
+
+local function LabelThing(thing, x, y, hexes)
 	if not thing then return end
 	x = x or thing.x
 	if not x then return end
 	y = y or thing.y
 	local label, labelType = GetLabel(thing)
 	if label then
-		DatabaseInsert("Fantastical_Map_Labels", {x = x, y = y, Type = labelType, Label = label})
+		InsertLabel(x, y, labelType, label, hexes or thing.hexes)
 		return true
 	else
 		return false
@@ -827,7 +853,12 @@ local function SetConstants()
 	end
 
 	LabelDefinitions = {
-		Sea = { plotRatios = {[plotOcean] = 0.8}, terrainRatios = {[terrainCoast] = 0.4} },
+		-- subpolygons
+		Sea = { tinyIsland = false, superPolygon = {region = {coastal=true}, sea = {inland=false}} },
+		Straights = { tinyIsland = false, coastContinentsTotal = 2, superPolygon = {waterTotal = -2, sea = {inland=false}} },
+		Bay = { coast = true, coastTotal = 3, coastContinentsTotal = -1, superPolygon = {coastTotal = 3, coastContinentsTotal = -1, waterTotal = -1, sea = {inland=false}} },
+		Cape = { coast = true, coastContinentsTotal = -1, superPolygon = {coastTotal = -1, coastContinentsTotal = 1, oceanIndex = false, sea = {inland=false}} },
+		-- regions
 		Land = { plotRatios = {[plotLand] = 1.0} },
 		Islet = { tinyIsland = true },
 		Island = { continentSize = -3, },
@@ -841,6 +872,8 @@ local function SetConstants()
 		Waste = { terrainRatios = {[terrainSnow] = 0.75}, featureRatios = {[featureNone] = 0.8} },
 		Grassland = { terrainRatios = {[terrainGrass] = 0.75}, featureRatios = {[featureNone] = 0.75} },
 
+		-- etc
+		InlandSea = { inland = true },
 		Range = { rangeLength = 1 },
 		Ocean = { oceanSize = 1 },
 		Lake = { lake = true },
@@ -922,10 +955,12 @@ function Hex:Place(relax)
 	tInsert(self.subPolygon.hexes, self)
 	if not relax then
 		self.plot = Map.GetPlotByIndex(self.index-1)
-		if self.space.wrapX then
-			self.latitude = self.space:GetPlotLatitude(self.plot)
-		else
-			self.latitude = self.space:RealmLatitude(self.y)
+		if self.space.useMapLatitudes then
+			if self.space.wrapX then
+				self.latitude = self.space:GetPlotLatitude(self.plot)
+			else
+				self.latitude = self.space:RealmLatitude(self.y)
+			end
 		end
 		self:InsidePolygon(self.subPolygon)
 	end
@@ -936,6 +971,10 @@ function Hex:InsidePolygon(polygon)
 	if self.y < polygon.minY then polygon.minY = self.y end
 	if self.x > polygon.maxX then polygon.maxX = self.x end
 	if self.y > polygon.maxY then polygon.maxY = self.y end
+	if self.latitude then
+		if self.latitude < polygon.minLatitude then polygon.minLatitude = self.latitude end
+		if self.latitude > polygon.maxLatitude then polygon.maxLatitude = self.latitude end
+	end
 	polygon:CheckBottomTop(self)
 end
 
@@ -1135,6 +1174,8 @@ Polygon = class(function(a, space, x, y)
 	a.maxX = 0
 	a.minY = space.h
 	a.maxY = 0
+	a.minLatitude = 90
+	a.maxLatitude = 0
 end)
 
 function Polygon:FloodFillSuperPolygon(floodIndex, superPolygon)
@@ -1162,6 +1203,19 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 		neighbor:FloodFillAstronomy(astronomyIndex)
 	end
 	return true
+end
+
+function Polygon:FloodFillSea(sea)
+	if self.continent then return end
+	if self.sea then return end
+	if not sea then sea = { polygons = {}, inland = true, astronomyIndex = self.astronomyIndex } end
+	if self.oceanIndex then sea.inland = false end
+	self.sea = sea
+	tInsert(sea.polygons, self)
+	for i, neighbor in pairs(self.neighbors) do
+		neighbor:FloodFillSea(sea)
+	end
+	return sea
 end
 
 function Polygon:SetNeighbor(polygon)
@@ -1331,6 +1385,56 @@ function Polygon:EmptyCoastHex()
 		destHex = tGetRandom(hexPossibilities)
 	end
 	return destHex
+end
+
+-- 
+function Polygon:GiveFakeLatitude()
+	if self.superPolygon and self.superPolygon.fakeSubLatitudes and #self.superPolygon.fakeSubLatitudes > 0 then
+		self.latitude = tRemoveRandom(self.superPolygon.fakeSubLatitudes)
+	elseif not self.superPolygon then
+		if self.continent and #self.space.continentalFakeLatitudes > 0 then
+			self.latitude = tRemoveRandom(self.space.continentalFakeLatitudes)
+		elseif #self.space.nonContinentalFakeLatitudes > 0 then
+			self.latitude = tRemoveRandom(self.space.nonContinentalFakeLatitudes)
+		else
+			self.latitude = mRandom(0, 90)
+		end
+	else
+		return
+	end
+	self.latitudeX = mRandom(0, 1)
+	self.latitudeX = self.latitudeX == 1
+	if self.latitudeX then
+		self.minLatitude = self.latitude + ((self.minX - self.x) * self.space.xFakeLatitudeConversion)
+		self.maxLatitude = self.latitude + ((self.maxX - self.x) * self.space.xFakeLatitudeConversion)
+	else
+		self.minLatitude = self.latitude + ((self.minY - self.y) * self.space.yFakeLatitudeConversion)
+		self.maxLatitude = self.latitude + ((self.maxY - self.y) * self.space.yFakeLatitudeConversion)
+	end
+	self.minLatitude = mMin(90, mMax(0, self.minLatitude))
+	self.maxLatitude = mMin(90, mMax(0, self.maxLatitude))
+	self.latitudeRange = self.maxLatitude - self.minLatitude
+	self.fakeSubLatitudes = {}
+	local count
+	if self.superPolygon then count = #self.hexes else count = #self.subPolygons end
+	if count == 1 then
+		self.fakeSubLatitudes = { (self.minLatitude + self.maxLatitude) / 2 }
+	else
+		local lInc = self.latitudeRange / (count - 1)
+		for i = 1, count do
+			local lat = self.minLatitude + ((i-1) * lInc)
+			tInsert(self.fakeSubLatitudes, lat)
+		end
+	end
+	if self.superPolygon then
+		for i, hex in pairs(self.hexes) do
+			hex.latitude = tRemoveRandom(self.fakeSubLatitudes)
+		end
+	else
+		for i, subPolygon in pairs(self.subPolygons) do
+			subPolygon:GiveFakeLatitude()
+		end
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -1678,10 +1782,20 @@ end)
 
 function Region:CreateCollection()
 	-- get latitude (real or fake)
-	self.latitude = self:GetLatitude()
+	self:GiveLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
 	self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
 	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
+	--[[
+	self.temperatureAvg = self.space:GetTemperature(self.latitude)
+	local tempA, tempB = self.space:GetDeviatedTemperature(self.maxLatitude), self.space:GetDeviatedTemperature(self.minLatitude)
+	self.temperatureMin = mMin(tempA, tempB)
+	self.temperatureMax = mMax(tempA, tempB)
+	self.rainfallAvg = self.space:GetRainfall(self.latitude)
+	local rainA, rainB = self.space:GetDeviatedRainfall(self.maxLatitude), self.space:GetDeviatedRainfall(self.minLatitude)
+	self.rainfallMin = mMin(rainA, rainB)
+	self.rainfallMax = mMax(rainA, rainB)
+	]]--
 	self.hillyness = self.space:GetHillyness()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
@@ -1689,7 +1803,7 @@ function Region:CreateCollection()
 	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent or #self.space.lakeSubPolygons < self.space.minLakes
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
-	-- EchoDebug(self.latitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
+	EchoDebug(self.latitude, self.minLatitude, self.maxLatitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	-- create the collection
 	self.size, self.subSize = self.space:GetCollectionSize()
 	local subPolys = 0
@@ -1766,7 +1880,15 @@ function Region:CreateCollection()
 	end
 end
 
-function Region:GetLatitude()
+function Region:GiveLatitude()
+	self.minLatitude, self.maxLatitude = 90, 0
+	for i, polygon in pairs(self.polygons) do
+		if polygon.minLatitude < self.minLatitude then self.minLatitude = polygon.minLatitude end
+		if polygon.maxLatitude > self.maxLatitude then self.maxLatitude = polygon.maxLatitude end
+	end
+	local polygon = tGetRandom(self.polygons)
+	self.latitude = polygon.latitude
+	--[[
 	if self.space.useMapLatitudes then
 		for i, polygon in pairs(self.polygons) do
 			if polygon.polar then
@@ -1777,12 +1899,6 @@ function Region:GetLatitude()
 	end
 	local polygon = tGetRandom(self.polygons)
 	return mFloor(polygon.latitude)
-	--[[
-	local latSum = 0
-	for i, polygon in pairs(self.polygons) do
-		latSum = latSum + polygon.latitude
-	end
-	return mFloor(latSum / #self.polygons)
 	]]--
 end
 
@@ -1986,7 +2102,13 @@ function Region:Label()
 		self.featureRatios[featureType] = tcount / count
 		-- EchoDebug("feature", featureType, self.featureRatios[featureType])
 	end
-	local label = LabelThing(self, avgX, avgY)
+	local hexes = {}
+	for i, polygon in pairs(self.polygons) do
+		for h, hex in pairs(polygon.hexes) do
+			tInsert(hexes, hex)
+		end
+	end
+	local label = LabelThing(self, avgX, avgY, hexes)
 	if label then return true end
 end
 
@@ -2035,9 +2157,11 @@ Space = class(function(a)
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureMax = 100 -- highest temperature possible (plus or minus intraregionTemperatureDeviation)
 	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.intraregionTemperatureDeviation = 20 -- how much at maximum can a region's temperature vary within itself
+	a.intraregionTemperatureDeviation = 12 -- how much at maximum can a region's temperature deviate from its avg
+	a.temperatureMaxDeviation = 5
+	a.rainfallMaxDeviation = 7
 	a.rainfallDice = 1 -- just like temperature above
-	a.intraregionRainfallDeviation = 30 -- just like temperature above
+	a.intraregionRainfallDeviation = 16 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
@@ -2055,6 +2179,7 @@ Space = class(function(a)
 	a.rangeLabelsMax = 5 -- maximum number of labelled mountain ranges (descending length)
 	a.riverLabelsMax = 5 -- maximum number of labelled rivers (descending length)
 	a.tinyIslandLabelsMax = 5 -- maximum number of labelled tiny islands
+	a.subPolygonLabelsMax = 5 -- maximum number of labelled subpolygons (bays, straights)
 	----------------------------------
 	-- DEFINITIONS: --
 	a.oceans = {}
@@ -2077,6 +2202,7 @@ Space = class(function(a)
     a.tinyIslandSubPolygons = {}
     a.deepHexes = {}
     a.lakeSubPolygons = {}
+    a.inlandSeas = {}
     a.rivers = {}
 end)
 
@@ -2119,10 +2245,16 @@ function Space:Compute()
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
+    self.xFakeLatitudeConversion = 90 / self.iW
+    self.yFakeLatitudeConversion = 90 / self.iH
     local activatedMods = Modding.GetActivatedMods()
 	for i,v in ipairs(activatedMods) do
 		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
-		if title == "Alpha Centauri Maps" then
+		if title == "Fantastical Place Names" then
+			EchoDebug("Fantastical Place Names enabled, labels will be generated")
+			self.mapLabelsEnabled = true
+		elseif title == "Alpha Centauri Maps" then
+			EchoDebug("Alpha Centauri Maps enabled, will create random Map of Planet")
 			self.centauri = true
 			self.artContinents = { artAsia, artAfrica }
 			TerrainDictionary, FeatureDictionary = TerrainDictionaryCentauri, FeatureDictionaryCentauri
@@ -2157,7 +2289,6 @@ function Space:Compute()
 				end
 
 			end
-			break
 		end
 	end
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
@@ -2240,6 +2371,8 @@ function Space:Compute()
     self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
+    EchoDebug("flooding inland seas...")
+    self:FindInlandSeas()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 	if not self.useMapLatitudes then
@@ -2632,16 +2765,7 @@ function Space:SetRivers()
 end
 
 function Space:SetRoads()
-	if GameInfo.Ancient_Roads then
-		local sqlStatement = "DROP TABLE Ancient_Roads;"
-		for whatever in DB.Query(sqlStatement) do
-			EchoDebug(tostring(whatever))
-		end
-	end
-	local sqlStatement = "CREATE TABLE Ancient_Roads ( x integer DEFAULT 0, y integer DEFAULT 0 );"
-	for whatever in DB.Query(sqlStatement) do
-		EchoDebug(tostring(whatever))
-	end
+	CreateOrOverwriteTable("Ancient_Roads", "x integer DEFAULT 0, y integer DEFAULT 0")
 	for i, hex in pairs(self.hexes) do
 		hex:SetRoad()
 	end
@@ -3361,23 +3485,15 @@ function Space:FillRegions()
 	end
 end
 
-
-function Space:LabelMap()
-	if GameInfo.Fantastical_Map_Labels then
-		EchoDebug("dropping old label table")
-		DatabaseQuery("DROP TABLE Fantastical_Map_Labels;")
-	end
-	EchoDebug("creating label table")
-	DatabaseQuery("CREATE TABLE Fantastical_Map_Labels ( x integer DEFAULT 0, y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null );")
-	if self.centauri then
-		EchoDebug("giving centauri labels to subpolygons...")
-		LabelSyntaxes, LabelDictionary, LabelDefinitions, SpecialLabelTypes = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri, SpecialLabelTypesCentauri
-		local polygonBuffer = tDuplicate(self.polygons)
+function Space:LabelSubPolygonsByPolygon()
+	local labelled = 0
+	local polygonBuffer = tDuplicate(self.polygons)
+	repeat
+		local polygon = tRemoveRandom(polygonBuffer)
+		local subPolygonBuffer = tDuplicate(polygon.subPolygons)
 		repeat
-			local polygon = tRemoveRandom(polygonBuffer)
-			local subPolygonBuffer = tDuplicate(polygon.subPolygons)
-			repeat
-				local subPolygon = tRemoveRandom(subPolygonBuffer)
+			local subPolygon = tRemoveRandom(subPolygonBuffer)
+			if self.centauri or not subPolygon.superPolygon.continent and not subPolygon.tinyIsland and not subPolygon.lake then
 				if not subPolygon.superPolygon.continent and not subPolygon.tinyIsland then
 					subPolygon.coastContinentsTotal = 0
 					subPolygon.coastTotal = 0
@@ -3395,9 +3511,34 @@ function Space:LabelMap()
 				if subPolygon.superPolygon.continent then
 					subPolygon.continentSize = #subPolygon.superPolygon.continent
 				end
-				if LabelThing(subPolygon) then break end
-			until #subPolygonBuffer == 0
-		until #polygonBuffer == 0
+				if LabelThing(subPolygon) then
+					labelled = labelled + 1
+					break
+				end
+			end
+		until #subPolygonBuffer == 0
+	until #polygonBuffer == 0 or (self.subPolygonLabelsMax and labelled >= self.subPolygonLabelsMax)
+	EchoDebug(#polygonBuffer)
+end
+
+function Space:FindInlandSeas()
+	for i, polygon in pairs(self.polygons) do
+		local sea = polygon:FloodFillSea()
+		if sea and sea.inland then
+			sea.size = #sea.polygons
+			EchoDebug("found inland sea ", sea.size)
+			tInsert(self.inlandSeas, sea)
+		end
+	end
+end
+
+function Space:LabelMap()
+	CreateOrOverwriteTable("Fantastical_Map_Labels", "X integer DEFAULT 0, Y integer DEFAULT 0, Type text DEFAULT null, Label text DEFAULT null, ID integer DEFAULT 0")
+	if self.centauri then
+		EchoDebug("giving centauri labels to subpolygons...")
+		LabelSyntaxes, LabelDictionary, LabelDefinitions, SpecialLabelTypes = LabelSyntaxesCentauri, LabelDictionaryCentauri, LabelDefinitionsCentauri, SpecialLabelTypesCentauri
+		self.subPolygonLabelsMax = nil
+		self:LabelSubPolygonsByPolygon()
 		return
 	end
 	EchoDebug("generating names...")
@@ -3430,8 +3571,45 @@ function Space:LabelMap()
 			polygon = ocean[index]
 			if not polygon.hasTinyIslands then break end
 		end
-		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y, astronomyIndex = tRemoveRandom(astronomyIndexBuffer) }
+		local astronomyIndex
+		if #astronomyIndexBuffer == 0 then
+			astronomyIndex = 1
+		else
+			astronomyIndex = tRemoveRandom(astronomyIndexBuffer)
+		end
+		local thing = { oceanSize = #ocean, x = polygon.x, y = polygon.y, astronomyIndex = astronomyIndex, hexes = {} }
+		for p, polygon in pairs(ocean) do
+			for h, hex in pairs(polygon.hexes) do
+				tInsert(thing.hexes, hex)
+			end
+		end
 		LabelThing(thing)
+	end
+	EchoDebug("labelling inland seas...")
+	for i, sea in pairs(self.inlandSeas) do
+		local x, y
+		local hexes = {}
+		for p, polygon in pairs(sea.polygons) do
+			for sp, subPolygon in pairs(polygon.subPolygons) do
+				if not x then
+					local middle = true
+					for n, neighbor in pairs(subPolygon.neighbors) do
+						if neighbor.superPolygon.sea and neighbor.superPolygon.sea ~= sea then
+							middle = false
+							break
+						end
+					end
+					if middle then x, y = subPolygon.x, subPolygon.y end
+				end
+				for h, hex in pairs(subPolygon.hexes) do tInsert(hexes, hex) end
+			end
+		end
+		if not x then
+			local hex = tGetRandom(hexes)
+			x, y = hex.x, hex.y
+		end
+		EchoDebug(sea.size, sea.inland, x, y, #hexes)
+		LabelThing(sea, x, y, hexes)
 	end
 	EchoDebug("labelling lakes...")
 	for i, subPolygon in pairs(self.lakeSubPolygons) do
@@ -3445,6 +3623,11 @@ function Space:LabelMap()
 	local n = 0
 	for negLength, river in pairsByKeys(riversByLength) do
 		local hex = river.path[mCeil(#river.path/2)].hex
+		river.hexes = {}
+		for i, flow in pairs(river.path) do
+			tInsert(river.hexes, flow.hex)
+			tInsert(river.hexes, flow.pairHex)
+		end
 		river.x, river.y = hex.x, hex.y
 		river.astronomyIndex = hex.polygon.astronomyIndex
 		if LabelThing(river) then n = n + 1 end
@@ -3464,6 +3647,8 @@ function Space:LabelMap()
 		local subPolygon = tRemoveRandom(tinyIslandBuffer)
 		if LabelThing(subPolygon) then tinyIslandsLabelled = tinyIslandsLabelled + 1 end
 	until #tinyIslandBuffer == 0 or tinyIslandsLabelled >= self.tinyIslandLabelsMax
+	EchoDebug("labelling bays, straights, and capes")
+	self:LabelSubPolygonsByPolygon()
 	EchoDebug("labelling mountain ranges...")
 	local rangesByLength = {}
 	for i, range in pairs(self.mountainRanges) do
@@ -3476,6 +3661,7 @@ function Space:LabelMap()
 		local tempCount = 0
 		local rainCount = 0
 		local x, y
+		local hexes = {}
 		for ie, edge in pairs(range) do
 			for ip, polygon in pairs(edge.polygons) do
 				if polygon.oceanTemperature then
@@ -3493,13 +3679,10 @@ function Space:LabelMap()
 						rainfallAvg = rainfallAvg + subPolygon.rainfall
 						rainCount = rainCount + 1
 					end
-					if not x then
-						for ih, hex in pairs(subPolygon.hexes) do
-							if hex.plotType == plotMountain then
-								x = hex.x
-								y = hex.y
-								break
-							end
+					for ih, hex in pairs(subPolygon.hexes) do
+						if hex.plotType == plotMountain then
+							tInsert(hexes, hex)
+							if not x then x, y = hex.x, hex.y end
 						end
 					end
 				end
@@ -3509,7 +3692,7 @@ function Space:LabelMap()
 			temperatureAvg = temperatureAvg / tempCount
 			rainfallAvg = rainfallAvg / rainCount
 			-- EchoDebug("valid mountain range: ", #range, temperatureAvg, temperatureAvg)
-			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex }
+			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex, hexes = hexes }
 			if LabelThing(thing) then rangesLabelled = rangesLabelled + 1 end
 		end
 		if rangesLabelled == self.rangeLabelsMax then break end
@@ -4109,20 +4292,17 @@ end
 
 function Space:DisperseFakeLatitude()
 	self.continentalFakeLatitudes = {}
-	local increment = 90 / self.filledPolygons
+	local increment = 90 / (self.filledPolygons - 1)
     for i = 1, self.filledPolygons do
     	tInsert(self.continentalFakeLatitudes, increment * (i-1))
     end
 	self.nonContinentalFakeLatitudes = {}
-    increment = 90 / (#self.polygons - self.filledPolygons)
+    increment = 90 / ((#self.polygons - self.filledPolygons) - 1)
     for i = 1, (#self.polygons - self.filledPolygons) do
     	tInsert(self.nonContinentalFakeLatitudes, increment * (i-1))
     end
 	for i, polygon in pairs(self.polygons) do
-		polygon.latitude = self:GetFakeLatitude(polygon)
-		for spi, subPolygon in pairs(polygon.subPolygons) do
-			subPolygon.latitude = self:GetFakeSubLatitude(polygon.latitude)
-		end
+		polygon:GiveFakeLatitude()
 	end
 end
 
@@ -4200,24 +4380,6 @@ function Space:GetPlotLatitude(plot)
 	end
 end
 
-function Space:GetFakeLatitude(polygon)
-	if polygon then
-		if polygon.continent then
-			return tRemoveRandom(self.continentalFakeLatitudes)
-		else
-			return tRemoveRandom(self.nonContinentalFakeLatitudes)
-		end
-	end
-	return mRandom(0, 90)
-end
-
-function Space:GetFakeSubLatitude(latitudeStart)
-	if latitudeStart then
-		return mRandom(latitudeStart-5, latitudeStart+5)
-	end
-	return mRandom(0, 90)
-end
-
 function Space:RealmLatitude(y)
 	if self.realmHemisphere == 2 then y = self.h - y end
 	return mCeil(y * (90 / self.h))
@@ -4232,10 +4394,17 @@ function Space:GetTemperature(latitude)
 	else
 		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
 	end
-	local diff = mRandom(1, mFloor(self.intraregionTemperatureDeviation / 2))
+	local diff = mRandom(1, self.intraregionTemperatureDeviation)
 	local temp1 = mMax(temp - diff, 0)
 	local temp2 = mMin(temp + diff, 100)
 	return mFloor(temp), mFloor(temp1), mFloor(temp2)
+end
+
+function Space:GetDeviatedTemperature(latitude)
+	local temp = self:GetTemperature(latitude)
+	temp = mRandom(temp - self.temperatureMaxDeviation, temp + self.temperatureMaxDeviation)
+	temp = mMin(90, mMax(0, temp))
+	return temp
 end
 
 function Space:GetRainfall(latitude)
@@ -4252,10 +4421,17 @@ function Space:GetRainfall(latitude)
 		local rise = self.rainfallMax - self.rainfallMin
 		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
 	end
-	local diff = mRandom(1, mFloor(self.intraregionRainfallDeviation / 2))
+	local diff = mRandom(1, self.intraregionRainfallDeviation)
 	local rain1 = mMax(rain - diff, 0)
 	local rain2 = mMin(rain + diff, 100)
 	return mFloor(rain), mFloor(rain1), mFloor(rain2)
+end
+
+function Space:GetDeviatedRainfall(latitude)
+	local rain = self:GetRainfall(latitude)
+	rain = mRandom(rain - self.rainfallMaxDeviation, rain + self.rainfallMaxDeviation)
+	rain = mMin(90, mMax(0, rain))
+	return rain
 end
 
 function Space:GetHillyness()
@@ -4421,6 +4597,7 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+	FantasticalLands = "HELLO THERE"
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()

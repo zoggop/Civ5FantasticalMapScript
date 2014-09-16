@@ -2,9 +2,11 @@ Maps with not much bearing on reality. Vast jungles next to icy wastes, etc. Mou
 
 The map is a rendering of a polygonal world--a smaller map is just a lower resolution, therefore has smaller continents, regions, mountain ranges, rivers, etc.
 
+Names can be given to places on the map with the dependent mod [url=http://steamcommunity.com/sharedfiles/filedetails/?id=314699759]Fantastical Place Names[/url]. Just enable that mod, and names will be revealed when tiles are explored, and persist through savegames.
+
 It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based entirely upon latitude, with a little randomness.
 
-This script (version 6) is compatible with [url=http://steamcommunity.com/sharedfiles/filedetails/?id=220026971]Alpha Centauri Maps[/url]. To create a map similar to Map of Planet, set [b]Oceans[/b] to [i]One[/i], [b]Continents/Ocean[/b] to [i]Three[/i], [b]Climate Realism[/b] to [i]On[/i], [b]Ancient Roads[/b] to [i]None[/i], and [b]Place Names[/b] to [i]On[/i].
+This script (version 6) is compatible with [url=http://steamcommunity.com/sharedfiles/filedetails/?id=220026971]Alpha Centauri Maps[/url]. To create a map similar to Map of Planet, set [b]Oceans[/b] to [i]One[/i], [b]Continents/Ocean[/b] to [i]Three[/i], [b]Climate Realism[/b] to [i]On[/i], and [b]Ancient Roads[/b] to [i]None[/i].
 
 [url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Repository[/url]
 
@@ -24,7 +26,5 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 [b]Fallout:[/b] [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
 
 [b]Ancient Roads:[/b] [i]Some[/i] and [i]Many[/i] produce preexisting road networks, in places flooded by water, overgrown with trees, and blocked by landslides.
-
-[b]Place Names:[/b] [i]On[/i] names regions, mountain ranges, lakes, rivers, oceans, and islands and shows those names on the map.
 
 [b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Ice Age[/i] to [i]Jurassic[/i], and [b]Rainfall[/b] from [i]Wasteland[/i] to [i]Waterlogged[/i].
