@@ -8,13 +8,6 @@ include("FLuaVector")
 include("InstanceManager")
 include("Serializer.lua")
 --------------------------------------------------------------------
-g_Properties = {}
---------------------------------------------------------------------
-local g_SaveData	= Modding.OpenSaveData();
-local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
-local g_WorldOffset = {x=0, y=0, z=0}
-local labelledIDs = {}
-local labelledHexes = {}
 local tInsert = table.insert
 local function tDuplicate(sourceTable)
 	local duplicate = {}
@@ -23,6 +16,19 @@ local function tDuplicate(sourceTable)
 	end
 	return duplicate
 end
+local mFloor, mCeil = math.floor, math.ceil
+--------------------------------------------------------------------
+g_Properties = {}
+--------------------------------------------------------------------
+local mapWidth, mapHeight = Map.GetGridSize()
+local mapArea = mapWidth * mapHeight
+local bigArea = mCeil(mapArea / 8)
+local featureIce = FeatureTypes.FEATURE_ICE
+local g_SaveData	= Modding.OpenSaveData();
+local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
+local g_WorldOffset = {x=0, y=0, z=0}
+local labelledIDs = {}
+local labelledHexes = {}
 --------------------------------------------------------------------
 function F_ActivePlayerTurnStart()
 	local teamID = Game.GetActiveTeam()
@@ -30,11 +36,27 @@ function F_ActivePlayerTurnStart()
 		if not labelledIDs[ID] then
 			local label = GetPersistentTable("Fantastical_Map_Label_ID_" .. ID)
 			local allRevealed = true
-			for h, hex in pairs(label.Hexes) do
-				local plot = Map.GetPlot(hex.X, hex.Y)
-				if not plot:IsRevealed(teamID) then
-					allRevealed = false
-					break
+			if #label.Hexes > bigArea then
+				-- for oceans, so that one doesn't need to explore every last bit to get the name
+				local validHexCount, revealedHexCount = 0, 0
+				for h, hex in pairs(label.Hexes) do
+					local plot = Map.GetPlot(hex.X, hex.Y)
+					if plot:GetFeatureType() ~= featureIce then
+						validHexCount = validHexCount + 1
+						if plot:IsRevealed(teamID) then
+							revealedHexCount = revealedHexCount + 1
+						end
+					end
+				end
+				local necessaryHexRatio = mMax( 0.5, 1 - (validHexCount / mapArea) )
+				allRevealed = revealedHexCount > (validHexCount * necessaryHexRatio)
+			else
+				for h, hex in pairs(label.Hexes) do
+					local plot = Map.GetPlot(hex.X, hex.Y)
+					if not plot:IsRevealed(teamID) then
+						allRevealed = false
+						break
+					end
 				end
 			end
 			if allRevealed then

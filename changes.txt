@@ -1,8 +1,10 @@
 planned v7:
-- include bays and straights in noncentauri labelling
-- instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")
+- floodfill oceans to find insland seas (don't put capes, bays, or straights in inland seas)
 
 planned v8:
+- instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")? this creates regions with way too much variation...
+
+planned v9:
 - turn Fantastical.lua into a library that map scripts can include
 
 don't know how to implement:
@@ -14,6 +16,9 @@ low priority:
 - does wonder placement fix work in game?
 
 Done (v7)
+- slightly increase intraregion temp and rain deviation
+- hand out fake sublatitudes based on the maximum dimension of their superpolygon along a random axis, multiplied by a conversion (this creates the minimum and maximum latitude within that polygon)
+- include bays and straights in noncentauri labelling
 - split map labels into a different mod
 - save and load map labels (see MOP_Main.lua)
 - pass map labels to Fantastical_Main.lua as sets of hexes, so that the labels only show once all hexes are revealed
