@@ -1,8 +1,6 @@
-planned v7:
-- floodfill oceans to find insland seas (don't put capes, bays, or straights in inland seas)
-
 planned v8:
 - instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")? this creates regions with way too much variation...
+- river diversions (forks that flow away from and back into the river) (but this has yet to actually be drawn)
 
 planned v9:
 - turn Fantastical.lua into a library that map scripts can include
@@ -15,7 +13,16 @@ low priority:
 - make coastal ice not interfere with navigation?
 - does wonder placement fix work in game?
 
+Done (v8)
+- fix mountain range picking getting truncated ranges
+- gut edge assembly and high and low connection deciphering
+- mountain range drawn along random subpolygons of each subedge. smaller amount of range hexes, which results in more defined ranges without looking too linear
+- add tributaries to river length for labelling priority
+- reduce lakeyness slightly
+- fill in excess inland seas
+
 Done (v7)
+- floodfill oceans to find inland seas (don't put capes, bays, or straights in inland seas)
 - slightly increase intraregion temp and rain deviation
 - hand out fake sublatitudes based on the maximum dimension of their superpolygon along a random axis, multiplied by a conversion (this creates the minimum and maximum latitude within that polygon)
 - include bays and straights in noncentauri labelling
