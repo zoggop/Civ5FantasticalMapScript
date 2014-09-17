@@ -533,13 +533,14 @@ local OptionDictionary = {
 			-- sadly wrapY does not work
 		}
 	},
-	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 2,
+	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 3,
 	values = {
-			[1] = { name = "One", values = {1} },
-			[2] = { name = "Two", values = {2} },
-			[3] = { name = "Three", values = {3} },
-			[4] = { name = "Four", values = {4} },
-			[5] = { name = "Random", values = "keys" },
+			[1] = { name = "Zero", values = {0} },
+			[2] = { name = "One", values = {1} },
+			[3] = { name = "Two", values = {2} },
+			[4] = { name = "Three", values = {3} },
+			[5] = { name = "Four", values = {4} },
+			[6] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
@@ -1186,18 +1187,6 @@ Polygon = class(function(a, space, x, y)
 	a.maxLatitude = 0
 end)
 
-function Polygon:FloodFillSuperPolygon(floodIndex, superPolygon)
-	superPolygon = superPolygon or self.superPolygon
-	if self.superPolygon ~= superPolygon or self.flooded then return false end
-	if self.space.floods[floodIndex] == nil then self.space.floods[floodIndex] = {} end
-	tInsert(self.space.floods[floodIndex], self)
-	self.flooded = true
-	for i, neighbor in pairs(self.neighbors) do
-		neighbor:FloodFillSuperPolygon(floodIndex, superPolygon)
-	end
-	return true
-end
-
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex or self.nearOcean then
 		self.astronomyIndex = (self.oceanIndex or self.nearOcean) + 100
@@ -1221,6 +1210,10 @@ function Polygon:FloodFillSea(sea)
 	if self.sea then return end
 	if not sea then sea = { polygons = {}, inland = true, astronomyIndex = self.astronomyIndex } end
 	if self.oceanIndex then sea.inland = false end
+	if self.space.oceanNumber == 0 then
+		if not self.space.wrapY and (self.bottomY or self.topY) then sea.inland = false end
+		if not self.space.wrapX and (self.bottomX or self.topX) then sea.inland = false end
+	end
 	self.sea = sea
 	tInsert(sea.polygons, self)
 	for i, neighbor in pairs(self.neighbors) do
@@ -2711,7 +2704,7 @@ end
 
 function Space:PickOceans()
 	if self.wrapX and self.wrapY then
-		self:PickOceansDoughnut()
+		self:PickOceansDoughnut() -- the game doesn't support this :-(
 	elseif not self.wrapX and not self.wrapY then
 		self:PickOceansRectangle()
 	elseif self.wrapX and not self.wrapY then
@@ -3300,10 +3293,14 @@ end
 function Space:FindInlandSeas()
 	for i, polygon in pairs(self.polygons) do
 		local sea = polygon:FloodFillSea()
-		if sea and sea.inland then
+		if sea then
 			sea.size = #sea.polygons
-			EchoDebug("found inland sea ", sea.size)
-			tInsert(self.inlandSeas, sea)
+			if sea.inland then
+				EchoDebug("found inland sea of " .. sea.size .. " polygons")
+				tInsert(self.inlandSeas, sea)
+			else
+				EchoDebug("found sea of " .. sea.size .. " polygons")
+			end
 		end
 	end
 end

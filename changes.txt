@@ -1,6 +1,5 @@
 planned v8:
 - instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")? this creates regions with way too much variation...
-- river diversions (forks that flow away from and back into the river) (but this has yet to actually be drawn)
 
 planned v9:
 - turn Fantastical.lua into a library that map scripts can include
@@ -14,9 +13,11 @@ low priority:
 - does wonder placement fix work in game?
 
 Done (v8)
+- add zero ocean option
 - gut useless coastal expansion stuff
 - fix mountain range picking getting truncated ranges
 - gut edge assembly and high and low connection deciphering
+- river diversions (forks that flow away from and back into the river) (but this has yet to actually be drawn)
 - mountain range drawn along random subpolygons of each subedge. smaller amount of range hexes, which results in more defined ranges without looking too linear
 - add tributaries to river length for labelling priority
 - reduce lakeyness slightly
