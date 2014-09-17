@@ -14,6 +14,7 @@ low priority:
 - does wonder placement fix work in game?
 
 Done (v8)
+- gut useless coastal expansion stuff
 - fix mountain range picking getting truncated ranges
 - gut edge assembly and high and low connection deciphering
 - mountain range drawn along random subpolygons of each subedge. smaller amount of range hexes, which results in more defined ranges without looking too linear

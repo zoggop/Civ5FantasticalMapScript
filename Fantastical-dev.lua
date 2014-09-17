@@ -13,9 +13,17 @@ include("MapGenerator")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
+local clockEnabled = false
+local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
 		local printResult = ""
+		if clockEnabled then
+			local clock = math.floor(os.clock() / 0.1) * 0.1
+			local since = clock - lastClock
+			lastClock = clock
+			printResult = printResult .. "(" .. clock .. "): \t"
+		end
 		for i,v in ipairs(arg) do
 			printResult = printResult .. tostring(v) .. "\t"
 		end
@@ -1901,16 +1909,12 @@ Space = class(function(a)
 	a.riverSpawnRainfall = 85 -- how much rainfall spawns a river seed even without mountains/hills
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 8 -- how many polygon edges long can a mountain range be
-	a.coastRangeRatio = 0.33
+	a.coastRangeRatio = 0.33 -- what ratio of the total mountain ranges should be coastal
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.mountainRangeMult = 1.3 -- higher mult means more (globally) scattered mountains
 	a.mountainCoreTenacity = 9 -- 0 to 10, higher is more range-like mountains, less widely scattered
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
-	a.coastDiceAmount = 2 -- how many dice does each polygon get for coastal expansion
-	a.coastDiceMin = 2 -- the minimum sides for each polygon's dice
-	a.coastDiceMax = 8 -- the maximum sides for each polygon's dice
-	a.coastAreaRatio = 0.25 -- how much of the water on the map (not including coastal polygons) should be coast
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -4073,11 +4077,6 @@ function Space:DrawRoads()
 end
 
 function Space:PickCoasts()
-	self.waterArea = self.nonOceanArea - self.filledArea
-	self.prescribedCoastArea = self.waterArea * self.coastAreaRatio
-	EchoDebug(self.prescribedCoastArea .. " coastal tiles prescribed of " .. self.waterArea .. " total water tiles")
-	self.coastArea = 0
-	self.coastalPolygonArea = 0
 	self.coastalPolygonCount = 0
 	self.polarMaxLandPercent = self.polarMaxLandRatio * 100
 	for i, polygon in pairs(self.polygons) do
@@ -4408,7 +4407,6 @@ end
 local mySpace
 
 function GeneratePlotTypes()
-	FantasticalLands = "HELLO THERE"
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
