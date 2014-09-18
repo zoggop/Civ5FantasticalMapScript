@@ -13,11 +13,12 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 [url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]
 
 [b][i][u]Custom Options[/u][/i][/b]
+
 [b]World Wrap:[/b] The map can be either a [i]Globe[/i] with east-west wrapping, or a [i]Realm[/i] with no wrapping
 
-[b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]1[/i] to [i]4[/i]. (On [i]Realm[/i] maps this means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.)
+[b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]Zero[/i] to [i]Four[/i]. (On [i]Realm[/i] maps this means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.)
 
-[b]Continents/Ocean:[/b] The number of large continents per ocean, [i]1[/i] to [i]4[/i]. (On [i]Realm[/i] maps this doesn't do anything.)
+[b]Continents/Ocean:[/b] The number of large continents per ocean, [i]One[/i] to [i]Four[/i]. (On [i]Realm[/i] maps this sets the number of major continents, regardless of how many sides of ocean there are.)
 
 [b]Islands:[/b] How many large and small islands. [i]Few[/i], [i]Some[/i], or [i]Many[/i]. More islands has a side effect of smaller continents.
 

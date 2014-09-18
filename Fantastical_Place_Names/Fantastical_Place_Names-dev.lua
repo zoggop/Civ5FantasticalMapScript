@@ -1,7 +1,7 @@
 -- Fantastical Place Names, helper mod for Fantastical Map Script
 -- handles map labels
 -- Author: zoggop
--- version 1
+-- version 2
 --------------------------------------------------------------------
 print('Fantastical Place Names present')
 include("FLuaVector")
