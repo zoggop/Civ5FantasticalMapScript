@@ -1296,7 +1296,7 @@ function Polygon:CheckBottomTop(hex)
 		self.topX = true
 		if not self.superPolygon then tInsert(space.topXPolygons, self) end
 	end
-	if self.space.useMapLatitudes and self.space.polarExponent >= 1.0 and hex.latitude == 90 then
+	if self.space.useMapLatitudes and self.space.polarExponent >= 1.0 and hex.latitude > 89 then
 		self.polar = true
 	end
 end
@@ -1391,32 +1391,39 @@ function Polygon:EmptyCoastHex()
 	return destHex
 end
 
--- 
-function Polygon:GiveFakeLatitude()
-	if self.superPolygon and self.superPolygon.fakeSubLatitudes and #self.superPolygon.fakeSubLatitudes > 0 then
-		self.latitude = tRemoveRandom(self.superPolygon.fakeSubLatitudes)
-	elseif not self.superPolygon then
-		if self.continent and #self.space.continentalFakeLatitudes > 0 then
-			self.latitude = tRemoveRandom(self.space.continentalFakeLatitudes)
-		elseif #self.space.nonContinentalFakeLatitudes > 0 then
-			self.latitude = tRemoveRandom(self.space.nonContinentalFakeLatitudes)
+function Polygon:GiveFakeLatitude(latitude)
+	if not latitude then
+		if self.superPolygon and self.superPolygon.fakeSubLatitudes and #self.superPolygon.fakeSubLatitudes > 0 then
+			self.latitude = tRemoveRandom(self.superPolygon.fakeSubLatitudes)
+		elseif not self.superPolygon then
+			if self.continent and #self.space.continentalFakeLatitudes > 0 then
+				self.latitude = tRemoveRandom(self.space.continentalFakeLatitudes)
+			elseif #self.space.nonContinentalFakeLatitudes > 0 then
+				self.latitude = tRemoveRandom(self.space.nonContinentalFakeLatitudes)
+			else
+				self.latitude = mRandom(0, 90)
+			end
 		else
-			self.latitude = mRandom(0, 90)
+			return
 		end
 	else
-		return
+		self.latitude = latitude
 	end
-	self.latitudeX = mRandom(0, 1)
-	self.latitudeX = self.latitudeX == 1
-	if self.latitudeX then
-		self.minLatitude = self.latitude + ((self.minX - self.x) * self.space.xFakeLatitudeConversion)
-		self.maxLatitude = self.latitude + ((self.maxX - self.x) * self.space.xFakeLatitudeConversion)
-	else
-		self.minLatitude = self.latitude + ((self.minY - self.y) * self.space.yFakeLatitudeConversion)
-		self.maxLatitude = self.latitude + ((self.maxY - self.y) * self.space.yFakeLatitudeConversion)
-	end
+	self.minLatitude = self.latitude + ((self.minY - self.y) * self.space.yFakeLatitudeConversion)
+	self.maxLatitude = self.latitude + ((self.maxY - self.y) * self.space.yFakeLatitudeConversion)
 	self.minLatitude = mMin(90, mMax(0, self.minLatitude))
 	self.maxLatitude = mMin(90, mMax(0, self.maxLatitude))
+	if self.maxLatitude == 90 and self.superPolygon then
+		if self.superPolygon.continent and mRandom() > self.space.polarMaxLandRatio then
+			local latitudeDist = 90 - self.superPolygon.latitude 
+			local upperBound = mMax(0, 80 - latitudeDist)
+			self.superPolygon:GiveFakeLatitude(mRandom(0, upperBound))
+			return
+		else
+			self.polar, self.superPolygon.polar = true, true
+		end
+	end
+
 	self.latitudeRange = self.maxLatitude - self.minLatitude
 	self.fakeSubLatitudes = {}
 	local count
@@ -1543,22 +1550,43 @@ Region = class(function(a, space)
 	end
 end)
 
+function Region:GiveRainfall()
+	self.rainfallAvg = self.space:GetRainfall(self.latitude)
+	self.rainfallMin, self.rainfallMax = 100, 0
+	-- for p, polygon in pairs(self.polygons) do
+	local polygon = self.representativePolygon
+		for sp, subPolygon in pairs(polygon.subPolygons) do
+			local rain = self.space:GetRainfall(subPolygon.latitude)
+			if rain > self.rainfallMax then self.rainfallMax = rain end
+			if rain < self.rainfallMin then self.rainfallMin = rain end
+		end
+	-- end
+end
+
 function Region:CreateCollection()
 	-- get latitude (real or fake)
 	self:GiveLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
-	self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
-	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
-	--[[
+	-- self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
+	-- self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	self.temperatureAvg = self.space:GetTemperature(self.latitude)
-	local tempA, tempB = self.space:GetDeviatedTemperature(self.maxLatitude), self.space:GetDeviatedTemperature(self.minLatitude)
+	local tempA, tempB = self.space:GetTemperature(self.maxLatitude), self.space:GetTemperature(self.minLatitude)
 	self.temperatureMin = mMin(tempA, tempB)
 	self.temperatureMax = mMax(tempA, tempB)
-	self.rainfallAvg = self.space:GetRainfall(self.latitude)
-	local rainA, rainB = self.space:GetDeviatedRainfall(self.maxLatitude), self.space:GetDeviatedRainfall(self.minLatitude)
-	self.rainfallMin = mMin(rainA, rainB)
-	self.rainfallMax = mMax(rainA, rainB)
-	]]--
+	self.temperatureMin = (self.temperatureMin * self.space.inverseTemperatureAvgRatio) + (self.temperatureAvg * self.space.temperatureAvgRatio)
+	self.temperatureMax = (self.temperatureMax * self.space.inverseTemperatureAvgRatio) + (self.temperatureAvg * self.space.temperatureAvgRatio)
+	self:GiveRainfall()
+	self.rainfallMin = (self.rainfallMin * self.space.inverseRainfallAvgRatio) + (self.rainfallAvg * self.space.rainfallAvgRatio)
+	self.rainfallMax = (self.rainfallMax * self.space.inverseRainfallAvgRatio) + (self.rainfallAvg * self.space.rainfallAvgRatio)
+	local temperatureSpan = self.temperatureMax - self.temperatureMin
+	local rainfallSpan = self.rainfallMax - self.rainfallMin
+	local latitudeSpan = self.maxLatitude - self.minLatitude
+	if temperatureSpan > self.space.temperatureSpanMax then self.space.temperatureSpanMax = temperatureSpan end
+	if temperatureSpan < self.space.temperatureSpanMin then self.space.temperatureSpanMin = temperatureSpan end
+	if rainfallSpan > self.space.rainfallSpanMax then self.space.rainfallSpanMax = rainfallSpan end
+	if rainfallSpan < self.space.rainfallSpanMin then self.space.rainfallSpanMin = rainfallSpan end
+	if latitudeSpan > self.space.latitudeSpanMax then self.space.latitudeSpanMax = latitudeSpan end
+	if latitudeSpan < self.space.latitudeSpanMin then self.space.latitudeSpanMin = latitudeSpan end
 	self.hillyness = self.space:GetHillyness()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
@@ -1566,11 +1594,13 @@ function Region:CreateCollection()
 	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent or #self.space.lakeSubPolygons < self.space.minLakes
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
+	-- EchoDebug("latitude " .. self.minLatitude .. " < " .. self.latitude .." < " .. self.maxLatitude, "temperature " .. self.temperatureMin .. " < " .. self.temperatureAvg .. " < " .. self.temperatureMax, "rainfall " .. self.rainfallMin .. " < " .. self.rainfallAvg .. " < " .. self.rainfallMax)
 	-- EchoDebug(self.latitude, self.minLatitude, self.maxLatitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 	-- create the collection
 	self.size, self.subSize = self.space:GetCollectionSize()
 	local subPolys = 0
 	for i, polygon in pairs(self.polygons) do
+		if polygon.polar then self.polar = true end
 		subPolys = subPolys + #polygon.subPolygons
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
@@ -1606,11 +1636,21 @@ function Region:CreateCollection()
 	if self.polar then
 		self.size = self.size + 1
 		self.polarTemps = {}
-		self.polarRains = tDuplicate(tGetRandom(rainList))
+		self.polarRains = {}
+		local rain, rmin, rmax = self.space:GetRainfall(90)
 		local temp, tmin, tmax = self.space:GetTemperature(90)
-		for si = 1, self.subSize do
-			local temp = tmin + (tSubInc * (si-1))
-			tInsert(self.polarTemps, temp)
+		if self.subSize == 1 then
+			self.polarTemps = { temp }
+			self.polarRains = { rain }
+		else
+			local ptSubInc = (tmax - tmin) / (self.subSize - 1)
+			local prSubInc = (rmax - rmin) / (self.subSize - 1)
+			for si = 1, self.subSize do
+				local temp = tmin + (ptSubInc * (si-1))
+				tInsert(self.polarTemps, temp)
+				local rain = rmin + (prSubInc * (si-1))
+				tInsert(self.polarRains, rain)
+			end
 		end
 	end
 	for i = 1, self.size do
@@ -1630,6 +1670,7 @@ function Region:CreateCollection()
 		local tempTotal, rainTotal = 0, 0
 		for si = 1, self.subSize do
 			-- EchoDebug("sublists", si, #temps, #rains, self.subSize)
+			if #temps == 0 or #rains == 0 then EchoDebug(#temps, #rains) end
 			local temperature = tRemoveRandom(temps)
 			local rainfall = tRemoveRandom(rains)
 			tempTotal = tempTotal + temperature
@@ -1644,13 +1685,17 @@ function Region:CreateCollection()
 end
 
 function Region:GiveLatitude()
+	--[[
 	self.minLatitude, self.maxLatitude = 90, 0
 	for i, polygon in pairs(self.polygons) do
 		if polygon.minLatitude < self.minLatitude then self.minLatitude = polygon.minLatitude end
 		if polygon.maxLatitude > self.maxLatitude then self.maxLatitude = polygon.maxLatitude end
 	end
+	]]--
 	local polygon = tGetRandom(self.polygons)
 	self.latitude = polygon.latitude
+	self.minLatitude, self.maxLatitude = polygon.minLatitude, polygon.maxLatitude
+	self.representativePolygon = polygon
 	--[[
 	if self.space.useMapLatitudes then
 		for i, polygon in pairs(self.polygons) do
@@ -1913,14 +1958,14 @@ Space = class(function(a)
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
 	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
-	a.temperatureMin = 0 -- lowest temperature possible (plus or minus intraregionTemperatureDeviation)
-	a.temperatureMax = 100 -- highest temperature possible (plus or minus intraregionTemperatureDeviation)
+	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
+	a.temperatureMax = 100 -- highest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.intraregionTemperatureDeviation = 12 -- how much at maximum can a region's temperature deviate from its avg
-	a.temperatureMaxDeviation = 5
-	a.rainfallMaxDeviation = 7
+	a.temperatureMaxDeviation = 12 -- how much at maximum can a temperature deviate from its avg
 	a.rainfallDice = 1 -- just like temperature above
-	a.intraregionRainfallDeviation = 16 -- just like temperature above
+	a.rainfallMaxDeviation = 16 -- just like temperature above
+	a.temperatureAvgRatio = 0.45 -- how much to recede a region's min and max temperature to its average
+	a.rainfallAvgRatio = 0.65 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
@@ -2005,8 +2050,10 @@ function Space:Compute()
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
-    self.xFakeLatitudeConversion = 90 / self.iW
-    self.yFakeLatitudeConversion = 90 / self.iH
+    self.xFakeLatitudeConversion = 180 / self.iW
+    self.yFakeLatitudeConversion = 180 / self.iH
+    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
+    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
     local activatedMods = Modding.GetActivatedMods()
 	for i,v in ipairs(activatedMods) do
 		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
@@ -3248,10 +3295,16 @@ function Space:PickRegions()
 end
 
 function Space:FillRegions()
+	self.rainfallSpanMin, self.rainfallSpanMax = 100, 0
+	self.temperatureSpanMin, self.temperatureSpanMax = 100, 0
+	self.latitudeSpanMin, self.latitudeSpanMax = 90, 0
 	for i, region in pairs(self.regions) do
 		region:CreateCollection()
 		region:Fill()
 	end
+	EchoDebug("rainfall spans: " .. self.rainfallSpanMin .. " to " .. self.rainfallSpanMax)
+	EchoDebug("temperature spans: " .. self.temperatureSpanMin .. " to " .. self.temperatureSpanMax)
+	EchoDebug("latitude spans: " .. self.latitudeSpanMin .. " to " .. self.latitudeSpanMax)
 end
 
 function Space:LabelSubPolygonsByPolygon()
@@ -4082,12 +4135,12 @@ function Space:PickCoasts()
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
-				if not polygon.polar or mRandom(0, 100) < self.polarMaxLandPercent then
+				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
 				end
 			elseif polygon.oceanIndex then
-				if not polygon.polar or mRandom(0, 100) < self.polarMaxLandPercent then
+				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
 				end
@@ -4201,17 +4254,10 @@ function Space:GetTemperature(latitude)
 	else
 		temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
 	end
-	local diff = mRandom(1, self.intraregionTemperatureDeviation)
+	local diff = mRandom(1, self.temperatureMaxDeviation)
 	local temp1 = mMax(temp - diff, 0)
 	local temp2 = mMin(temp + diff, 100)
 	return mFloor(temp), mFloor(temp1), mFloor(temp2)
-end
-
-function Space:GetDeviatedTemperature(latitude)
-	local temp = self:GetTemperature(latitude)
-	temp = mRandom(temp - self.temperatureMaxDeviation, temp + self.temperatureMaxDeviation)
-	temp = mMin(90, mMax(0, temp))
-	return temp
 end
 
 function Space:GetRainfall(latitude)
@@ -4228,17 +4274,10 @@ function Space:GetRainfall(latitude)
 		local rise = self.rainfallMax - self.rainfallMin
 		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
 	end
-	local diff = mRandom(1, self.intraregionRainfallDeviation)
+	local diff = mRandom(1, self.rainfallMaxDeviation)
 	local rain1 = mMax(rain - diff, 0)
 	local rain2 = mMin(rain + diff, 100)
 	return mFloor(rain), mFloor(rain1), mFloor(rain2)
-end
-
-function Space:GetDeviatedRainfall(latitude)
-	local rain = self:GetRainfall(latitude)
-	rain = mRandom(rain - self.rainfallMaxDeviation, rain + self.rainfallMaxDeviation)
-	rain = mMin(90, mMax(0, rain))
-	return rain
 end
 
 function Space:GetHillyness()

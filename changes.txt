@@ -1,6 +1,3 @@
-planned v8:
-- instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")? this creates regions with way too much variation...
-
 planned v9:
 - turn Fantastical.lua into a library that map scripts can include
 
@@ -13,6 +10,8 @@ low priority:
 - does wonder placement fix work in game?
 
 Done (v8)
+- instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")
+- fix filling polar subpolygons with wasteland on climate realism maps
 - add zero ocean option
 - gut useless coastal expansion stuff
 - fix mountain range picking getting truncated ranges
