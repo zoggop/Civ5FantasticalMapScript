@@ -7,7 +7,7 @@ don't know how to implement:
 low priority:
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
-- does wonder placement fix work in game?
+- make wonder placement fix work?
 
 Done (v8)
 - instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")
