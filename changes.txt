@@ -1,6 +1,3 @@
-planned v9:
-- turn Fantastical.lua into a library that map scripts can include
-
 don't know how to implement:
 - for centauri maps, change wonder conditions for: uranium flats (?), monsoon jungle (fountain of youth), sunny mesa (sri pada), geothermal shallows (old faithful)
 
@@ -8,6 +5,12 @@ low priority:
 - better finding of connections from lake to lake? (pathfinding)
 - make coastal ice not interfere with navigation?
 - make wonder placement fix work?
+
+Done (v9)
+- option for no sea on the map at all (whole-world continent)
+- lake generation based on global rainfall, like river generation
+- option for no land at poles
+- fix roads
 
 Done (v8)
 - instead of a maximum deviation determining region's min and max temperature, use min and max subpolygon latitude (even nonrealistic maps have subpolygon "latitudes")

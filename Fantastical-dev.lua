@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 8
+-- version 9
 
 --------------------------------------------------------------
 if include == nil then
@@ -13,7 +13,7 @@ include("MapGenerator")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = false
+local clockEnabled = true
 local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
@@ -533,14 +533,15 @@ local OptionDictionary = {
 			-- sadly wrapY does not work
 		}
 	},
-	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 3,
+	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 4,
 	values = {
-			[1] = { name = "Zero", values = {0} },
-			[2] = { name = "One", values = {1} },
-			[3] = { name = "Two", values = {2} },
-			[4] = { name = "Three", values = {3} },
-			[5] = { name = "Four", values = {4} },
-			[6] = { name = "Random", values = "keys" },
+			[1] = { name = "No Oceans", values = {-1} },
+			[2] = { name = "No Major Oceans", values = {0} },
+			[3] = { name = "One", values = {1} },
+			[4] = { name = "Two", values = {2} },
+			[5] = { name = "Three", values = {3} },
+			[6] = { name = "Four", values = {4} },
+			[7] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
@@ -560,7 +561,13 @@ local OptionDictionary = {
 			[4] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "World Age", sortpriority = 5, keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	{ name = "Land at Poles", sortpriority = 5, keys = { "polarMaxLandRatio" }, default = 2,
+	values = {
+			[1] = { name = "No", values = {0.0} },
+			[2] = { name = "Yes", values = {0.15} },
+		}
+	},
+	{ name = "World Age", sortpriority = 6, keys = { "mountainRatio", "hillynessMax" }, default = 4,
 	values = {
 			[1] = { name = "1 Billion Years", values = {0.25, 75} },
 			[2] = { name = "2 Billion Years", values = {0.16, 60} },
@@ -571,13 +578,13 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Climate Realism", sortpriority = 6, keys = { "useMapLatitudes" }, default = 1,
+	{ name = "Climate Realism", sortpriority = 7, keys = { "useMapLatitudes" }, default = 1,
 	values = {
 			[1] = { name = "Off", values = {false} },
 			[2] = { name = "On", values = {true} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 7, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
 			[1] = { name = "Ice Age", values = {2.0, 0, 45} },
 			[2] = { name = "Cool", values = {1.4, 0, 85} },
@@ -587,7 +594,7 @@ local OptionDictionary = {
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 8, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
 			[1] = { name = "Wasteland", values = {13} },
 			[2] = { name = "Arid", values = {35} },
@@ -597,7 +604,7 @@ local OptionDictionary = {
 			[6] = { name = "Random", values = "values" },
 		}
 	},
-	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
+	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
 	values = {
 			[1] = { name = "None", values = {false, false, false} },
 			[2] = { name = "A Bit", values = {true, false, false} },
@@ -606,7 +613,7 @@ local OptionDictionary = {
 			[5] = { name = "Contaminated Everything", values = {true, true, true} },
 		}
 	},
-	{ name = "Ancient Roads", sortpriority = 10, keys = { "roadCount" }, default = 2,
+	{ name = "Ancient Roads", sortpriority = 11, keys = { "roadCount" }, default = 2,
 	values = {
 			[1] = { name = "None", values = {0} },
 			[2] = { name = "Some", values = {5} },
@@ -1764,6 +1771,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 			end
 		end
 	end
+	-- if bestTerrain.terrainType == terrainGrass then EchoDebug(temperature, rainfall) end
 	bestDist = 300
 	local bestFeature
 	for i, featureType in pairs(bestTerrain.features) do
@@ -1942,7 +1950,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivres. modified by rainfall
+	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
 	a.riverSpawnRainfall = 85 -- how much rainfall spawns a river seed even without mountains/hills
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -1970,6 +1978,7 @@ Space = class(function(a)
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
+	-- all lake variables scale with global rainfall in Compute()
 	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
 	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
@@ -2031,30 +2040,14 @@ function Space:SetOptions(optDict)
 			option.values[optionChoice].values = randValues
 		end
  		for valueNumber, key in ipairs(option.keys) do
-			EchoDebug(key, option.name, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
+			EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
 			self[key] = option.values[optionChoice].values[valueNumber]
 		end
 	end
 end
 
-function Space:Compute()
-    self.iW, self.iH = Map.GetGridSize()
-    self.iA = self.iW * self.iH
-    self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    self.coastalMod = self.areaMod
-    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
-    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
-    self.nonOceanArea = self.iA
-    self.w = self.iW - 1
-    self.h = self.iH - 1
-    self.halfWidth = self.w / 2
-    self.halfHeight = self.h / 2
-    self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
-    self.xFakeLatitudeConversion = 180 / self.iW
-    self.yFakeLatitudeConversion = 180 / self.iH
-    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
-    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
-    local activatedMods = Modding.GetActivatedMods()
+function Space:DoCentuariIfActivated()
+	local activatedMods = Modding.GetActivatedMods()
 	for i,v in ipairs(activatedMods) do
 		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
 		if title == "Fantastical Place Names" then
@@ -2098,6 +2091,32 @@ function Space:Compute()
 			end
 		end
 	end
+end
+
+function Space:Compute()
+    self.iW, self.iH = Map.GetGridSize()
+    self.iA = self.iW * self.iH
+    self.areaMod = mFloor(mSqrt(self.iA) / 30)
+    self.coastalMod = self.areaMod
+    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
+    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
+    self.nonOceanArea = self.iA
+    self.w = self.iW - 1
+    self.h = self.iH - 1
+    self.halfWidth = self.w / 2
+    self.halfHeight = self.h / 2
+    self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
+    self.xFakeLatitudeConversion = 180 / self.iW
+    self.yFakeLatitudeConversion = 180 / self.iH
+    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
+    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
+    self:DoCentuariIfActivated()
+    -- lake generation scales with global rainfall:
+    local rainfallScale = self.rainfallMidpoint / 50
+    self.minLakes = mFloor( self.minLakes * rainfallScale )
+	self.lakeRegionPercent = mFloor( self.lakeRegionPercent * rainfallScale )
+	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
+	EchoDebug(self.minLakes .. " minimum lakes", self.lakeRegionPercent .. " percent lake regions", self.lakeynessMax .. " maximum region lakeyness")
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
@@ -2759,7 +2778,7 @@ function Space:PickOceans()
 	elseif self.wrapY and not self.wrapX then
 		print("why have a vertically wrapped map?")
 	end
-	EchoDebug(#self.oceans .. " oceans", self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
+	EchoDebug(#self.oceans .. " oceans")
 end
 
 function Space:PickOceansCylinder()
@@ -3008,6 +3027,19 @@ end
 function Space:PickContinents()
 	self.filledArea = 0
 	self.filledPolygons = 0
+	if self.oceanNumber == -1 then
+		-- option to have no water has been selected
+		local continent = {}
+		for i, polygon in pairs(self.polygons) do
+			polygon.continent = continent
+			tInsert(continent, polygon)
+			self.filledPolygons = self.filledPolygons + 1
+			self.filledArea = self.filledArea + #polygon.hexes
+		end
+		tInsert(self.continents, continent)
+		EchoDebug("whole-world continent of " .. #continent .. " polygons")
+		return
+	end
 	for astronomyIndex, basin in pairs(self.astronomyBasins) do
 		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons...")
 		self:PickContinentsInBasin(astronomyIndex)
@@ -3553,6 +3585,11 @@ function Space:FindRiverSeeds()
 	self.majorRiverSeeds = {}
 	self.minorRiverSeeds = {}
 	self.tinyRiverSeeds = {}
+	if self.oceanNumber == -1 and #self.lakeSubPolygons == 0 then
+		-- no rivers can be drawn if there are no bodies of water on the map
+		EchoDebug("no bodies of water on the map and therefore no rivers")
+		return
+	end
 	local lakeCount = 0
 	local rainSeedCount = 0
 	for ih, hex in pairs(self.hexes) do
