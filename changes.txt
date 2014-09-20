@@ -1,3 +1,6 @@
+Planned v9:
+- adjust terrain calcs somehow so that wasteland rainfall doesn't produce grassland over plains. (what was wrong with simple distance, rather than having all these bounds in the dictionary  too?)
+
 don't know how to implement:
 - for centauri maps, change wonder conditions for: uranium flats (?), monsoon jungle (fountain of youth), sunny mesa (sri pada), geothermal shallows (old faithful)
 

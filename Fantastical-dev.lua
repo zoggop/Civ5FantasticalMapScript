@@ -13,7 +13,7 @@ include("MapGenerator")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = true
+local clockEnabled = false
 local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
@@ -276,6 +276,24 @@ local function name_list(type, n_of)
 end
 
 ------------------------------------------------------------------------------
+
+local convertThis = [[
+0.0 506.0
+323.0 261.0
+8.0 281.0
+159.0 502.0
+303.0 408.0
+146.0 274.0
+302.0 381.0
+190.0 505.0
+]]
+local convertList = splitIntoWords(convertThis)
+for i = 1, #convertList-1, 2 do
+	local t, r = tonumber(convertList[i]), tonumber(convertList[i+1])
+	t = mFloor( t / 5.12 )
+	r = mFloor( (512 - r) / 5.12 )
+	EchoDebug(t .. ", " .. r)
+end
 
 -- Compatible with Lua 5.1 (not 5.0).
 function class(base, init)
@@ -819,23 +837,23 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 	TerrainDictionary = {
-		[terrainGrass] = { temperature = {40, 100, 60}, rainfall = {20, 100, 50}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { temperature = {20, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { temperature = {20, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { temperature = {0, 30, 5}, rainfall = {20, 100, 45}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { temperature = {0, 20, 0}, rainfall = {0, 20}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=63,r=49}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=58,r=25}, {t=32,r=46}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=58,r=20}, {t=36,r=1}}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { points = {{t=3,r=43}, {t=31,r=1}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=1}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { temperature = {0, 85, 30}, rainfall = {50, 100, 90}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
-		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
-		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 20, limitRatio = 0.01, hill = false },
-		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 18, limitRatio = 0.75, hill = true },
+		[featureNone] = { points = {{t=50,r=50}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=52,r=90}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureMarsh] = { points = {{t=50,r=100}}, percent = 10, limitRatio = 0.33, hill = false },
+		[featureOasis] = { points = {{t=100,r=50}}, percent = 20, limitRatio = 0.01, hill = false },
+		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -1729,13 +1747,13 @@ end
 
 function Region:BoundsDistance(bounds, value)
 	local min, max, mid = bounds[1], bounds[2], bounds[3]
-	if value >= min and value <= max then
+	-- if value >= min and value <= max then
 		mid = mid or (min + max) / 2
 		return mAbs(value - mid)
-	else
-		if value > max then return 100 + (value - max) end
-		if value < min then return 100 + (min - value) end
-	end
+	-- else
+		-- if value > max then return 100 + (value - max) end
+		-- if value < min then return 100 + (min - value) end
+	-- end
 end
 
 function Region:TemperatureRainfallDistance(thing, temperature, rainfall)
@@ -1760,20 +1778,27 @@ function Region:CreateElement(temperature, rainfall, lake)
 	end
 	temperature = mFloor(temperature)
 	rainfall = mFloor(rainfall)
+	local bestTerrain = self.space:NearestTempRainThing(temperature, rainfall, TerrainDictionary)
+	local featureList = {}
+	for i, featureType in pairs(bestTerrain.features) do
+		tInsert(featureList, FeatureDictionary[featureType])
+	end
+	local bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
+	--[[
 	local bestDist = 300
 	local bestTerrain
 	for terrainType, terrain in pairs(TerrainDictionary) do
-		if self:WithinBounds(terrain, temperature, rainfall) then
+		-- if self:WithinBounds(terrain, temperature, rainfall) then
 			local dist = self:TemperatureRainfallDistance(terrain, temperature, rainfall)
 			if dist < bestDist then
 				bestDist = dist
 				bestTerrain = terrain
 			end
-		end
+		-- end
 	end
 	-- if bestTerrain.terrainType == terrainGrass then EchoDebug(temperature, rainfall) end
 	bestDist = 300
-	local bestFeature
+	local bestFeature 
 	for i, featureType in pairs(bestTerrain.features) do
 		if featureType ~= featureNone and (featureType ~= featureFallout or self.space.falloutEnabled) then
 			local feature = FeatureDictionary[featureType]
@@ -1787,7 +1812,8 @@ function Region:CreateElement(temperature, rainfall, lake)
 			end
 		end
 	end
-	if bestFeature == nil or mRandom(1, 140) < bestDist or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
+	]]--
+	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
 	local plotType = plotLand
 	local terrainType = bestFeature.terrainType or bestTerrain.terrainType
 	local featureType = bestFeature.featureType
@@ -2093,6 +2119,90 @@ function Space:DoCentuariIfActivated()
 	end
 end
 
+function Space:PrintClimate()
+	-- print out temperature/rainfall voronoi
+	local terrainChars = {
+		[terrainGrass] = "+",
+		[terrainPlains] = '|',
+		[terrainDesert] = "~",
+		[terrainTundra] = "<",
+		[terrainSnow] = "$",
+		[terrainCoast] = "C",
+		[terrainOcean] = "O",
+	}
+	local featureChars = {
+		[featureNone] = " ",
+		[featureForest] = "^",
+		[featureJungle] = "%",
+		[featureMarsh] = "_",
+		[featureIce] = "*",
+		[featureFallout] = "@",
+		[featureOasis] = "&",
+	}
+	local terrainLatitudeAreas = {}
+	local latitudesByTempRain = {}
+	local line = ""
+	local numLine = ""
+	for l = 0, 90, 1 do
+		local t, r = self:GetTemperature(l), self:GetRainfall(l)
+		latitudesByTempRain[mFloor(t) .. " " .. mFloor(r)] = l
+		numLine = numLine .. mMax(0, mFloor((t-1)/10)) .. mMax(0, mFloor((r-1)/10))
+		local terrain = self:NearestTempRainThing(t, r, TerrainDictionary)
+		if terrain then
+			local terrainType = terrain.terrainType
+			local featureList = {}
+			for i, featureType in pairs(terrain.features) do
+				tInsert(featureList, FeatureDictionary[featureType])
+			end
+			local feature = self:NearestTempRainThing(t, r, featureList) or FeatureDictionary[featureNone]
+			if feature.percent == 0 then feature = FeatureDictionary[featureNone] end
+			if terrainLatitudeAreas[terrainType] == nil then terrainLatitudeAreas[terrainType] = 0 end
+			terrainLatitudeAreas[terrainType] = terrainLatitudeAreas[terrainType] + 1
+			line = line .. terrainChars[terrain.terrainType] .. featureChars[feature.featureType]
+		else
+			line = line .. "  "
+		end
+	end
+	local terrainAreas = {}
+	for r = 100, 0, -3 do
+		local line = ""
+		for t = 0, 100, 3 do
+			local terrain = self:NearestTempRainThing(t, r, TerrainDictionary)
+			if terrain then
+				local terrainType = terrain.terrainType
+				local featureList = {}
+				for i, featureType in pairs(terrain.features) do
+					tInsert(featureList, FeatureDictionary[featureType])
+				end
+				local feature = self:NearestTempRainThing(t, r, featureList) or FeatureDictionary[featureNone]
+				if feature.percent == 0 then feature = FeatureDictionary[featureNone] end
+				if terrainAreas[terrainType] == nil then terrainAreas[terrainType] = 0 end
+				terrainAreas[terrainType] = terrainAreas[terrainType] + 1
+				local lastChar = " "
+				for lr = r-2, r+2 do
+					for lt = t-2, t+2 do
+						if latitudesByTempRain[lt .. " " ..lr] then
+							lastChar = "/"
+							break
+						end
+					end
+					if lastChar == "/" then break end
+				end
+				line = line .. terrainChars[terrain.terrainType] .. featureChars[feature.featureType] .. lastChar
+			else
+				line = line .. "   "
+			end
+		end
+		EchoDebug(line)
+	end
+	EchoDebug("latitudes 0 to 90:")
+	EchoDebug(line)
+	EchoDebug(numLine)
+	for i, terrain in pairs(TerrainDictionary) do
+		EchoDebug(GameInfo.Terrains[terrain.terrainType].Description, terrainAreas[terrain.terrainType], terrainLatitudeAreas[terrain.terrainType])
+	end
+end
+
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
@@ -2137,15 +2247,19 @@ function Space:Compute()
 	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
     if self.contaminatedWater and self.contaminatedSoil then
     	FeatureDictionary[featureFallout].percent = 70
-    	FeatureDictionary[featureFallout].rainfall = {0, 100}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
     elseif self.contaminatedWater then
     	FeatureDictionary[featureFallout].percent = 70
-    	FeatureDictionary[featureFallout].rainfall = {65, 100}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
     elseif self.contaminatedSoil then
     	FeatureDictionary[featureFallout].percent = 70
     	FeatureDictionary[featureFallout].limitRatio = 0.85
-    	FeatureDictionary[featureFallout].rainfall = {0, 25}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
+    elseif falloutEnabled then
+    	FeatureDictionary[featureFallout].percent = 18
+		FeatureDictionary[featureFallout].points = {{t=mRandom(0, 100),r=mRandom(0, 100)}}
     end
+    self:PrintClimate()
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
@@ -3324,6 +3438,33 @@ function Space:PickRegions()
 		polygon.region.archipelago = true
 		tInsert(self.regions, polygon.region)
 	end
+end
+
+function Space:TempRainDist(t1, r1, t2, r2)
+	local tdist = mAbs(t2 - t1)
+	local rdist = mAbs(r2 - r1)
+	return mSqrt( tdist^2 + rdist^2 )
+end
+
+function Space:NearestTempRainThing(temperature, rainfall, things)
+	local nearestDist = 20000
+	local nearest
+	local dearest = {}
+	for i, thing in pairs(things) do
+		if thing.points then
+			for p, point in pairs(thing.points) do
+				local trdist = self:TempRainDist(point.t, point.r, temperature, rainfall)
+				if trdist < nearestDist then
+					nearestDist = trdist
+					nearest = thing
+				end
+			end
+		else
+			tInsert(dearest, thing)
+		end
+	end
+	nearest = nearest or tGetRandom(dearest)
+	return nearest
 end
 
 function Space:FillRegions()
