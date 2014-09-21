@@ -836,12 +836,37 @@ local function SetConstants()
 
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
+--[[
+grassland
+56,63
+99,82
+
+plains
+50,41
+23,50
+
+desert
+32,9
+58,0
+
+tundra
+10,33
+2,54
+
+snow
+0,0
+
+
+
+
+]]--
+
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=63,r=49}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=58,r=25}, {t=32,r=46}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=58,r=20}, {t=36,r=1}}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { points = {{t=3,r=43}, {t=31,r=1}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { points = {{t=0,r=1}}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=56,r=63}, {t=99,r=82}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=50,r=52}, {t=23,r=50}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=32,r=9}, {t=58,r=0}}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { points = {{t=10,r=33}, {t=2,r=54}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=0}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
@@ -3443,7 +3468,7 @@ end
 function Space:TempRainDist(t1, r1, t2, r2)
 	local tdist = mAbs(t2 - t1)
 	local rdist = mAbs(r2 - r1)
-	return mSqrt( tdist^2 + rdist^2 )
+	return tdist^2 + rdist^2
 end
 
 function Space:NearestTempRainThing(temperature, rainfall, things)
