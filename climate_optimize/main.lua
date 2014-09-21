@@ -12,9 +12,10 @@ local terrainRegions = {
 			desert = {n = -1},
 			tundra = {n = -1},
 		},
+		subRegionNames = {"none", "forest", "jungle", "marsh"},
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.25,
+	{ name = "plains", targetArea = 0.25, noLowT = true, noLowR = true,
 		points = {
 			{t = 75, r = 50},
 			{t = 50, r = 75}
@@ -24,6 +25,7 @@ local terrainRegions = {
 			desert = {r = 1},
 			tundra = {t = 1} 
 		},
+		subRegionNames = {"none", "forest"},
 		color = {127, 127, 0}
 	},
 	{ name = "desert", targetArea = 0.18, lowR = true,
@@ -35,6 +37,7 @@ local terrainRegions = {
 			plains = {r = -1},
 			tundra = {t = 1} 
 		},
+		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
 	{ name = "tundra", targetArea = 0.16, lowT = true,
@@ -46,100 +49,76 @@ local terrainRegions = {
 			desert = {t = -1},
 			plains = {t = -1} 
 		},
+		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
 	{ name = "snow", targetArea = 0.08, fixed = true, lowT = true, lowR = true,
 		points = {
 			{t = 0, r = 0}
 		},
+		subRegionNames = {"none"},
 		relations = {},
 		color = {127, 127, 127}
 	},
 }
 
 local featureRegions = {
-	{ name = "none", targetArea = 0.5,
-		targetTerrainAreas = {
-			grassland = 0.5,
-			plains = 0.5,
-			desert = 0.9,
-			tundra = 0.5,
-			snow = 1.0,
-		},
+	{ name = "none", targetArea = 0.59,
 		points = {
 			{t = 50, r = 50},
 		},
-		relations = {
-			plains = {t = 1, r = 1},
-			desert = {n = -1},
-			tundra = {n = -1},
-		},
-		color = {0, 0, 0, 127}
+		relations = {},
+		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
+		color = {255, 255, 255, 0}
 	},
 	{ name = "forest", targetArea = 0.25,
-		targetTerrainAreas = {
-			grassland = 0.25,
-			plains = 0.5,
-			tundra = 0.5,
-		},
 		points = {
-			{t = 52, r = 90},
+			{t = 40, r = 60},
 		},
-		relations = {
-			grassland = {t = -1, r = -1},
-			desert = {r = 1},
-			tundra = {t = 1} 
-		},
-		color = {127, 255, 0, 127}
+		relations = {},
+		containedBy = { "grassland", "plains", "tundra" },
+		color = {255, 255, 0, 127}
 	},
-	{ name = "jungle", targetArea = 0.15,
-		targetTerrainAreas = {
-			grassland = 0.25,
-		},
+	{ name = "jungle", targetArea = 0.1,
 		points = {
 			{t = 100, r = 100},
 		},
-		relations = {
-			plains = {r = -1},
-			tundra = {t = 1} 
-		},
+		containedBy = { "grassland" },
+		relations = {},
 		color = {0, 255, 0, 127}
 	},
-	{ name = "marsh", targetArea = 0.08,
+	{ name = "marsh", targetArea = 0.05,
 		points = {
-			{t = 50, r = 100},
+			{t = 40, r = 75},
 		},
-		relations = {
-			desert = {t = -1},
-			plains = {t = -1} 
-		},
-		color = {0, 127, 255, 127}
+		containedBy = { "grassland" },
+		relations = {},
+		color = {0, 0, 255, 127}
 	},
-	{ name = "oasis", targetArea = 0.02,
+	{ name = "oasis", targetArea = 0.01,
 		points = {
 			{t = 100, r = 50}
 		},
+		containedBy = { "desert" },
 		relations = {},
 		color = {255, 0, 0, 127}
 	},
 }
 
-for i, region in pairs(terrainRegions) do
-	region.targetLatitudeArea = region.targetArea * 90
-	region.targetArea = region.targetArea * 10000
-end
-
 local myClimate
 
 function love.load()
-    love.window.setMode(600, 600, {resizable=false, vsync=false})
-    myClimate = Climate(terrainRegions)
+    love.window.setMode(displayMult * 100 + 200, displayMult * 100 + 100, {resizable=false, vsync=false})
+    myClimate = Climate(terrainRegions, featureRegions)
 end
 
 function love.mousereleased(x, y, button)
    if button == 'l' then
    		local output = ""
 	   for i, point in pairs(myClimate.pointSet.points) do
+	   		output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
+	   end
+	   for i, point in pairs(myClimate.subPointSet.points) do
 	   		output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
 	   end
 	   love.system.setClipboardText( output )
@@ -153,25 +132,49 @@ function love.draw()
 		for r, point in pairs(rains) do
 			if point.t == t and point.r == r then
 				love.graphics.setColor( 0, 0, 0 )
-				love.graphics.rectangle("fill", t*5, 500-r*5, 5, 5)
+				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 			elseif myClimate.latitudePoints[t .. " " .. r] then
 				love.graphics.setColor( 127, 0, 0 )
-				love.graphics.rectangle("fill", t*5, 500-r*5, 5, 5)
+				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 			else
 				love.graphics.setColor( point.region.color )
-				love.graphics.rectangle("fill", t*5, 500-r*5, 5, 5)
+				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 			end
 		end
 	end
+	for t, rains in pairs(myClimate.subPointSet.grid) do
+		for r, point in pairs(rains) do
+			if point.t == t and point.r == r then
+				love.graphics.setColor( 255, 0, 255 )
+				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
+			else
+				love.graphics.setColor( point.region.color )
+				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
+			end
+		end
+	end
+	local y = 0
+	for name, region in pairs(myClimate.regionsByName) do
+		if region.containedBy then
+			love.graphics.setColor( 255, 255, 127 )
+		else
+			love.graphics.setColor( 127, 255, 255 )
+		end
+		love.graphics.print(region.name .. "\n" .. (region.stableLatitudeArea or "nil") .. "/" .. mFloor(region.targetLatitudeArea) .. "\n" .. (region.stableArea or "nil") .. "/" .. mFloor(region.targetArea) .. "\n", displayMultHundred+70, y)
+		y = y + 50
+	end
 	love.graphics.setColor( 255, 255, 255 )
 	for i, point in pairs(myClimate.pointSet.points) do
-		love.graphics.print(point.region.name .. "\n" .. (point.region.stableLatitudeArea or "nil") .. "/" .. mFloor(point.region.targetLatitudeArea) .. ", " .. (point.latitudeArea or "nil") .. "\n" .. (point.region.stableArea or "nil") .. "/" .. mFloor(point.region.targetArea) .. ", " .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*5, 500-point.r*5)
+		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
+	end
+	for i, point in pairs(myClimate.subPointSet.points) do
+		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
 	end
 	love.graphics.setColor(255, 0, 0)
-	love.graphics.print(myClimate.nearestString, 10, 570)
+	love.graphics.print(myClimate.nearestString, 10, displayMultHundred + 70)
 end
 
 function love.update(dt)
 	myClimate:Optimize()
-   love.window.setTitle( myClimate.iterations .. " " .. myClimate.generations .. " " .. mFloor(myClimate.pointSet.distance) )
+   love.window.setTitle( myClimate.iterations .. " " .. myClimate.pointSet.generation .. " " .. mFloor(myClimate.pointSet.distance or 0) .. " (" .. myClimate.subPointSet.generation .. " " .. mFloor(myClimate.subPointSet.distance or 0) ..")" )
 end

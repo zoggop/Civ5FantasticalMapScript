@@ -1,13 +1,17 @@
 require "common"
 require "point"
 
-PointSet = class(function(a, climate, parentPointSet)
+PointSet = class(function(a, climate, parentPointSet, isSub)
 	a.climate = climate
+	a.isSub = isSub
 	a.points = {}
 	a.grid = {}
 	a.latitudes = {}
+	a.generation = 0
 	if parentPointSet then
 		-- mutation
+		a.isSub = parentPointSet.isSub
+		a.generation = parentPointSet.generation + 1
 		for i, parentPoint in pairs(parentPointSet.points) do
 			local point = Point(parentPoint.region, nil, nil, parentPoint)
 			tInsert(a.points, point)
@@ -21,6 +25,7 @@ function PointSet:AddPoint(point)
 	tInsert(self.points, point)
 	point:ResetFillState()
 	point.pointSet = self
+	point.isSub = self.isSub
 end
 
 function PointSet:NearestPoint(t, r)
@@ -30,8 +35,13 @@ function PointSet:NearestPoint(t, r)
 		local dist = point:Dist(t, r)
 		if dist < nearestDist then
 			nearestDist = dist
-			nearestRegion = region
 			nearestPoint = point
+		end
+	end
+	if self.isSub then
+		local superPoint = self.climate.pointSet.grid[t][r]
+		if not superPoint.region.subRegions[nearestPoint.region] then
+			nearestPoint = self.points[1]
 		end
 	end
 	return nearestPoint
@@ -52,6 +62,13 @@ function PointSet:FillGrid()
 		self.grid[t] = {}
 		for r = 0, 100 do
 			local point = self:NearestPoint(t, r)
+			if self.isSub then
+				local superPoint = self.climate.pointSet.grid[t][r]
+				if point.superRegionAreas[superPoint.region] == nil then
+					point.superRegionAreas[superPoint.region] = 0
+				end
+				point.superRegionAreas[superPoint.region] = point.superRegionAreas[superPoint.region] + 1
+			end
 			self.grid[t][r] = point
 			point.region.area = point.region.area + 1
 			point.area = point.area + 1
@@ -92,6 +109,13 @@ function PointSet:FillLatitudes()
 		local t, r = self.climate:GetTemperature(l), self.climate:GetRainfall(l)
 		if drawCurve then self.climate.latitudePoints[mFloor(t) .. " " .. mFloor(r)] = true end
 		local point = self:NearestPoint(t, r)
+		if self.isSub then
+			local superPoint = self.climate.pointSet.latitudes[l]
+			if point.superRegionLatitudeAreas[superPoint.region] == nil then
+				point.superRegionLatitudeAreas[superPoint.region] = 0
+			end
+			point.superRegionLatitudeAreas[superPoint.region] = point.superRegionLatitudeAreas[superPoint.region] + 1
+		end
 		self.latitudes[l] = point
 		point.region.latitudeArea = point.region.latitudeArea + 1
 		point.latitudeArea = point.latitudeArea + 1
@@ -109,6 +133,13 @@ end
 function PointSet:Okay()
 	for i, point in pairs(self.points) do
 		if not point:Okay() then return end
+	end
+	return true
+end
+
+function PointSet:FillOkay()
+	for i, point in pairs(self.points) do
+		if not point:FillOkay() then return end
 	end
 	return true
 end

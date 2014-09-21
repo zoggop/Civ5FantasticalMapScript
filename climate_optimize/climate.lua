@@ -2,7 +2,7 @@ require "common"
 require "pointset"
 require "point"
 
-Climate = class(function(a, regions)
+Climate = class(function(a, regions, subRegions)
 	a.temperatureMin = 0
 	a.temperatureMax = 100
 	a.polarExponent = 1.2
@@ -19,50 +19,86 @@ Climate = class(function(a, regions)
 	a.generations = 0
 	a.nearestString = ""
 	a.regions = regions
+	a.subRegions = subRegions
 	a.regionsByName = {}
+	a.allRegions = {}
 	a.pointSet = PointSet(a)
 	for i, region in pairs(regions) do
+		region.targetLatitudeArea = region.targetArea * 90
+		region.targetArea = region.targetArea * 10000
 		for ii, p in pairs(region.points) do
 			local point = Point(region, p.t, p.r)
 			a.pointSet:AddPoint(point)
 		end
 		a.regionsByName[region.name] = region
 	end
+	a.subPointSet = PointSet(a, nil, true)
+	for i, region in pairs(subRegions) do
+		region.targetLatitudeArea = region.targetArea * 90
+		region.targetArea = region.targetArea * 10000
+		for ii, p in pairs(region.points) do
+			local point = Point(region, p.t, p.r)
+			a.subPointSet:AddPoint(point)
+		end
+		a.regionsByName[region.name] = region
+	end
+	for i, region in pairs(regions) do
+		region.subRegions = {}
+		for ii, subRegionName in pairs(region.subRegionNames) do
+			region.subRegions[a.regionsByName[subRegionName]] = true
+		end
+	end
 end)
 
 function Climate:Fill()
-	local didSomething = self.pointSet:Fill()
-	if didSomething then
-		self:GiveRegionExcessAreas()
+	if self.pointSet:Fill() then
+		self:GiveRegionsExcessAreas(self.regions)
+	end
+	if self.subPointSet:Fill() then
+		self:GiveRegionsExcessAreas(self.subRegions)
 	end
 end
 
-function Climate:GiveRegionExcessAreas()
-	for ii, region in pairs(self.regions) do
+function Climate:GiveRegionsExcessAreas(regions)
+	for i, region in pairs(regions) do
 		region.excessLatitudeArea = region.latitudeArea - region.targetLatitudeArea
 		region.excessArea = region.area - region.targetArea
 	end
+end
+
+function Climate:MutatePointSet(pointSet)
+	local mutation = PointSet(self, pointSet)
+	if mutation:Okay() then
+		mutation:Fill()
+		if mutation:FillOkay() then
+			local regions
+			if pointSet.isSub then
+				regions = self.subRegions
+			else
+				regions = self.regions
+			end
+			self:GiveRegionsExcessAreas(regions)
+			mutation:GiveDistance()
+			if not pointSet.distance or mutation.distance < pointSet.distance then
+				pointSet = mutation
+				for i, region in pairs(regions) do
+					region.stableArea = region.area + 0
+					region.stableLatitudeArea = region.latitudeArea + 0
+				end
+			end
+		end
+	end
+	return pointSet
 end
 
 -- get one mutation and use it if it's better
 function Climate:Optimize()
 	self:Fill()
 	self.pointSet:GiveAdjustments()
-	local mutation = PointSet(self, self.pointSet)
-	if mutation:Okay() then
-		mutation:Fill()
-		self:GiveRegionExcessAreas()
-		mutation:GiveDistance()
-		if not self.pointSet.distance or mutation.distance < self.pointSet.distance then
-			self.pointSet = mutation
-			for i, region in pairs(self.regions) do
-				region.stableArea = region.area + 0
-				region.stableLatitudeArea = region.latitudeArea + 0
-			end
-			self.generations = self.generations + 1
-		end
-	end
-	self.nearestString = tostring(mFloor(self.pointSet.distance))
+	self.subPointSet:GiveAdjustments()
+	self.pointSet = self:MutatePointSet(self.pointSet)
+	self.subPointSet = self:MutatePointSet(self.subPointSet)
+	self.nearestString = tostring(mFloor(self.pointSet.distance or 0) .. " " .. mFloor(self.subPointSet.distance or 0))
 	self.iterations = self.iterations + 1
 end
 

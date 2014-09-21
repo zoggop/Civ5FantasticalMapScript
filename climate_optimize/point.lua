@@ -11,6 +11,7 @@ Point = class(function(a, region, t, r, parentPoint)
 		a.t = mMax(0, mMin(100, a.t))
 		a.r = mMax(0, mMin(100, a.r))
 	end
+	a.superRegionAreas, a.superRegionLatitudeAreas = {}, {}
 end)
 
 function Point:ResetFillState()
@@ -20,6 +21,7 @@ function Point:ResetFillState()
 	self.area = 0
 	self.neighbors = {}
 	self.lowT, self.highT, self.lowR, self.highR = nil, nil, nil, nil
+	self.superRegionAreas, self.superRegionLatitudeAreas = {}, {}
 end
 
 function Point:GiveAdjustment()
@@ -58,8 +60,13 @@ function Point:GiveAdjustment()
 	elseif self.region.lowR then
 		self:RainMove((0-self.r)*highLowMultiplier)
 	end
-	self.tMove = (self.tMove / self.tMoveCount) * adjustmentIntensity
-	self.rMove = (self.rMove / self.rMoveCount) * adjustmentIntensity
+	-- print(self.tMove, self.rMove, tostring(self.isSub), self.t, self.r)
+	if mAbs(self.tMove) > 0 and self.tMoveCount > 0 then
+		self.tMove = (self.tMove / self.tMoveCount) * adjustmentIntensity
+	end
+	if mAbs(self.rMove) > 0 and self.rMoveCount > 0 then
+		self.rMove = (self.rMove / self.rMoveCount) * adjustmentIntensity
+	end
 end
 
 function Point:Dist(t, r)
@@ -67,24 +74,22 @@ function Point:Dist(t, r)
 end
 
 function Point:TempMove(tempMove)
+	if tempMove ~= tempMove then return end
 	self.tMove = self.tMove + tempMove
 	self.tMoveCount = self.tMoveCount + 1
 end
 
 function Point:RainMove(rainMove)
+	if rainMove ~= rainMove then return end
 	self.rMove = self.rMove + rainMove
 	self.rMoveCount = self.rMoveCount + 1
 end
 
 function Point:Okay()
-	if not self.region.lowT and self.lowT then return end
-	-- if not region.highT and self.highT then return end
-	-- if not region.lowR and self.lowR then return end
-	-- if not region.highR and self.highR then return end
 	for regionName, relation in pairs(self.region.relations) do
 		local relatedRegion = self.pointSet.climate.regionsByName[regionName]
 		if relatedRegion then
-			for ii, rPoint in pairs(self.pointSet) do
+			for ii, rPoint in pairs(self.pointSet.points) do
 				if rPoint.region == relatedRegion then
 					if relation.t == -1 then
 						if self.t >= rPoint.t then return end
@@ -100,6 +105,25 @@ function Point:Okay()
 						if self.neighbors[rPoint] then return end
 					end
 				end
+			end
+		end
+	end
+	return true
+end
+
+function Point:FillOkay()
+	if self.region.noLowT and self.lowT then return end
+	if self.region.noHighT and self.highT then return end
+	if self.region.noLowR and self.lowR then return end
+	if self.region.noHighR and self.highR then return end
+	if self.pointSet.isSub then
+		for i, regionName in pairs(self.region.containedBy) do
+			local region = self.pointSet.climate.regionsByName[regionName]
+			if self.superRegionLatitudeAreas[region] ~= nil then 
+				-- print(self.superRegionAreas[region], region.stableArea, self.superRegionLatitudeAreas[region], region.stableLatitudeArea)
+			end
+			if (not self.superRegionAreas[region] and (region.stableArea or 0) > 0) or (not self.superRegionLatitudeAreas[region] and (region.stableLatitudeArea or 0) > 0) then
+				return
 			end
 		end
 	end
