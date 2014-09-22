@@ -48,10 +48,11 @@ function PointSet:NearestPoint(t, r)
 end
 
 function PointSet:Fill()
-	if self.filled then return false end
+	-- if self.filled then return false end
+	for i, point in pairs(self.points) do point:ResetFillState() end
 	self:FillLatitudes()
 	self:FillGrid()
-	self.filled = true
+	-- self.filled = true
 	return true
 end
 
@@ -64,10 +65,8 @@ function PointSet:FillGrid()
 			local point = self:NearestPoint(t, r)
 			if self.isSub then
 				local superPoint = self.climate.pointSet.grid[t][r]
-				if point.superRegionAreas[superPoint.region] == nil then
-					point.superRegionAreas[superPoint.region] = 0
-				end
-				point.superRegionAreas[superPoint.region] = point.superRegionAreas[superPoint.region] + 1
+				point.superRegionAreas[superPoint.region] = (point.superRegionAreas[superPoint.region] or 0) + 1
+				point.region.superRegionAreas[superPoint.region] = (point.region.superRegionAreas[superPoint.region] or 0) + 1
 			end
 			self.grid[t][r] = point
 			point.region.area = point.region.area + 1
@@ -100,21 +99,13 @@ end
 
 function PointSet:FillLatitudes()
 	self.latitudes = {}
-	local drawCurve = false
-	if not self.climate.latitudePoints then
-		self.climate.latitudePoints = {}
-		drawCurve = true
-	end
-	for l = 0, 90 do
-		local t, r = self.climate:GetTemperature(l), self.climate:GetRainfall(l)
-		if drawCurve then self.climate.latitudePoints[mFloor(t) .. " " .. mFloor(r)] = true end
+	for string, values in pairs(self.climate.latitudePoints) do
+		local l, t, r = values.l, values.t, values.r
 		local point = self:NearestPoint(t, r)
 		if self.isSub then
 			local superPoint = self.climate.pointSet.latitudes[l]
-			if point.superRegionLatitudeAreas[superPoint.region] == nil then
-				point.superRegionLatitudeAreas[superPoint.region] = 0
-			end
-			point.superRegionLatitudeAreas[superPoint.region] = point.superRegionLatitudeAreas[superPoint.region] + 1
+			point.superRegionLatitudeAreas[superPoint.region] = (point.superRegionLatitudeAreas[superPoint.region] or 0) + 1
+			point.region.superRegionLatitudeAreas[superPoint.region] = (point.region.superRegionLatitudeAreas[superPoint.region] or 0) + 1
 		end
 		self.latitudes[l] = point
 		point.region.latitudeArea = point.region.latitudeArea + 1
@@ -160,19 +151,7 @@ function PointSet:GiveDistance()
 			self.distance = self.distance + point.r
 		end
 		if not haveRegion[point.region] then
-			if self.isSub then
-				point.region.superRegionAreas = {}
-				point.region.superRegionLatitudeAreas = {}
-			end
 			tInsert(regions, point.region)
-		end
-		if self.isSub then
-			for region, area in pairs(point.superRegionAreas) do
-				point.region.superRegionAreas[region] = (point.region.superRegionAreas[region] or 0) + area
-			end
-			for region, area in pairs(point.superRegionLatitudeAreas) do
-				point.region.superRegionLatitudeAreas[region] = (point.region.superRegionLatitudeAreas[region] or 0) + area
-			end
 		end
 	end
 	for i, region in pairs(regions) do
@@ -182,16 +161,24 @@ function PointSet:GiveDistance()
 			local areaAvg, latitudeAreaAvg = 0, 0
 			for i, regionName in pairs(region.containedBy) do
 				local superRegion = self.climate.regionsByName[regionName]
-				areaAvg = areaAvg + region.superRegionAreas[superRegion]
-				latitudeAreaAvg = latitudeAreaAvg + region.superRegionLatitudeAreas[superRegion]
+				areaAvg = areaAvg + (region.superRegionAreas[superRegion] or 0)
+				latitudeAreaAvg = latitudeAreaAvg + (region.superRegionLatitudeAreas[superRegion] or 0)
 			end
-			areaAvg = areaAvg / #region.containedBy
-			latitudeAreaAvg = latitudeAreaAvg / #region.containedBy
+			if areaAvg > 0 and #region.containedBy > 0 then
+				areaAvg = areaAvg / #region.containedBy
+			else
+				latitudeAreaAvg = 0
+			end
+			if latitudeAreaAvg > 0 and #region.containedBy > 0 then
+				latitudeAreaAvg = latitudeAreaAvg / #region.containedBy
+			else
+				latitudeAreaAvg = 0
+			end
 			for i, regionName in pairs(region.containedBy) do
 				local superRegion = self.climate.regionsByName[regionName]
 				-- print(mAbs(region.superRegionAreas[superRegion] - areaAvg) * areaMutationDistMult, mAbs(region.superRegionLatitudeAreas[superRegion] - latitudeAreaAvg) * latitudeAreaMutationDistMult)
-				self.distance = self.distance + mAbs(region.superRegionAreas[superRegion] - areaAvg) * areaMutationDistMult
-				self.distance = self.distance + mAbs(region.superRegionLatitudeAreas[superRegion] - latitudeAreaAvg) * latitudeAreaMutationDistMult
+				self.distance = self.distance + mAbs((region.superRegionAreas[superRegion] or 0) - areaAvg) * areaMutationDistMult
+				self.distance = self.distance + mAbs((region.superRegionLatitudeAreas[superRegion] or 0) - latitudeAreaAvg) * latitudeAreaMutationDistMult
 			end
 		end
 	end

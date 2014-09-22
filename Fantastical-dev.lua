@@ -586,11 +586,11 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
-			[1] = { name = "Ice Age", values = {2.0, 0, 45} },
-			[2] = { name = "Cool", values = {1.4, 0, 85} },
+			[1] = { name = "Ice Age", values = {1.8, 0, 25} },
+			[2] = { name = "Cool", values = {1.6, 0, 60} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
-			[4] = { name = "Hot", values = {1.1, 5, 100} },
-			[5] = { name = "Jurassic", values = {0.9, 20, 100} },
+			[4] = { name = "Hot", values = {1.1, 10, 100} },
+			[5] = { name = "Jurassic", values = {0.75, 20, 100} },
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
@@ -819,28 +819,27 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 --[[
-plains 50,41
-grassland: 90,75
-grassland: 59,65
-plains: 51,47
-plains: 22,44
-desert: 21,0
-desert: 74,3
-tundra: 0,27
-tundra: 0,64
-snow: 20,3
-none: 56,13
-forest: 51,53
-jungle: 93,91
-marsh: 15,76
-oasis: 91,57
+grassland: 84,52
+grassland: 59,85
+plains: 51,23
+plains: 15,50
+desert: 19,9
+desert: 56,0
+tundra: 3,28
+tundra: 2,60
+snow: 0,0
+none: 55,44
+forest: 46,59
+jungle: 84,86
+marsh: 31,74
+oasis: 81,50
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=56,r=63}, {t=99,r=82}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=50,r=52}, {t=23,r=50}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=32,r=9}, {t=58,r=0}}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { points = {{t=10,r=33}, {t=2,r=54}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainGrass] = { points = {{t=84,r=52}, {t=59,r=85}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=51,r=23}, {t=15,r=50}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=19,r=9}, {t=56,r=0}}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { points = {{t=3,r=28}, {t=2,r=60}}, features = { featureNone, featureForest, featureFallout } },
 		[terrainSnow] = { points = {{t=0,r=0}}, features = { featureNone, featureFallout } },
 	}
 
@@ -848,11 +847,11 @@ oasis: 91,57
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=50,r=50}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=52,r=90}}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
-		[featureMarsh] = { points = {{t=50,r=100}}, percent = 10, limitRatio = 0.33, hill = false },
-		[featureOasis] = { points = {{t=100,r=50}}, percent = 20, limitRatio = 0.01, hill = false },
+		[featureNone] = { points = {{t=55,r=44}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=46,r=59}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=84,r=86}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureMarsh] = { points = {{t=31,r=74}}, percent = 100, limitRatio = 0.33, hill = false },
+		[featureOasis] = { points = {{t=81,r=50}}, percent = 100, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
@@ -1781,7 +1780,9 @@ function Region:CreateElement(temperature, rainfall, lake)
 	local bestTerrain = self.space:NearestTempRainThing(temperature, rainfall, TerrainDictionary)
 	local featureList = {}
 	for i, featureType in pairs(bestTerrain.features) do
-		tInsert(featureList, FeatureDictionary[featureType])
+		if featureType ~= featureFallout or self.space.falloutEnabled then
+			tInsert(featureList, FeatureDictionary[featureType])
+		end
 	end
 	local bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
 	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list

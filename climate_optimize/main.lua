@@ -2,7 +2,7 @@ require "common"
 require "climate"
 
 local terrainRegions = {
-	{ name = "grassland", targetArea = 0.33, highT = true, highR = true,
+	{ name = "grassland", targetArea = 0.38, highT = true, highR = true,
 		points = {
 			{t = 100, r = 75},
 			{t = 75, r = 100}
@@ -15,7 +15,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.25, noLowT = true, noLowR = true,
+	{ name = "plains", targetArea = 0.33, noLowT = true, noLowR = true,
 		points = {
 			{t = 75, r = 50},
 			{t = 50, r = 75}
@@ -28,7 +28,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest"},
 		color = {127, 127, 0}
 	},
-	{ name = "desert", targetArea = 0.18, lowR = true,
+	{ name = "desert", targetArea = 0.12, lowR = true,
 		points = {
 			{t = 25, r = 0},
 			{t = 75, r = 0}
@@ -40,40 +40,45 @@ local terrainRegions = {
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.16, lowT = true,
+	{ name = "tundra", targetArea = 0.09, lowT = true,
 		points = {
 			{t = 0, r = 25},
 			{t = 0, r = 75}
 		},
 		relations = {
 			desert = {t = -1},
-			plains = {t = -1} 
+			plains = {t = -1},
+			snow = {r = 1},
 		},
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.08, fixed = true, lowT = true, lowR = true,
+	{ name = "snow", targetArea = 0.02, fixed = true, lowT = true, lowR = true,
 		points = {
 			{t = 0, r = 0}
 		},
 		subRegionNames = {"none"},
-		relations = {},
+		relations = {
+			tundra = {r = -1},
+		},
 		color = {127, 127, 127}
 	},
 }
 
 local featureRegions = {
-	{ name = "none", targetArea = 0.59,
+	{ name = "none", targetArea = 0.70,
 		points = {
-			{t = 50, r = 50},
+			{t = 45, r = 55},
+			-- {t = 55, r = 45},
 		},
 		relations = {},
 		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
 		color = {255, 255, 255, 0}
 	},
-	{ name = "forest", targetArea = 0.25, highR = true,
+	{ name = "forest", targetArea = 0.17, highR = true,
 		points = {
 			{t = 40, r = 60},
+			-- {t = 25, r = 40},
 		},
 		relations = {},
 		containedBy = { "grassland", "plains", "tundra" },
@@ -82,12 +87,13 @@ local featureRegions = {
 	{ name = "jungle", targetArea = 0.1, highR = true, highT = true,
 		points = {
 			{t = 100, r = 100},
+			-- {t = 90, r = 90},
 		},
 		containedBy = { "grassland" },
 		relations = {},
 		color = {0, 255, 0, 127}
 	},
-	{ name = "marsh", targetArea = 0.05, highR = true,
+	{ name = "marsh", targetArea = 0.02, highR = true,
 		points = {
 			{t = 40, r = 75},
 		},
@@ -97,7 +103,7 @@ local featureRegions = {
 	},
 	{ name = "oasis", targetArea = 0.01,
 		points = {
-			{t = 100, r = 50}
+			{t = 80, r = 50}
 		},
 		containedBy = { "desert" },
 		relations = {},
@@ -176,5 +182,5 @@ end
 
 function love.update(dt)
 	myClimate:Optimize()
-   love.window.setTitle( myClimate.iterations .. " " .. myClimate.pointSet.generation .. " " .. mFloor(myClimate.pointSet.distance or 0) .. " (" .. myClimate.subPointSet.generation .. " " .. mFloor(myClimate.subPointSet.distance or 0) ..")" )
+   love.window.setTitle( myClimate.iterations .. " " .. myClimate.pointSet.generation .. " " .. mFloor(myClimate.pointSet.distance or 0) .. " (" .. myClimate.subPointSet.generation .. " " .. mFloor(myClimate.subPointSet.distance or 0) ..") " .. myClimate.mutationStrength )
 end

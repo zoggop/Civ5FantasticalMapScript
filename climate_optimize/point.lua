@@ -6,10 +6,16 @@ Point = class(function(a, region, t, r, parentPoint)
 	a.r = r
 	if parentPoint then
 		-- mutation
-		a.t = mFloor( parentPoint.t + parentPoint.tMove + math.random(-mutationStrength, mutationStrength) )
-		a.r = mFloor( parentPoint.r + parentPoint.rMove + math.random(-mutationStrength, mutationStrength) )
-		a.t = mMax(0, mMin(100, a.t))
-		a.r = mMax(0, mMin(100, a.r))
+		if parentPoint.region.fixed then
+			a.t = parentPoint.t + 0
+			a.r = parentPoint.r + 0
+		else
+			local strength = parentPoint.pointSet.climate.mutationStrength
+			a.t = mFloor( parentPoint.t + parentPoint.tMove + math.random(-strength, strength) )
+			a.r = mFloor( parentPoint.r + parentPoint.rMove + math.random(-strength, strength) )
+			a.t = mMax(0, mMin(100, a.t))
+			a.r = mMax(0, mMin(100, a.r))
+		end
 	end
 	a.superRegionAreas, a.superRegionLatitudeAreas = {}, {}
 end)
@@ -22,6 +28,7 @@ function Point:ResetFillState()
 	self.neighbors = {}
 	self.lowT, self.highT, self.lowR, self.highR = nil, nil, nil, nil
 	self.superRegionAreas, self.superRegionLatitudeAreas = {}, {}
+	self.region.superRegionAreas, self.region.superRegionLatitudeAreas = {}, {}
 end
 
 function Point:GiveAdjustment()
@@ -31,7 +38,7 @@ function Point:GiveAdjustment()
 		if neighbor.region ~= self.region then
 			local dt = neighbor.t - self.t
 			local dr = neighbor.r - self.r
-			local da = (neighbor.region.excessLatitudeArea) / 90
+			local da = (neighbor.region.excessLatitudeArea) / self.pointSet.climate.totalLatitudes
 			if neighbor.region.excessLatitudeArea > 0 and neighbor.latitudeArea > 0 then 
 				da = da * (neighbor.latitudeArea / neighbor.region.latitudeArea)
 			elseif neighbor.region.excessLatitudeArea < 0 or neighbor.latitudeArea == 0 then
@@ -119,10 +126,7 @@ function Point:FillOkay()
 	if self.pointSet.isSub then
 		for i, regionName in pairs(self.region.containedBy) do
 			local region = self.pointSet.climate.regionsByName[regionName]
-			if self.superRegionLatitudeAreas[region] ~= nil then 
-				-- print(self.superRegionAreas[region], region.stableArea, self.superRegionLatitudeAreas[region], region.stableLatitudeArea)
-			end
-			if (not self.superRegionAreas[region] and (region.stableArea or 0) > 0) or (not self.superRegionLatitudeAreas[region] and (region.stableLatitudeArea or 0) > 0) then
+			if (not self.region.superRegionAreas[region] and (self.region.stableArea or 0) > 0) or (not self.region.superRegionLatitudeAreas[region] and (self.region.stableLatitudeArea or 0) > 0) then
 				return
 			end
 		end

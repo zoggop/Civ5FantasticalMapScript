@@ -14,9 +14,21 @@ Climate = class(function(a, regions, subRegions)
 	else
 		a.rainfallPlusMinus = a.rainfallMidpoint
 	end
+	a.latitudePoints = {}
+	a.totalLatitudes = 0
+	for l = 0, 90, latitudeResolution do
+		local t, r = a:GetTemperature(l), a:GetRainfall(l)
+		if not a.latitudePoints[mFloor(t) .. " " .. mFloor(r)] then
+			a.latitudePoints[mFloor(t) .. " " .. mFloor(r)] = {l = l, t = t, r = r}
+			a.totalLatitudes = a.totalLatitudes + 1
+		end
+	end
+	-- latitudeAreaMutationDistMult = latitudeAreaMutationDistMult * (90 / a.totalLatitudes)
+	-- print(a.totalLatitudes, latitudeAreaMutationDistMult)
 
+	a.mutationStrength = mutationStrength
 	a.iterations = 0
-	a.generations = 0
+	a.barrenIterations = 0
 	a.nearestString = ""
 	a.regions = regions
 	a.subRegions = subRegions
@@ -24,7 +36,7 @@ Climate = class(function(a, regions, subRegions)
 	a.allRegions = {}
 	a.pointSet = PointSet(a)
 	for i, region in pairs(regions) do
-		region.targetLatitudeArea = region.targetArea * 90
+		region.targetLatitudeArea = region.targetArea * a.totalLatitudes
 		region.targetArea = region.targetArea * 10000
 		for ii, p in pairs(region.points) do
 			local point = Point(region, p.t, p.r)
@@ -34,7 +46,7 @@ Climate = class(function(a, regions, subRegions)
 	end
 	a.subPointSet = PointSet(a, nil, true)
 	for i, region in pairs(subRegions) do
-		region.targetLatitudeArea = region.targetArea * 90
+		region.targetLatitudeArea = region.targetArea * a.totalLatitudes
 		region.targetArea = region.targetArea * 10000
 		for ii, p in pairs(region.points) do
 			local point = Point(region, p.t, p.r)
@@ -67,6 +79,7 @@ function Climate:GiveRegionsExcessAreas(regions)
 end
 
 function Climate:MutatePointSet(pointSet)
+	local mutated = false
 	local mutation = PointSet(self, pointSet)
 	if mutation:Okay() then
 		mutation:Fill()
@@ -80,6 +93,7 @@ function Climate:MutatePointSet(pointSet)
 			self:GiveRegionsExcessAreas(regions)
 			mutation:GiveDistance()
 			if not pointSet.distance or mutation.distance < pointSet.distance then
+				mutated = true
 				pointSet = mutation
 				for i, region in pairs(regions) do
 					region.stableArea = region.area + 0
@@ -88,7 +102,7 @@ function Climate:MutatePointSet(pointSet)
 			end
 		end
 	end
-	return pointSet
+	return pointSet, mutated
 end
 
 -- get one mutation and use it if it's better
@@ -96,10 +110,39 @@ function Climate:Optimize()
 	self:Fill()
 	self.pointSet:GiveAdjustments()
 	self.subPointSet:GiveAdjustments()
-	self.pointSet = self:MutatePointSet(self.pointSet)
-	self.subPointSet = self:MutatePointSet(self.subPointSet)
+	local oldPointSet = self.pointSet
+	local mutated, subMutated
+	self.pointSet, mutated = self:MutatePointSet(self.pointSet)
+	if mutated then
+		local oldDist = self.leastSubPointSetDistance or 999999
+		self.subPointSet:Fill()
+		self:GiveRegionsExcessAreas(self.subRegions)
+		self.subPointSet:GiveDistance()
+		-- print(oldDist, self.subPointSet.distance, oldPointSet, self.pointSet)
+		if self.subPointSet.distance > oldDist + (oldDist * subPointSetDistanceIncreaseTolerance) then
+			self.pointSet = oldPointSet
+			self.subPointSet:Fill()
+			self:GiveRegionsExcessAreas(self.subRegions)
+			self.subPointSet:GiveDistance()
+		end
+		-- print(self.subPointSet.distance)
+	end
+	self.subPointSet, subMutated = self:MutatePointSet(self.subPointSet)
+	if self.subPointSet.distance and self.subPointSet.distance < (self.leastSubPointSetDistance or 999999) then
+		self.leastSubPointSetDistance = self.subPointSet.distance
+	end
 	self.nearestString = tostring(mFloor(self.pointSet.distance or 0) .. " " .. mFloor(self.subPointSet.distance or 0))
 	self.iterations = self.iterations + 1
+	if not mutated and not subMutated then
+		self.barrenIterations = self.barrenIterations + 1
+		if self.barrenIterations > maxBarrenIterations then
+			self.mutationStrength = mMin(self.mutationStrength + 1, maxMutationStrength)
+			self.barrenIterations = 0
+		end
+	else
+		self.barrenIterations = 0
+		self.mutationStrength = mutationStrength
+	end
 end
 
 function Climate:GetTemperature(latitude)
