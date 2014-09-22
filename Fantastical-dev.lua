@@ -277,24 +277,6 @@ end
 
 ------------------------------------------------------------------------------
 
-local convertThis = [[
-0.0 506.0
-323.0 261.0
-8.0 281.0
-159.0 502.0
-303.0 408.0
-146.0 274.0
-302.0 381.0
-190.0 505.0
-]]
-local convertList = splitIntoWords(convertThis)
-for i = 1, #convertList-1, 2 do
-	local t, r = tonumber(convertList[i]), tonumber(convertList[i+1])
-	t = mFloor( t / 5.12 )
-	r = mFloor( (512 - r) / 5.12 )
-	EchoDebug(t .. ", " .. r)
-end
-
 -- Compatible with Lua 5.1 (not 5.0).
 function class(base, init)
    local c = {}    -- a new class instance
@@ -837,28 +819,21 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 --[[
-grassland
-56,63
-99,82
-
-plains
-50,41
-23,50
-
-desert
-32,9
-58,0
-
-tundra
-10,33
-2,54
-
-snow
-0,0
-
-
-
-
+plains 50,41
+grassland: 90,75
+grassland: 59,65
+plains: 51,47
+plains: 22,44
+desert: 21,0
+desert: 74,3
+tundra: 0,27
+tundra: 0,64
+snow: 20,3
+none: 56,13
+forest: 51,53
+jungle: 93,91
+marsh: 15,76
+oasis: 91,57
 ]]--
 
 	TerrainDictionary = {
@@ -1809,35 +1784,6 @@ function Region:CreateElement(temperature, rainfall, lake)
 		tInsert(featureList, FeatureDictionary[featureType])
 	end
 	local bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
-	--[[
-	local bestDist = 300
-	local bestTerrain
-	for terrainType, terrain in pairs(TerrainDictionary) do
-		-- if self:WithinBounds(terrain, temperature, rainfall) then
-			local dist = self:TemperatureRainfallDistance(terrain, temperature, rainfall)
-			if dist < bestDist then
-				bestDist = dist
-				bestTerrain = terrain
-			end
-		-- end
-	end
-	-- if bestTerrain.terrainType == terrainGrass then EchoDebug(temperature, rainfall) end
-	bestDist = 300
-	local bestFeature 
-	for i, featureType in pairs(bestTerrain.features) do
-		if featureType ~= featureNone and (featureType ~= featureFallout or self.space.falloutEnabled) then
-			local feature = FeatureDictionary[featureType]
-			if self:WithinBounds(feature, temperature, rainfall) then
-				local dist = 300
-				dist = self:TemperatureRainfallDistance(feature, temperature, rainfall)
-				if dist < bestDist then
-					bestDist = dist
-					bestFeature = feature
-				end
-			end
-		end
-	end
-	]]--
 	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
 	local plotType = plotLand
 	local terrainType = bestFeature.terrainType or bestTerrain.terrainType

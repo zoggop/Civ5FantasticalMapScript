@@ -149,23 +149,49 @@ function PointSet:GiveDistance()
 	local haveRegion = {}
 	local regions = {}
 	for i, point in pairs(self.points) do
+		if point.region.highT then
+			self.distance = self.distance + (100-point.t)
+		elseif point.region.lowT then
+			self.distance = self.distance + point.t
+		end
+		if point.region.highR then
+			self.distance = self.distance + (100-point.r)
+		elseif point.region.lowR then
+			self.distance = self.distance + point.r
+		end
 		if not haveRegion[point.region] then
+			if self.isSub then
+				point.region.superRegionAreas = {}
+				point.region.superRegionLatitudeAreas = {}
+			end
 			tInsert(regions, point.region)
+		end
+		if self.isSub then
+			for region, area in pairs(point.superRegionAreas) do
+				point.region.superRegionAreas[region] = (point.region.superRegionAreas[region] or 0) + area
+			end
+			for region, area in pairs(point.superRegionLatitudeAreas) do
+				point.region.superRegionLatitudeAreas[region] = (point.region.superRegionLatitudeAreas[region] or 0) + area
+			end
 		end
 	end
 	for i, region in pairs(regions) do
 		self.distance = self.distance + mAbs(region.excessLatitudeArea) * latitudeAreaMutationDistMult
 		self.distance = self.distance + mAbs(region.excessArea) * areaMutationDistMult
-		for ii, point in pairs(region.points) do
-			if region.highT then
-				self.distance = self.distance + (100-point.t)
-			elseif region.lowT then
-				self.distance = self.distance + point.t
+		if self.isSub then
+			local areaAvg, latitudeAreaAvg = 0, 0
+			for i, regionName in pairs(region.containedBy) do
+				local superRegion = self.climate.regionsByName[regionName]
+				areaAvg = areaAvg + region.superRegionAreas[superRegion]
+				latitudeAreaAvg = latitudeAreaAvg + region.superRegionLatitudeAreas[superRegion]
 			end
-			if region.highR then
-				self.distance = self.distance + (100-point.r)
-			elseif region.lowR then
-				self.distance = self.distance + point.r
+			areaAvg = areaAvg / #region.containedBy
+			latitudeAreaAvg = latitudeAreaAvg / #region.containedBy
+			for i, regionName in pairs(region.containedBy) do
+				local superRegion = self.climate.regionsByName[regionName]
+				-- print(mAbs(region.superRegionAreas[superRegion] - areaAvg) * areaMutationDistMult, mAbs(region.superRegionLatitudeAreas[superRegion] - latitudeAreaAvg) * latitudeAreaMutationDistMult)
+				self.distance = self.distance + mAbs(region.superRegionAreas[superRegion] - areaAvg) * areaMutationDistMult
+				self.distance = self.distance + mAbs(region.superRegionLatitudeAreas[superRegion] - latitudeAreaAvg) * latitudeAreaMutationDistMult
 			end
 		end
 	end

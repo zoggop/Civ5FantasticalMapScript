@@ -71,7 +71,7 @@ local featureRegions = {
 		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
 		color = {255, 255, 255, 0}
 	},
-	{ name = "forest", targetArea = 0.25,
+	{ name = "forest", targetArea = 0.25, highR = true,
 		points = {
 			{t = 40, r = 60},
 		},
@@ -79,7 +79,7 @@ local featureRegions = {
 		containedBy = { "grassland", "plains", "tundra" },
 		color = {255, 255, 0, 127}
 	},
-	{ name = "jungle", targetArea = 0.1,
+	{ name = "jungle", targetArea = 0.1, highR = true, highT = true,
 		points = {
 			{t = 100, r = 100},
 		},
@@ -87,7 +87,7 @@ local featureRegions = {
 		relations = {},
 		color = {0, 255, 0, 127}
 	},
-	{ name = "marsh", targetArea = 0.05,
+	{ name = "marsh", targetArea = 0.05, highR = true,
 		points = {
 			{t = 40, r = 75},
 		},
