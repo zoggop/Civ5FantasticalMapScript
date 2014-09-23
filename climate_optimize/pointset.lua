@@ -8,15 +8,37 @@ PointSet = class(function(a, climate, parentPointSet, isSub)
 	a.grid = {}
 	a.latitudes = {}
 	a.generation = 0
+	a.unmutatedPoints = {}
 	if parentPointSet then
 		-- mutation
 		a.isSub = parentPointSet.isSub
 		a.generation = parentPointSet.generation + 1
-		for i, parentPoint in pairs(parentPointSet.points) do
+		-- for i, parentPoint in pairs(parentPointSet.points) do
+		local parentPoint
+		local i = 0
+		repeat
+			if #parentPointSet.unmutatedPoints == 0 then
+				parentPointSet.unmutatedPoints = tDuplicate(parentPointSet.points)
+			end
+			parentPoint = tRemoveRandom(parentPointSet.unmutatedPoints)
+			i = i + 1
+		until parentPoint:Okay()
 			local point = Point(parentPoint.region, nil, nil, parentPoint)
 			tInsert(a.points, point)
 			point:ResetFillState()
 			point.pointSet = a
+			point.isSub = a.isSub
+			if point.region.name == "none" then a.defaultPoint = point end
+		-- end
+		for i, pp in pairs(parentPointSet.points) do
+			if pp ~= parentPoint then
+				local point = Point(pp.region, nil, nil, pp, true)
+				tInsert(a.points, point)
+				point:ResetFillState()
+				point.pointSet = a
+				point.isSub = a.isSub
+				if point.region.name == "none" then a.defaultPoint = point end
+			end
 		end
 	end
 end)
@@ -26,6 +48,7 @@ function PointSet:AddPoint(point)
 	point:ResetFillState()
 	point.pointSet = self
 	point.isSub = self.isSub
+	if point.region.name == "none" then self.defaultPoint = point end
 end
 
 function PointSet:NearestPoint(t, r)
@@ -41,7 +64,7 @@ function PointSet:NearestPoint(t, r)
 	if self.isSub then
 		local superPoint = self.climate.pointSet.grid[t][r]
 		if not superPoint.region.subRegions[nearestPoint.region] then
-			nearestPoint = self.points[1]
+			nearestPoint = self.defaultPoint
 		end
 	end
 	return nearestPoint
@@ -123,14 +146,22 @@ end
 
 function PointSet:Okay()
 	for i, point in pairs(self.points) do
-		if not point:Okay() then return end
+		local okay, problem = point:Okay()
+		if not okay then
+			-- print(point.region.name, point.t, point.r, problem)
+			return
+		end
 	end
 	return true
 end
 
 function PointSet:FillOkay()
 	for i, point in pairs(self.points) do
-		if not point:FillOkay() then return end
+		local okay, problem = point:FillOkay()
+		if not okay then
+			-- print(point.region.name, point.t, point.r, problem)
+			return
+		end
 	end
 	return true
 end
@@ -157,6 +188,7 @@ function PointSet:GiveDistance()
 	for i, region in pairs(regions) do
 		self.distance = self.distance + mAbs(region.excessLatitudeArea) * latitudeAreaMutationDistMult
 		self.distance = self.distance + mAbs(region.excessArea) * areaMutationDistMult
+		-- penalize uneven distribution of features across multiple terrains
 		if self.isSub then
 			local areaAvg, latitudeAreaAvg = 0, 0
 			for i, regionName in pairs(region.containedBy) do

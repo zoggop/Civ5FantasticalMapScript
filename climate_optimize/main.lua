@@ -2,45 +2,46 @@ require "common"
 require "climate"
 
 local terrainRegions = {
-	{ name = "grassland", targetArea = 0.38, highT = true, highR = true,
+	{ name = "grassland", targetArea = 0.40, highT = true, highR = true,
 		points = {
 			{t = 100, r = 75},
 			{t = 75, r = 100}
 		},
 		relations = {
-			plains = {t = 1, r = 1},
+			-- plains = {t = 1, r = 1},
 			desert = {n = -1},
 			tundra = {n = -1},
 		},
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.33, noLowT = true, noLowR = true,
+	{ name = "plains", targetArea = 0.32, noLowT = true, noLowR = true,
 		points = {
 			{t = 75, r = 50},
 			{t = 50, r = 75}
 		},
 		relations = {
-			grassland = {t = -1, r = -1},
+			-- grassland = {t = -1, r = -1},
 			desert = {r = 1},
 			tundra = {t = 1} 
 		},
 		subRegionNames = {"none", "forest"},
 		color = {127, 127, 0}
 	},
-	{ name = "desert", targetArea = 0.12, lowR = true,
+	{ name = "desert", targetArea = 0.13, lowR = true,
 		points = {
 			{t = 25, r = 0},
 			{t = 75, r = 0}
 		},
 		relations = {
 			plains = {r = -1},
-			tundra = {t = 1} 
+			tundra = {t = 1},
+			grassland = {n = -1},
 		},
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.09, lowT = true,
+	{ name = "tundra", targetArea = 0.1, lowT = true,
 		points = {
 			{t = 0, r = 25},
 			{t = 0, r = 75}
@@ -48,18 +49,19 @@ local terrainRegions = {
 		relations = {
 			desert = {t = -1},
 			plains = {t = -1},
-			snow = {r = 1},
+			-- snow = {r = 1},
+			grassland = {n = -1},
 		},
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.02, fixed = true, lowT = true, lowR = true,
+	{ name = "snow", targetArea = 0.05, fixed = true, lowT = true, lowR = true,
 		points = {
 			{t = 0, r = 0}
 		},
 		subRegionNames = {"none"},
 		relations = {
-			tundra = {r = -1},
+			-- tundra = {r = -1},
 		},
 		color = {127, 127, 127}
 	},
@@ -68,7 +70,7 @@ local terrainRegions = {
 local featureRegions = {
 	{ name = "none", targetArea = 0.70,
 		points = {
-			{t = 45, r = 55},
+			{t = 60, r = 40},
 			-- {t = 55, r = 45},
 		},
 		relations = {},
@@ -77,7 +79,7 @@ local featureRegions = {
 	},
 	{ name = "forest", targetArea = 0.17, highR = true,
 		points = {
-			{t = 40, r = 60},
+			{t = 45, r = 60},
 			-- {t = 25, r = 40},
 		},
 		relations = {},
@@ -103,7 +105,7 @@ local featureRegions = {
 	},
 	{ name = "oasis", targetArea = 0.01,
 		points = {
-			{t = 80, r = 50}
+			{t = 90, r = 0}
 		},
 		containedBy = { "desert" },
 		relations = {},

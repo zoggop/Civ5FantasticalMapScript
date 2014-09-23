@@ -67,6 +67,7 @@ end
 
 local randomNumbers = 0
 
+-- uses civ's Map.Rand function to generate random numbers so that multiplayer works
 local function mRandom(lower, upper)
 	local hundredth
 	if lower and upper then
@@ -586,21 +587,21 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
-			[1] = { name = "Ice Age", values = {1.8, 0, 25} },
-			[2] = { name = "Cool", values = {1.6, 0, 60} },
+			[1] = { name = "Ice Age", values = {1.5, 0, 25} },
+			[2] = { name = "Cool", values = {1.4, 0, 75} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
-			[4] = { name = "Hot", values = {1.1, 10, 100} },
-			[5] = { name = "Jurassic", values = {0.75, 20, 100} },
+			[4] = { name = "Hot", values = {1.1, 5, 100} },
+			[5] = { name = "Jurassic", values = {0.9, 5, 100} },
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
-			[1] = { name = "Wasteland", values = {13} },
-			[2] = { name = "Arid", values = {35} },
+			[1] = { name = "Wasteland", values = {14} },
+			[2] = { name = "Arid", values = {34} },
 			[3] = { name = "Normal", values = {50} },
-			[4] = { name = "Wet", values = {60} },
-			[5] = { name = "Waterlogged", values = {90} },
+			[4] = { name = "Wet", values = {56} },
+			[5] = { name = "Waterlogged", values = {69} },
 			[6] = { name = "Random", values = "values" },
 		}
 	},
@@ -819,6 +820,7 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 --[[
+less snow
 grassland: 84,52
 grassland: 59,85
 plains: 51,23
@@ -833,25 +835,41 @@ forest: 46,59
 jungle: 84,86
 marsh: 31,74
 oasis: 81,50
+
+440 1023
+grassland: 86,67
+grassland: 62,80
+plains: 52,18
+plains: 18,53
+desert: 25,14
+desert: 56,4
+tundra: 6,34
+tundra: 0,66
+snow: 0,0
+none: 53,44
+forest: 38,66
+jungle: 94,93
+marsh: 34,71
+oasis: 82,52
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=84,r=52}, {t=59,r=85}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=51,r=23}, {t=15,r=50}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=19,r=9}, {t=56,r=0}}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { points = {{t=3,r=28}, {t=2,r=60}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { points = {{t=0,r=0}}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=86,r=63}, {t=60,r=81}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=56,r=18}, {t=17,r=54}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=30,r=17}, {t=64,r=4}}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { points = {{t=7,r=31}, {t=0,r=64}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=31}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=55,r=44}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=46,r=59}}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=84,r=86}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
-		[featureMarsh] = { points = {{t=31,r=74}}, percent = 100, limitRatio = 0.33, hill = false },
-		[featureOasis] = { points = {{t=81,r=50}}, percent = 100, limitRatio = 0.01, hill = false },
+		[featureNone] = { points = {{t=54,r=45}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=38,r=66}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=96,r=93}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureMarsh] = { points = {{t=32,r=71}}, percent = 100, limitRatio = 0.33, hill = false },
+		[featureOasis] = { points = {{t=83,r=51}}, percent = 100, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
@@ -1591,8 +1609,6 @@ function Region:CreateCollection()
 	-- get latitude (real or fake)
 	self:GiveLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
-	-- self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
-	-- self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	self.temperatureAvg = self.space:GetTemperature(self.latitude)
 	local tempA, tempB = self.space:GetTemperature(self.maxLatitude), self.space:GetTemperature(self.minLatitude)
 	self.temperatureMin = mMin(tempA, tempB)
@@ -1661,18 +1677,20 @@ function Region:CreateCollection()
 		self.size = self.size + 1
 		self.polarTemps = {}
 		self.polarRains = {}
-		local rain, rmin, rmax = self.space:GetRainfall(90)
-		local temp, tmin, tmax = self.space:GetTemperature(90)
+		-- local rain, rmin, rmax = self.space:GetRainfall(90)
+		-- local temp, tmin, tmax = self.space:GetTemperature(90)
 		if self.subSize == 1 then
-			self.polarTemps = { temp }
-			self.polarRains = { rain }
+			self.polarTemps = {0} -- { temp }
+			self.polarRains = {0} -- { rain }
 		else
-			local ptSubInc = (tmax - tmin) / (self.subSize - 1)
-			local prSubInc = (rmax - rmin) / (self.subSize - 1)
+			-- local ptSubInc = (tmax - tmin) / (self.subSize - 1)
+			-- local prSubInc = (rmax - rmin) / (self.subSize - 1)
 			for si = 1, self.subSize do
-				local temp = tmin + (ptSubInc * (si-1))
+				-- local temp = tmin + (ptSubInc * (si-1))
+				local temp = 0
+				local rain = 0
 				tInsert(self.polarTemps, temp)
-				local rain = rmin + (prSubInc * (si-1))
+				-- local rain = rmin + (prSubInc * (si-1))
 				tInsert(self.polarRains, rain)
 			end
 		end
@@ -1709,29 +1727,10 @@ function Region:CreateCollection()
 end
 
 function Region:GiveLatitude()
-	--[[
-	self.minLatitude, self.maxLatitude = 90, 0
-	for i, polygon in pairs(self.polygons) do
-		if polygon.minLatitude < self.minLatitude then self.minLatitude = polygon.minLatitude end
-		if polygon.maxLatitude > self.maxLatitude then self.maxLatitude = polygon.maxLatitude end
-	end
-	]]--
 	local polygon = tGetRandom(self.polygons)
 	self.latitude = polygon.latitude
 	self.minLatitude, self.maxLatitude = polygon.minLatitude, polygon.maxLatitude
 	self.representativePolygon = polygon
-	--[[
-	if self.space.useMapLatitudes then
-		for i, polygon in pairs(self.polygons) do
-			if polygon.polar then
-				self.polar = true
-				return mFloor((polygon.latitude + 90) / 2)
-			end
-		end
-	end
-	local polygon = tGetRandom(self.polygons)
-	return mFloor(polygon.latitude)
-	]]--
 end
 
 function Region:WithinBounds(thing, temperature, rainfall)
@@ -1966,7 +1965,7 @@ Space = class(function(a)
 	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 100 -- highest temperature possible (plus or minus temperatureMaxDeviation)
-	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
+	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.temperatureMaxDeviation = 12 -- how much at maximum can a temperature deviate from its avg
 	a.rainfallDice = 1 -- just like temperature above
 	a.rainfallMaxDeviation = 16 -- just like temperature above
@@ -4398,7 +4397,7 @@ end
 function Space:GetTemperature(latitude)
 	local rise = self.temperatureMax - self.temperatureMin
 	local temp, temp2
-	if latitude then
+	if latitude and not self.crazyClimate then
 		local distFromPole = (90 - latitude) ^ self.polarExponent
 		temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
 	else
@@ -4412,7 +4411,7 @@ end
 
 function Space:GetRainfall(latitude)
 	local rain, rain2
-	if latitude then
+	if latitude and not self.crazyClimate then
 		if latitude > 75 then -- polar
 			rain = (self.rainfallMidpoint/4) + ( (self.rainfallPlusMinus/4) * (mCos((mPi/15) * (latitude+15))) )
 		elseif latitude > 37.5 then -- temperate

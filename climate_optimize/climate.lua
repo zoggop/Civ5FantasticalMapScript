@@ -62,6 +62,24 @@ Climate = class(function(a, regions, subRegions)
 	end
 end)
 
+function Climate:ReloadRegions(regions, isSub)
+	if isSub then
+		self.subPointSet = PointSet(self, nil, true)
+	else
+		self.pointSet = PointSet(self)
+	end
+	for i, region in pairs(regions) do
+		for ii, p in pairs(region.points) do
+			local point = Point(region, p.t, p.r)
+			if isSub then
+				self.subPointSet:AddPoint(point)
+			else
+				self.pointSet:AddPoint(point)
+			end
+		end
+	end
+end
+
 function Climate:Fill()
 	if self.pointSet:Fill() then
 		self:GiveRegionsExcessAreas(self.regions)
@@ -124,6 +142,7 @@ function Climate:Optimize()
 			self.subPointSet:Fill()
 			self:GiveRegionsExcessAreas(self.subRegions)
 			self.subPointSet:GiveDistance()
+			mutated = false
 		end
 		-- print(self.subPointSet.distance)
 	end
