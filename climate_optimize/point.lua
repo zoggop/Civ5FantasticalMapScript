@@ -28,6 +28,7 @@ function Point:ResetFillState()
 	self.latitudeArea = 0
 	self.region.area = 0
 	self.area = 0
+	self.minT, self.maxT, self.minR, self.maxR = 100, 0, 100, 0
 	self.neighbors = {}
 	self.lowT, self.highT, self.lowR, self.highR = nil, nil, nil, nil
 	self.superRegionAreas, self.superRegionLatitudeAreas = {}, {}
@@ -152,6 +153,10 @@ function Point:FillOkay()
 	if self.region.noHighT and self.highT then return false, "highT" end
 	if self.region.noLowR and self.lowR then return false, "lowR" end
 	if self.region.noHighR and self.highR then return false, "highR" end
+	if self.region.maxR and self.maxR > self.region.maxR then return false, "maxR" end
+	if self.region.minR and self.minR < self.region.minR then return false, "minR" end
+	if self.region.maxT and self.maxT > self.region.maxT then return false, "maxT" end
+	if self.region.minT and self.minT < self.region.minT then return false, "minT" end
 	for regionName, relation in pairs(self.region.relations) do
 		local relatedRegion = self.pointSet.climate.regionsByName[regionName]
 		if relatedRegion then

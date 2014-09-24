@@ -38,3 +38,9 @@ function TempRainDist(t1, r1, t2, r2)
 	local rdist = mAbs(r2 - r1)
 	return tdist^2 + rdist^2
 end
+
+function DisplayToGrid(x, y)
+	local t = mFloor( x / displayMult )
+	local r = mFloor( (displayMultHundred - y) / displayMult  )
+	return t, r
+end

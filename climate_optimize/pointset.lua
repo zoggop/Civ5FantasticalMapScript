@@ -98,6 +98,10 @@ function PointSet:FillGrid()
 			if t == 100 then point.highT = true end
 			if r == 0 then point.lowR = true end
 			if r == 100 then point.highR = true end
+			if t > point.maxT then point.maxT = t end
+			if t < point.minT then point.minT = t end
+			if r > point.maxR then point.maxR = r end
+			if r < point.minR then point.minR = r end
 			if self.grid[t][r-1] and self.grid[t][r-1] ~= point then
 				point.neighbors[self.grid[t][r-1]] = true
 				self.grid[t][r-1].neighbors[point] = true

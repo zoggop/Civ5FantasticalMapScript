@@ -2,7 +2,7 @@ require "common"
 require "pointset"
 require "point"
 
-Climate = class(function(a, regions, subRegions)
+Climate = class(function(a, regions, subRegions, parentClimate)
 	a.temperatureMin = 0
 	a.temperatureMax = 100
 	a.polarExponent = 1.2
@@ -33,31 +33,42 @@ Climate = class(function(a, regions, subRegions)
 	a.regions = regions
 	a.subRegions = subRegions
 	a.regionsByName = {}
-	a.allRegions = {}
-	a.pointSet = PointSet(a)
-	for i, region in pairs(regions) do
-		region.targetLatitudeArea = region.targetArea * a.totalLatitudes
-		region.targetArea = region.targetArea * 10000
-		for ii, p in pairs(region.points) do
-			local point = Point(region, p.t, p.r)
-			a.pointSet:AddPoint(point)
+	if regions then
+		a.pointSet = PointSet(a)
+		for i, region in pairs(regions) do
+			region.targetLatitudeArea = region.targetArea * a.totalLatitudes
+			region.targetArea = region.targetArea * 10000
+			for ii, p in pairs(region.points) do
+				local point = Point(region, p.t, p.r)
+				a.pointSet:AddPoint(point)
+			end
+			a.regionsByName[region.name] = region
 		end
-		a.regionsByName[region.name] = region
+	elseif parentClimate then
+		a.pointSet = parentClimate.pointSet
+		a.regions = parentClimate.regions
+		a.regionsByName = parentClimate.regionsByName
 	end
-	a.subPointSet = PointSet(a, nil, true)
-	for i, region in pairs(subRegions) do
-		region.targetLatitudeArea = region.targetArea * a.totalLatitudes
-		region.targetArea = region.targetArea * 10000
-		for ii, p in pairs(region.points) do
-			local point = Point(region, p.t, p.r)
-			a.subPointSet:AddPoint(point)
+	if subRegions then
+		a.subPointSet = PointSet(a, nil, true)
+		for i, region in pairs(subRegions) do
+			region.targetLatitudeArea = region.targetArea * a.totalLatitudes
+			region.targetArea = region.targetArea * 10000
+			for ii, p in pairs(region.points) do
+				local point = Point(region, p.t, p.r)
+				a.subPointSet:AddPoint(point)
+			end
+			a.regionsByName[region.name] = region
 		end
-		a.regionsByName[region.name] = region
+	elseif parentClimate then
+		a.subPointSet = parentClimate.subPointSet
 	end
-	for i, region in pairs(regions) do
+	for i, region in pairs(a.regions) do
 		region.subRegions = {}
 		for ii, subRegionName in pairs(region.subRegionNames) do
-			region.subRegions[a.regionsByName[subRegionName]] = true
+			if a.regionsByName[subRegionName] then
+				region.subRegions[a.regionsByName[subRegionName]] = true
+			end
 		end
 	end
 end)

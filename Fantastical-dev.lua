@@ -820,23 +820,8 @@ local function SetConstants()
 	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
 
 --[[
-less snow
-grassland: 84,52
-grassland: 59,85
-plains: 51,23
-plains: 15,50
-desert: 19,9
-desert: 56,0
-tundra: 3,28
-tundra: 2,60
-snow: 0,0
-none: 55,44
-forest: 46,59
-jungle: 84,86
-marsh: 31,74
-oasis: 81,50
 
-440 1023
+scores 440 1023
 grassland: 86,67
 grassland: 62,80
 plains: 52,18
@@ -851,6 +836,24 @@ forest: 38,66
 jungle: 94,93
 marsh: 34,71
 oasis: 82,52
+
+scores 380 1021
+ more grassland: (realized i count jungle as grassland)
+grassland: 49,66
+desert: 23,1
+plains: 21,61
+snow: 0,64
+tundra: 9,62
+grassland: 88,54
+tundra: 14,22
+desert: 59,8
+snow: 1,24
+plains: 61,21
+jungle: 84,100
+oasis: 100,52
+none: 61,33
+marsh: 41,73
+forest: 45,68
 ]]--
 
 	TerrainDictionary = {

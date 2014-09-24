@@ -1,6 +1,19 @@
 require "common"
 require "climate"
 
+--[[
+grassland: 49,66
+desert: 23,1
+plains: 21,61
+snow: 0,64
+tundra: 9,62
+grassland: 88,54
+tundra: 14,22
+desert: 59,8
+snow: 1,24
+plains: 61,21
+]]--
+
 local terrainRegions = {
 	{ name = "grassland", targetArea = 0.40, highT = true, highR = true,
 		points = {
@@ -15,7 +28,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.32, noLowT = true, noLowR = true,
+	{ name = "plains", targetArea = 0.30, noLowT = true, noLowR = true,
 		points = {
 			{t = 75, r = 50},
 			{t = 50, r = 75}
@@ -41,27 +54,29 @@ local terrainRegions = {
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.1, lowT = true,
+	{ name = "tundra", targetArea = 0.1, noLowR = true,
 		points = {
-			{t = 0, r = 25},
-			{t = 0, r = 75}
+			{t = 3, r = 25},
+			{t = 1, r = 75}
 		},
 		relations = {
 			desert = {t = -1},
 			plains = {t = -1},
-			-- snow = {r = 1},
+			snow = {t = 1},
 			grassland = {n = -1},
 		},
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.05, fixed = true, lowT = true, lowR = true,
+	{ name = "snow", targetArea = 0.07, lowT = true, maxR = 75,
 		points = {
-			{t = 0, r = 0}
+			{t = 0, r = 25},
+			{t = 0, r = 70},
 		},
 		subRegionNames = {"none"},
 		relations = {
-			-- tundra = {r = -1},
+			tundra = {t = -1},
+			plains = {n = -1},
 		},
 		color = {127, 127, 127}
 	},
@@ -113,26 +128,62 @@ local featureRegions = {
 	},
 }
 
+nullFeatureRegions = {
+	{ name = "none", targetArea = 1.0,
+		points = {
+			{t = 50, r = 50},
+		},
+		relations = {},
+		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
+		color = {255, 255, 255, 0}
+	},
+}
+
 local myClimate
 
 function love.load()
     love.window.setMode(displayMult * 100 + 200, displayMult * 100 + 100, {resizable=false, vsync=false})
-    myClimate = Climate(terrainRegions, featureRegions)
+    myClimate = Climate(terrainRegions, nullFeatureRegions)
+end
+
+function love.keyreleased(key)
+	if key == "c" then
+		local output = ""
+		for i, point in pairs(myClimate.pointSet.points) do
+			output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
+		end
+		for i, point in pairs(myClimate.subPointSet.points) do
+			output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
+		end
+		love.system.setClipboardText( output )
+	elseif key == "f" then
+		myClimate = Climate(nil, featureRegions, myClimate)
+	end
+end
+
+local buttonPointSets = { l = 'pointSet', r = 'subPointSet' }
+local mousePress = {}
+local mousePoint = {}
+local mousePointOriginalPosition = {}
+
+function love.mousepressed(x, y, button)
+	if buttonPointSets[button] then
+		local t, r = DisplayToGrid(x, y)
+		local point = myClimate[buttonPointSets[button]]:NearestPoint(t, r)
+		mousePoint[button] = point
+		mousePointOriginalPosition[button] = { t = point.t, r = point.r }
+		point.fixed = true
+	end
+	mousePress[button] = {x = x, y = y}
 end
 
 function love.mousereleased(x, y, button)
-   if button == 'l' then
-   		local output = ""
-	   for i, point in pairs(myClimate.pointSet.points) do
-	   		output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
-	   end
-	   for i, point in pairs(myClimate.subPointSet.points) do
-	   		output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
-	   end
-	   love.system.setClipboardText( output )
-   elseif button == 'r' then
-   		myClimate = Climate(terrainRegions)
-   end
+	if mousePoint[button] then
+		mousePoint[button].fixed = false
+	end
+	mousePoint[button] = nil
+	mousePress[button] = nil
+	mousePointOriginalPosition[button] = nil
 end
 
 function love.draw()
@@ -153,7 +204,7 @@ function love.draw()
 	for t, rains in pairs(myClimate.subPointSet.grid) do
 		for r, point in pairs(rains) do
 			if point.t == t and point.r == r then
-				love.graphics.setColor( 255, 0, 255 )
+				love.graphics.setColor( 255, 255, 255 )
 				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 			else
 				love.graphics.setColor( point.region.color )
@@ -171,11 +222,20 @@ function love.draw()
 		love.graphics.print(region.name .. "\n" .. (region.stableLatitudeArea or "nil") .. "/" .. mFloor(region.targetLatitudeArea) .. "\n" .. (region.stableArea or "nil") .. "/" .. mFloor(region.targetArea) .. "\n", displayMultHundred+70, y)
 		y = y + 50
 	end
-	love.graphics.setColor( 255, 255, 255 )
 	for i, point in pairs(myClimate.pointSet.points) do
+		if point.fixed then
+			love.graphics.setColor( 255, 0, 255 )
+		else
+			love.graphics.setColor( 255, 255, 255 )
+		end
 		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
 	end
 	for i, point in pairs(myClimate.subPointSet.points) do
+		if point.fixed then
+			love.graphics.setColor( 255, 0, 255 )
+		else
+			love.graphics.setColor( 255, 255, 255 )
+		end
 		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
 	end
 	love.graphics.setColor(255, 0, 0)
@@ -183,6 +243,14 @@ function love.draw()
 end
 
 function love.update(dt)
+	for button, point in pairs(mousePoint) do
+		local curT, curR = DisplayToGrid(love.mouse.getX(), love.mouse.getY())
+		local pressT, pressR = DisplayToGrid(mousePress[button].x, mousePress[button].y)
+		local dt = curT - pressT
+		local dr = curR - pressR
+		point.t = mMax(0, mMin(100, mousePointOriginalPosition[button].t + dt))
+		point.r = mMax(0, mMin(100, mousePointOriginalPosition[button].r + dr))
+	end
 	myClimate:Optimize()
    love.window.setTitle( myClimate.iterations .. " " .. myClimate.pointSet.generation .. " " .. mFloor(myClimate.pointSet.distance or 0) .. " (" .. myClimate.subPointSet.generation .. " " .. mFloor(myClimate.subPointSet.distance or 0) ..") " .. myClimate.mutationStrength )
 end
