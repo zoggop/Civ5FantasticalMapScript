@@ -65,3 +65,9 @@ function string:split( inSplitPattern, outResults )
   table.insert( outResults, string.sub( self, theStart ) )
   return outResults
 end
+
+function stringCapitalize(string)
+	local first = string:sub(1,1)
+	first = string.upper(first)
+	return first .. string:sub(2)
+end

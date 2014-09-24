@@ -100,9 +100,19 @@ end
 function Climate:Fill()
 	if self.pointSet:Fill() then
 		self:GiveRegionsExcessAreas(self.regions)
+		self.pointSet:GiveDistance()
 	end
 	if self.subPointSet:Fill() then
 		self:GiveRegionsExcessAreas(self.subRegions)
+		self.subPointSet:GiveDistance()
+	end
+	for i, region in pairs(self.regions) do
+		region.stableArea = region.area + 0
+		region.stableLatitudeArea = region.latitudeArea + 0
+	end
+	for i, region in pairs(self.subRegions) do
+		region.stableArea = region.area + 0
+		region.stableLatitudeArea = region.latitudeArea + 0
 	end
 end
 
@@ -196,5 +206,6 @@ function Climate:GetRainfall(latitude)
 	else -- tropics and desert
 		rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/25)))
 	end
+	rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
 	return mFloor(rain)
 end

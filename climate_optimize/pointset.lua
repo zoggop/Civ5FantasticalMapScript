@@ -48,7 +48,10 @@ function PointSet:AddPoint(point)
 	point:ResetFillState()
 	point.pointSet = self
 	point.isSub = self.isSub
-	if point.region.name == "none" then self.defaultPoint = point end
+	if point.region.name == "none" then
+		print("got default point")
+		self.defaultPoint = point
+	end
 end
 
 function PointSet:NearestPoint(t, r)
@@ -134,6 +137,7 @@ function PointSet:FillLatitudes()
 			point.superRegionLatitudeAreas[superPoint.region] = (point.superRegionLatitudeAreas[superPoint.region] or 0) + 1
 			point.region.superRegionLatitudeAreas[superPoint.region] = (point.region.superRegionLatitudeAreas[superPoint.region] or 0) + 1
 		end
+		if not point then print(#self.points) end
 		self.latitudes[l] = point
 		point.region.latitudeArea = point.region.latitudeArea + 1
 		point.latitudeArea = point.latitudeArea + 1

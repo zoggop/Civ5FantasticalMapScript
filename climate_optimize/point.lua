@@ -174,7 +174,7 @@ function Point:FillOkay()
 	if self.region.contiguous then
 		for i, point in pairs(self.pointSet.points) do
 			if point ~= self and point.region == self.region then
-				if not point.neighbors[self] then return false, "not contiguous" end
+ 				if not point.neighbors[self] then return false, "not contiguous" end
 			end
 		end
 	end

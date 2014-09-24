@@ -15,7 +15,7 @@ plains: 61,21
 ]]--
 
 local terrainRegions = {
-	{ name = "grassland", targetArea = 0.40, highT = true, highR = true,
+	{ name = "grassland", targetArea = 0.36, highT = true, highR = true,
 		points = {
 			{t = 100, r = 75},
 			{t = 75, r = 100}
@@ -28,7 +28,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.30, noLowT = true, noLowR = true,
+	{ name = "plains", targetArea = 0.26, noLowT = true, noLowR = true,
 		points = {
 			{t = 75, r = 50},
 			{t = 50, r = 75}
@@ -41,7 +41,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest"},
 		color = {127, 127, 0}
 	},
-	{ name = "desert", targetArea = 0.13, lowR = true,
+	{ name = "desert", targetArea = 0.195, lowR = true,
 		points = {
 			{t = 25, r = 0},
 			{t = 75, r = 0}
@@ -54,7 +54,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.1, noLowR = true, contiguous = true,
+	{ name = "tundra", targetArea = 0.13, noLowR = true, contiguous = true,
 		points = {
 			{t = 3, r = 25},
 			{t = 1, r = 75}
@@ -68,7 +68,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.07, lowT = true, maxR = 75, contiguous = true,
+	{ name = "snow", targetArea = 0.065, lowT = true, maxR = 75, contiguous = true,
 		points = {
 			{t = 0, r = 25},
 			{t = 0, r = 70},
@@ -81,6 +81,8 @@ local terrainRegions = {
 		color = {127, 127, 127}
 	},
 }
+
+-- 
 
 local featureRegions = {
 	{ name = "none", targetArea = 0.70,
@@ -140,6 +142,7 @@ nullFeatureRegions = {
 }
 
 local myClimate
+local paused
 
 function love.load()
     love.window.setMode(displayMult * 100 + 200, displayMult * 100 + 100, {resizable=false, vsync=false})
@@ -163,6 +166,36 @@ function love.keyreleased(key)
 			local success = love.filesystem.write( "points.txt", output )
 			if success then print('points.txt written') end
 		end
+	elseif key == "o" then
+		-- [terrainGrass] = { points = {{t=47,r=76}, {t=73,r=58}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		local block = ""
+		for r, region in pairs(myClimate.regions) do
+			local line = region.name .. " {"
+			for i, point in pairs(myClimate.pointSet.points) do
+				if point.region == region then
+					local part = "{t=" .. point.t .. ",r=" .. point.r .. "}, "
+					line = line .. part
+				end
+			end
+			line = line:sub(1, -3)
+			line = line .. "}"
+			block = block .. line .. "\n"
+		end
+		for r, region in pairs(myClimate.subRegions) do
+			local line = region.name .. " {"
+			for i, point in pairs(myClimate.subPointSet.points) do
+				if point.region == region then
+					local part = "{t=" .. point.t .. ",r=" .. point.r .. "}, "
+					line = line .. part
+				end
+			end
+			line = line:sub(1, -3)
+			line = line .. "}"
+			block = block .. line .. "\n"
+		end
+		love.system.setClipboardText( block )
+	elseif key == " " then
+		paused = not paused
 	elseif key == "f" then
 		myClimate = Climate(nil, featureRegions, myClimate)
 	elseif key == "l" or key == "v" then
@@ -171,37 +204,43 @@ function love.keyreleased(key)
 		if key == "l" then
 			if love.filesystem.exists( "points.txt" ) then
 				print('points.txt exists')
-				lines = love.filesystem.lines("points.txt")
+				lines = {}
+				for line in love.filesystem.lines("points.txt") do
+					tInsert(lines, line)
+				end
 			end
 		elseif key == "v" then
 			local clipText = love.system.getClipboardText()
-			local clipLines = clipText:split("\n")
-			if #clipLines > 0 then
-				lines = pairs(clipLines)
-			end
+			lines = clipText:split("\n")
 		end
 		if lines then
 			myClimate.pointSet = PointSet(myClimate)
 			myClimate.subPointSet = PointSet(myClimate, nil, true)
-			for line in love.filesystem.lines("points.txt") do
+			for i, line in pairs(lines) do
 				local words = splitIntoWords(line)
-				local regionName = words[1]
-				local tr = {}
-				for i, n in pairs(words[2]:split(",")) do tInsert(tr, n) end
-				local t, r = tr[1], tr[2]
-				print(regionName, t, r)
-				local region = myClimate.subRegionsByName[regionName] or myClimate.superRegionsByName[regionName]
-				if region then
-					if region.isSub then
-						pointSet = myClimate.subPointSet
-					else
-						pointSet = myClimate.pointSet
+				if #words > 1 then
+					local regionName = words[1]
+					local tr = {}
+					for i, n in pairs(words[2]:split(",")) do tInsert(tr, n) end
+					if #tr > 1 then
+						local t, r = tonumber(tr[1]), tonumber(tr[2])
+						print(regionName, t, r, type(regionName), type(t), type(r))
+						local region = myClimate.subRegionsByName[regionName] or myClimate.superRegionsByName[regionName]
+						if region then
+							if myClimate.subRegionsByName[regionName] then
+								pointSet = myClimate.subPointSet
+								print("sub")
+							elseif myClimate.superRegionsByName[regionName] then
+								pointSet = myClimate.pointSet
+								print("super")
+							end
+							local point = Point(region, t, r)
+							pointSet:AddPoint(point)
+						end
 					end
-					local point = Point(region, t, r)
-					pointSet:AddPoint(point)
 				end
 			end
-			print('points loaded from file')
+			print('points loaded')
 		end
 	end
 end
@@ -238,6 +277,9 @@ function love.mousepressed(x, y, button)
 			end
 			myClimate:GiveRegionsExcessAreas(regions)
 			pointSet:GiveDistance()
+		elseif love.keyboard.isDown('lalt') then
+			-- fix or unfix the point
+			point.fixed = not point.fixed
 		else
 			mousePoint[button] = point
 			mousePointOriginalPosition[button] = { t = point.t, r = point.r }
@@ -309,7 +351,7 @@ function love.draw()
 		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
 	end
 	love.graphics.setColor(255, 0, 0)
-	love.graphics.print(myClimate.nearestString, 10, displayMultHundred + 70)
+	love.graphics.print(mFloor(myClimate.pointSet.distance or "nil") .. " " .. mFloor(myClimate.subPointSet.distance or "nil"), 10, displayMultHundred + 70)
 end
 
 function love.update(dt)
@@ -321,6 +363,10 @@ function love.update(dt)
 		point.t = mMax(0, mMin(100, mousePointOriginalPosition[button].t + dt))
 		point.r = mMax(0, mMin(100, mousePointOriginalPosition[button].r + dr))
 	end
-	myClimate:Optimize()
+	if paused then
+		myClimate:Fill()
+	else
+		myClimate:Optimize()
+	end
    love.window.setTitle( myClimate.iterations .. " " .. myClimate.pointSet.generation .. " " .. mFloor(myClimate.pointSet.distance or 0) .. " (" .. myClimate.subPointSet.generation .. " " .. mFloor(myClimate.subPointSet.distance or 0) ..") " .. myClimate.mutationStrength )
 end
