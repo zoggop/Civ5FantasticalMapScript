@@ -33,16 +33,20 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 	a.regions = regions
 	a.subRegions = subRegions
 	a.regionsByName = {}
+	a.subRegionsByName = {}
+	a.superRegionsByName = {}
 	if regions then
 		a.pointSet = PointSet(a)
 		for i, region in pairs(regions) do
 			region.targetLatitudeArea = region.targetArea * a.totalLatitudes
 			region.targetArea = region.targetArea * 10000
+			region.isSub = false
 			for ii, p in pairs(region.points) do
 				local point = Point(region, p.t, p.r)
 				a.pointSet:AddPoint(point)
 			end
 			a.regionsByName[region.name] = region
+			a.superRegionsByName[region.name] = region
 		end
 	elseif parentClimate then
 		a.pointSet = parentClimate.pointSet
@@ -52,6 +56,7 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 	if subRegions then
 		a.subPointSet = PointSet(a, nil, true)
 		for i, region in pairs(subRegions) do
+			region.isSub = true
 			region.targetLatitudeArea = region.targetArea * a.totalLatitudes
 			region.targetArea = region.targetArea * 10000
 			for ii, p in pairs(region.points) do
@@ -59,6 +64,7 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 				a.subPointSet:AddPoint(point)
 			end
 			a.regionsByName[region.name] = region
+			a.subRegionsByName[region.name] = region
 		end
 	elseif parentClimate then
 		a.subPointSet = parentClimate.subPointSet

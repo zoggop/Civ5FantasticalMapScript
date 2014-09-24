@@ -5,6 +5,8 @@ Point = class(function(a, region, t, r, parentPoint, cloneParent)
 	a.t = t
 	a.r = r
 	a.generation = 0
+	a.tMove, a.rMove, a.tMoveCount, a.rMoveCount = 0, 0, 0, 0
+	a.neighCount = 0
 	if parentPoint then
 		-- mutation
 		if parentPoint.region.fixed or cloneParent then
@@ -166,6 +168,13 @@ function Point:FillOkay()
 						if self.neighbors[rPoint] then return false, "bad neighbor: " .. rPoint.region.name end
 					end
 				end
+			end
+		end
+	end
+	if self.region.contiguous then
+		for i, point in pairs(self.pointSet.points) do
+			if point ~= self and point.region == self.region then
+				if not point.neighbors[self] then return false, "not contiguous" end
 			end
 		end
 	end

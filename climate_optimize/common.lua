@@ -44,3 +44,24 @@ function DisplayToGrid(x, y)
 	local r = mFloor( (displayMultHundred - y) / displayMult  )
 	return t, r
 end
+
+function splitIntoWords(s)
+  local words = {}
+  for w in s:gmatch("%S+") do tInsert(words, w) end
+  return words
+end
+
+function string:split( inSplitPattern, outResults )
+  if not outResults then
+    outResults = { }
+  end
+  local theStart = 1
+  local theSplitStart, theSplitEnd = string.find( self, inSplitPattern, theStart )
+  while theSplitStart do
+    table.insert( outResults, string.sub( self, theStart, theSplitStart-1 ) )
+    theStart = theSplitEnd + 1
+    theSplitStart, theSplitEnd = string.find( self, inSplitPattern, theStart )
+  end
+  table.insert( outResults, string.sub( self, theStart ) )
+  return outResults
+end

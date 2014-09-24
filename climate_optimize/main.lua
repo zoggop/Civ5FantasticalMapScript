@@ -54,7 +54,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.1, noLowR = true,
+	{ name = "tundra", targetArea = 0.1, noLowR = true, contiguous = true,
 		points = {
 			{t = 3, r = 25},
 			{t = 1, r = 75}
@@ -68,7 +68,7 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.07, lowT = true, maxR = 75,
+	{ name = "snow", targetArea = 0.07, lowT = true, maxR = 75, contiguous = true,
 		points = {
 			{t = 0, r = 25},
 			{t = 0, r = 70},
@@ -147,17 +147,62 @@ function love.load()
 end
 
 function love.keyreleased(key)
-	if key == "c" then
+	if key == "c" or key == "s" then
 		local output = ""
 		for i, point in pairs(myClimate.pointSet.points) do
-			output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
+			output = output .. point.region.name .. " " .. point.t .. "," .. point.r .. "\n"
 		end
 		for i, point in pairs(myClimate.subPointSet.points) do
-			output = output .. point.region.name .. ": " .. point.t .. "," .. point.r .. "\n"
+			output = output .. point.region.name .. " " .. point.t .. "," .. point.r .. "\n"
 		end
-		love.system.setClipboardText( output )
+		if key == "c" then
+			-- save points to clipboard
+			love.system.setClipboardText( output )
+		elseif key == "s" then
+			-- save points to file
+			local success = love.filesystem.write( "points.txt", output )
+			if success then print('points.txt written') end
+		end
 	elseif key == "f" then
 		myClimate = Climate(nil, featureRegions, myClimate)
+	elseif key == "l" or key == "v" then
+		-- load points from file
+		local lines
+		if key == "l" then
+			if love.filesystem.exists( "points.txt" ) then
+				print('points.txt exists')
+				lines = love.filesystem.lines("points.txt")
+			end
+		elseif key == "v" then
+			local clipText = love.system.getClipboardText()
+			local clipLines = clipText:split("\n")
+			if #clipLines > 0 then
+				lines = pairs(clipLines)
+			end
+		end
+		if lines then
+			myClimate.pointSet = PointSet(myClimate)
+			myClimate.subPointSet = PointSet(myClimate, nil, true)
+			for line in love.filesystem.lines("points.txt") do
+				local words = splitIntoWords(line)
+				local regionName = words[1]
+				local tr = {}
+				for i, n in pairs(words[2]:split(",")) do tInsert(tr, n) end
+				local t, r = tr[1], tr[2]
+				print(regionName, t, r)
+				local region = myClimate.subRegionsByName[regionName] or myClimate.superRegionsByName[regionName]
+				if region then
+					if region.isSub then
+						pointSet = myClimate.subPointSet
+					else
+						pointSet = myClimate.pointSet
+					end
+					local point = Point(region, t, r)
+					pointSet:AddPoint(point)
+				end
+			end
+			print('points loaded from file')
+		end
 	end
 end
 
@@ -169,10 +214,35 @@ local mousePointOriginalPosition = {}
 function love.mousepressed(x, y, button)
 	if buttonPointSets[button] then
 		local t, r = DisplayToGrid(x, y)
-		local point = myClimate[buttonPointSets[button]]:NearestPoint(t, r)
-		mousePoint[button] = point
-		mousePointOriginalPosition[button] = { t = point.t, r = point.r }
-		point.fixed = true
+		local pointSet = myClimate[buttonPointSets[button]]
+		local point = pointSet:NearestPoint(t, r)
+		if love.keyboard.isDown( 'lctrl' ) then
+			if love.keyboard.isDown( 'lshift' ) then
+				-- delete a point
+				for i = #point.pointSet.points, 1, -1 do
+					if point.pointSet.points[i] == point then
+						tRemove(point.pointSet.points, i)
+						break
+					end
+				end
+			else
+				-- insert a point
+				local insertPoint = Point(point.region, t, r)
+				pointSet:AddPoint(insertPoint)
+			end
+			pointSet:Fill()
+			if pointSet.isSub then
+				regions = myClimate.subRegions
+			else
+				regions = myClimate.regions
+			end
+			myClimate:GiveRegionsExcessAreas(regions)
+			pointSet:GiveDistance()
+		else
+			mousePoint[button] = point
+			mousePointOriginalPosition[button] = { t = point.t, r = point.r }
+			point.fixed = true
+		end
 	end
 	mousePress[button] = {x = x, y = y}
 end

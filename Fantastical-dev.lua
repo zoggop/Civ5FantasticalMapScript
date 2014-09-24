@@ -837,31 +837,31 @@ jungle: 94,93
 marsh: 34,71
 oasis: 82,52
 
-scores 380 1021
- more grassland: (realized i count jungle as grassland)
-grassland: 49,66
-desert: 23,1
-plains: 21,61
-snow: 0,64
-tundra: 9,62
-grassland: 88,54
-tundra: 14,22
-desert: 59,8
-snow: 1,24
-plains: 61,21
-jungle: 84,100
-oasis: 100,52
-none: 61,33
-marsh: 41,73
-forest: 45,68
+snow 0,69
+snow 2,23
+grassland 50,77
+desert 20,2
+desert 55,0
+plains 41,34
+grassland 57,47
+plains 29,74
+tundra 4,72
+plains 54,24
+tundra 14,23
+forest 46,69
+none 58,28
+jungle 98,100
+oasis 100,47
+marsh 45,71
+
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=86,r=63}, {t=60,r=81}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=56,r=18}, {t=17,r=54}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=30,r=17}, {t=64,r=4}}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { points = {{t=7,r=31}, {t=0,r=64}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { points = {{t=0,r=31}}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=50,r=77}, {t=57,r=77}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=54,r=24}, {t=29,r=74}, {t=41,r=34}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=20,r=2}, {t=55,r=0}}, features = { featureNone, featureOasis, featureFallout } },
+		[terrainTundra] = { points = {{t=4,r=72}, {t=14,r=23}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=69}, {t=2,r=23}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
