@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 8
+-- version 9
 
 --------------------------------------------------------------
 if include == nil then
@@ -67,6 +67,7 @@ end
 
 local randomNumbers = 0
 
+-- uses civ's Map.Rand function to generate random numbers so that multiplayer works
 local function mRandom(lower, upper)
 	local hundredth
 	if lower and upper then
@@ -533,14 +534,15 @@ local OptionDictionary = {
 			-- sadly wrapY does not work
 		}
 	},
-	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 3,
+	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 4,
 	values = {
-			[1] = { name = "Zero", values = {0} },
-			[2] = { name = "One", values = {1} },
-			[3] = { name = "Two", values = {2} },
-			[4] = { name = "Three", values = {3} },
-			[5] = { name = "Four", values = {4} },
-			[6] = { name = "Random", values = "keys" },
+			[1] = { name = "No Oceans", values = {-1} },
+			[2] = { name = "No Major Oceans", values = {0} },
+			[3] = { name = "One", values = {1} },
+			[4] = { name = "Two", values = {2} },
+			[5] = { name = "Three", values = {3} },
+			[6] = { name = "Four", values = {4} },
+			[7] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
@@ -560,7 +562,13 @@ local OptionDictionary = {
 			[4] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "World Age", sortpriority = 5, keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	{ name = "Land at Poles", sortpriority = 5, keys = { "polarMaxLandRatio" }, default = 2,
+	values = {
+			[1] = { name = "No", values = {0.0} },
+			[2] = { name = "Yes", values = {0.15} },
+		}
+	},
+	{ name = "World Age", sortpriority = 6, keys = { "mountainRatio", "hillynessMax" }, default = 4,
 	values = {
 			[1] = { name = "1 Billion Years", values = {0.25, 75} },
 			[2] = { name = "2 Billion Years", values = {0.16, 60} },
@@ -571,33 +579,33 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Climate Realism", sortpriority = 6, keys = { "useMapLatitudes" }, default = 1,
+	{ name = "Climate Realism", sortpriority = 7, keys = { "useMapLatitudes" }, default = 1,
 	values = {
 			[1] = { name = "Off", values = {false} },
 			[2] = { name = "On", values = {true} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 7, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
-			[1] = { name = "Ice Age", values = {2.0, 0, 45} },
-			[2] = { name = "Cool", values = {1.4, 0, 85} },
+			[1] = { name = "Ice Age", values = {3, 0, 65} },
+			[2] = { name = "Cool", values = {2, 0, 80} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
 			[4] = { name = "Hot", values = {1.1, 5, 100} },
-			[5] = { name = "Jurassic", values = {0.9, 20, 100} },
+			[5] = { name = "Jurassic", values = {0.9, 10, 100} },
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 8, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
-			[1] = { name = "Wasteland", values = {13} },
-			[2] = { name = "Arid", values = {35} },
+			[1] = { name = "Wasteland", values = {16} },
+			[2] = { name = "Arid", values = {34} },
 			[3] = { name = "Normal", values = {50} },
-			[4] = { name = "Wet", values = {60} },
-			[5] = { name = "Waterlogged", values = {90} },
+			[4] = { name = "Wet", values = {58} },
+			[5] = { name = "Waterlogged", values = {63} },
 			[6] = { name = "Random", values = "values" },
 		}
 	},
-	{ name = "Fallout", sortpriority = 9, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
+	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
 	values = {
 			[1] = { name = "None", values = {false, false, false} },
 			[2] = { name = "A Bit", values = {true, false, false} },
@@ -606,7 +614,7 @@ local OptionDictionary = {
 			[5] = { name = "Contaminated Everything", values = {true, true, true} },
 		}
 	},
-	{ name = "Ancient Roads", sortpriority = 10, keys = { "roadCount" }, default = 2,
+	{ name = "Ancient Roads", sortpriority = 11, keys = { "roadCount" }, default = 2,
 	values = {
 			[1] = { name = "None", values = {0} },
 			[2] = { name = "Some", values = {5} },
@@ -809,26 +817,39 @@ local function SetConstants()
 		end
 	end
 
-	-- in temperature and rainfall, first number is minimum, seecond is maximum, third is midpoint (optional: it defaults to the average of min and max)
+--[[
+
+grassland {{t=95,r=22}, {t=71,r=66}, {t=66,r=25}, {t=64,r=32}}
+plains {{t=25,r=38}, {t=22,r=66}, {t=27,r=24}, {t=24,r=20}}
+desert {{t=95,r=13}, {t=26,r=0}, {t=61,r=0}, {t=37,r=0}, {t=24,r=16}, {t=76,r=2}}
+tundra {{t=7,r=0}, {t=5,r=63}, {t=6,r=38}, {t=8,r=17}, {t=7,r=66}}
+snow {{t=0,r=62}, {t=0,r=1}, {t=0,r=37}, {t=0,r=16}}
+none {{t=41,r=50}, {t=12,r=0}, {t=96,r=48}}
+forest {{t=41,r=100}, {t=13,r=72}}
+jungle {{t=96,r=100}}
+marsh}
+oasis}
+
+]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { temperature = {40, 100, 60}, rainfall = {20, 100, 50}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { temperature = {20, 60}, rainfall = {20, 100, 40}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { temperature = {20, 100}, rainfall = {0, 20, 0}, features = { featureNone, featureOasis, featureFallout } },
-		[terrainTundra] = { temperature = {0, 30, 5}, rainfall = {20, 100, 45}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { temperature = {0, 20, 0}, rainfall = {0, 20}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=95,r=22}, {t=71,r=66}, {t=66,r=25}, {t=64,r=32}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout }, specialFeature = featureMarsh },
+		[terrainPlains] = { points = {{t=25,r=38}, {t=22,r=66}, {t=27,r=24}, {t=24,r=20}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=95,r=13}, {t=26,r=0}, {t=61,r=0}, {t=37,r=0}, {t=24,r=16}, {t=76,r=2}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
+		[terrainTundra] = { points = {{t=7,r=0}, {t=5,r=63}, {t=6,r=38}, {t=8,r=17}, {t=7,r=66}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=62}, {t=0,r=1}, {t=0,r=37}, {t=0,r=16}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { temperature = {0, 85, 30}, rainfall = {50, 100, 90}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { temperature = {85, 100}, rainfall = {75, 100}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
-		[featureMarsh] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 10, limitRatio = 0.33, hill = false },
-		[featureOasis] = { temperature = {50, 100}, rainfall = {0, 100}, percent = 20, limitRatio = 0.01, hill = false },
-		[featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 18, limitRatio = 0.75, hill = true },
+		[featureNone] = { points = {{t=32,r=52}, {t=12,r=0}, {t=97,r=60}, {t=46,r=66}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=44,r=100}, {t=0,r=60}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=96,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureMarsh] = { points = {}, percent = 10, limitRatio = 0.33, hill = false },
+		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
+		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -841,16 +862,33 @@ local function SetConstants()
 
 	-- for Alpha Centauri Maps:
 
+	--[[
+grassland {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}
+plains {{t=0,r=50}}
+desert {{t=100,r=0}, {t=73,r=0}}
+tundra}
+snow}
+none {{t=0,r=0}}
+forest}
+jungle {{t=100,r=100}}
+marsh {{t=82,r=61}}
+oasis}
+
+
+
+
+	]]--
+
 	TerrainDictionaryCentauri = {
-		[terrainGrass] = { temperature = {0, 100, 50}, rainfall = {0, 100, 50}, features = { featureNone, featureJungle, featureMarsh } },
-		[terrainPlains] = { temperature = {0, 100, 50}, rainfall = {0, 90, 35}, features = { featureNone, } },
-		[terrainDesert] = { temperature = {0, 100}, rainfall = {0, 6, 0}, features = { featureNone, } },
+		[terrainGrass] = { points = {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainPlains] = { points = {{t=0,r=50}}, features = { featureNone, } },
+		[terrainDesert] = { points = {{t=100,r=0}, {t=73,r=0}}, features = { featureNone, } },
 	}
 
 	FeatureDictionaryCentauri = {
-		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureJungle] = { temperature = {90, 100}, rainfall = {90, 100}, percent = 100, limitRatio = 0.95, hill = false },
-		[featureMarsh] = { temperature = {10, 90}, rainfall = {10, 90}, percent = 80, limitRatio = 0.95, hill = true },
+		[featureNone] = { points = {{t=0,r=0}}, percent = 100, limitRatio = -1, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.95, hill = false },
+		[featureMarsh] = { points = {{t=82,r=61}}, percent = 75, limitRatio = 0.95, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -1553,22 +1591,22 @@ end)
 function Region:GiveRainfall()
 	self.rainfallAvg = self.space:GetRainfall(self.latitude)
 	self.rainfallMin, self.rainfallMax = 100, 0
-	-- for p, polygon in pairs(self.polygons) do
 	local polygon = self.representativePolygon
-		for sp, subPolygon in pairs(polygon.subPolygons) do
-			local rain = self.space:GetRainfall(subPolygon.latitude)
-			if rain > self.rainfallMax then self.rainfallMax = rain end
-			if rain < self.rainfallMin then self.rainfallMin = rain end
-		end
-	-- end
+	for sp, subPolygon in pairs(polygon.subPolygons) do
+		local rain = self.space:GetRainfall(subPolygon.latitude)
+		if rain > self.rainfallMax then self.rainfallMax = rain end
+		if rain < self.rainfallMin then self.rainfallMin = rain end
+	end
+	local rainHigh = mRandom(self.rainfallMin+1, self.rainfallMax + self.space.rainfallMaxDeviation)
+	local rainLow = mRandom(self.rainfallMin - self.space.rainfallMaxDeviation, self.rainfallMax-1)
+	self.rainfallMax = mMin(100, rainHigh)
+	self.rainfallMin = mMax(0, rainLow)
 end
 
 function Region:CreateCollection()
 	-- get latitude (real or fake)
 	self:GiveLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
-	-- self.temperatureAvg, self.temperatureMin, self.temperatureMax = self.space:GetTemperature(self.latitude)
-	-- self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	self.temperatureAvg = self.space:GetTemperature(self.latitude)
 	local tempA, tempB = self.space:GetTemperature(self.maxLatitude), self.space:GetTemperature(self.minLatitude)
 	self.temperatureMin = mMin(tempA, tempB)
@@ -1637,18 +1675,20 @@ function Region:CreateCollection()
 		self.size = self.size + 1
 		self.polarTemps = {}
 		self.polarRains = {}
-		local rain, rmin, rmax = self.space:GetRainfall(90)
-		local temp, tmin, tmax = self.space:GetTemperature(90)
+		-- local rain, rmin, rmax = self.space:GetRainfall(90)
+		-- local temp, tmin, tmax = self.space:GetTemperature(90)
 		if self.subSize == 1 then
-			self.polarTemps = { temp }
-			self.polarRains = { rain }
+			self.polarTemps = {0} -- { temp }
+			self.polarRains = {0} -- { rain }
 		else
-			local ptSubInc = (tmax - tmin) / (self.subSize - 1)
-			local prSubInc = (rmax - rmin) / (self.subSize - 1)
+			-- local ptSubInc = (tmax - tmin) / (self.subSize - 1)
+			-- local prSubInc = (rmax - rmin) / (self.subSize - 1)
 			for si = 1, self.subSize do
-				local temp = tmin + (ptSubInc * (si-1))
+				-- local temp = tmin + (ptSubInc * (si-1))
+				local temp = 0
+				local rain = 0
 				tInsert(self.polarTemps, temp)
-				local rain = rmin + (prSubInc * (si-1))
+				-- local rain = rmin + (prSubInc * (si-1))
 				tInsert(self.polarRains, rain)
 			end
 		end
@@ -1685,29 +1725,10 @@ function Region:CreateCollection()
 end
 
 function Region:GiveLatitude()
-	--[[
-	self.minLatitude, self.maxLatitude = 90, 0
-	for i, polygon in pairs(self.polygons) do
-		if polygon.minLatitude < self.minLatitude then self.minLatitude = polygon.minLatitude end
-		if polygon.maxLatitude > self.maxLatitude then self.maxLatitude = polygon.maxLatitude end
-	end
-	]]--
 	local polygon = tGetRandom(self.polygons)
 	self.latitude = polygon.latitude
 	self.minLatitude, self.maxLatitude = polygon.minLatitude, polygon.maxLatitude
 	self.representativePolygon = polygon
-	--[[
-	if self.space.useMapLatitudes then
-		for i, polygon in pairs(self.polygons) do
-			if polygon.polar then
-				self.polar = true
-				return mFloor((polygon.latitude + 90) / 2)
-			end
-		end
-	end
-	local polygon = tGetRandom(self.polygons)
-	return mFloor(polygon.latitude)
-	]]--
 end
 
 function Region:WithinBounds(thing, temperature, rainfall)
@@ -1722,13 +1743,13 @@ end
 
 function Region:BoundsDistance(bounds, value)
 	local min, max, mid = bounds[1], bounds[2], bounds[3]
-	if value >= min and value <= max then
+	-- if value >= min and value <= max then
 		mid = mid or (min + max) / 2
 		return mAbs(value - mid)
-	else
-		if value > max then return 100 + (value - max) end
-		if value < min then return 100 + (min - value) end
-	end
+	-- else
+		-- if value > max then return 100 + (value - max) end
+		-- if value < min then return 100 + (min - value) end
+	-- end
 end
 
 function Region:TemperatureRainfallDistance(thing, temperature, rainfall)
@@ -1753,33 +1774,19 @@ function Region:CreateElement(temperature, rainfall, lake)
 	end
 	temperature = mFloor(temperature)
 	rainfall = mFloor(rainfall)
-	local bestDist = 300
-	local bestTerrain
-	for terrainType, terrain in pairs(TerrainDictionary) do
-		if self:WithinBounds(terrain, temperature, rainfall) then
-			local dist = self:TemperatureRainfallDistance(terrain, temperature, rainfall)
-			if dist < bestDist then
-				bestDist = dist
-				bestTerrain = terrain
-			end
-		end
-	end
-	bestDist = 300
-	local bestFeature
+	local bestTerrain = self.space:NearestTempRainThing(temperature, rainfall, TerrainDictionary)
+	local featureList = {}
 	for i, featureType in pairs(bestTerrain.features) do
-		if featureType ~= featureNone and (featureType ~= featureFallout or self.space.falloutEnabled) then
-			local feature = FeatureDictionary[featureType]
-			if self:WithinBounds(feature, temperature, rainfall) then
-				local dist = 300
-				dist = self:TemperatureRainfallDistance(feature, temperature, rainfall)
-				if dist < bestDist then
-					bestDist = dist
-					bestFeature = feature
-				end
-			end
+		if featureType ~= featureFallout or self.space.falloutEnabled then
+			tInsert(featureList, FeatureDictionary[featureType])
 		end
 	end
-	if bestFeature == nil or mRandom(1, 140) < bestDist or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
+	local bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
+	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
+	if bestFeature.featureType == featureNone and bestTerrain.specialFeature then
+		local sFeature = FeatureDictionary[bestTerrain.specialFeature]
+		if mRandom(1, 100) < sFeature.percent then bestFeature = sFeature end
+	end
 	local plotType = plotLand
 	local terrainType = bestFeature.terrainType or bestTerrain.terrainType
 	local featureType = bestFeature.featureType
@@ -1804,6 +1811,7 @@ function Region:Fill()
 		for spi, subPolygon in pairs(polygon.subPolygons) do
 			local subCollection = tGetRandom(self.collection)
 			if self.polar and subPolygon.polar then
+				EchoDebug("polar subpoly ", subPolygon.superPolygon.continent)
 				subCollection = self.collection[#self.collection]
 			end
 			if subCollection.lake then
@@ -1828,6 +1836,9 @@ function Region:Fill()
 			subPolygon.lake = subCollection.lake
 			for hi, hex in pairs(subPolygon.hexes) do
 				local element = tGetRandom(subCollection.elements)
+				if subPolygon.polar and subPolygon.superPolygon.continent then
+					EchoDebug(element.terrainType)
+				end
 				if hex.plotType ~= plotOcean then
 					if filledHexes[hex] then EchoDebug("DUPE REGION FILL HEX at " .. hex:Locate()) end
 					if element.plotType == plotOcean then
@@ -1942,7 +1953,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 9 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivres. modified by rainfall
+	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
 	a.riverSpawnRainfall = 85 -- how much rainfall spawns a river seed even without mountains/hills
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -1960,7 +1971,7 @@ Space = class(function(a)
 	a.rainfallMidpoint = 50 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 100 -- highest temperature possible (plus or minus temperatureMaxDeviation)
-	a.temperatureDice = 2 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
+	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.temperatureMaxDeviation = 12 -- how much at maximum can a temperature deviate from its avg
 	a.rainfallDice = 1 -- just like temperature above
 	a.rainfallMaxDeviation = 16 -- just like temperature above
@@ -1970,6 +1981,7 @@ Space = class(function(a)
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
+	-- all lake variables scale with global rainfall in Compute()
 	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
 	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
@@ -2031,30 +2043,14 @@ function Space:SetOptions(optDict)
 			option.values[optionChoice].values = randValues
 		end
  		for valueNumber, key in ipairs(option.keys) do
-			EchoDebug(key, option.name, valueNumber, optionChoice, option.values[optionChoice].values[valueNumber])
+			EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
 			self[key] = option.values[optionChoice].values[valueNumber]
 		end
 	end
 end
 
-function Space:Compute()
-    self.iW, self.iH = Map.GetGridSize()
-    self.iA = self.iW * self.iH
-    self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    self.coastalMod = self.areaMod
-    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
-    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
-    self.nonOceanArea = self.iA
-    self.w = self.iW - 1
-    self.h = self.iH - 1
-    self.halfWidth = self.w / 2
-    self.halfHeight = self.h / 2
-    self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
-    self.xFakeLatitudeConversion = 180 / self.iW
-    self.yFakeLatitudeConversion = 180 / self.iH
-    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
-    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
-    local activatedMods = Modding.GetActivatedMods()
+function Space:DoCentuariIfActivated()
+	local activatedMods = Modding.GetActivatedMods()
 	for i,v in ipairs(activatedMods) do
 		local title = Modding.GetModProperty(v.ID, v.Version, "Name")
 		if title == "Fantastical Place Names" then
@@ -2098,6 +2094,116 @@ function Space:Compute()
 			end
 		end
 	end
+end
+
+function Space:PrintClimate()
+	-- print out temperature/rainfall voronoi
+	local terrainChars = {
+		[terrainGrass] = "+",
+		[terrainPlains] = '|',
+		[terrainDesert] = "~",
+		[terrainTundra] = "<",
+		[terrainSnow] = "$",
+		[terrainCoast] = "C",
+		[terrainOcean] = "O",
+	}
+	local featureChars = {
+		[featureNone] = " ",
+		[featureForest] = "^",
+		[featureJungle] = "%",
+		[featureMarsh] = "_",
+		[featureIce] = "*",
+		[featureFallout] = "@",
+		[featureOasis] = "&",
+	}
+	local terrainLatitudeAreas = {}
+	local latitudesByTempRain = {}
+	local line = ""
+	local numLine = ""
+	for l = 0, 90, 1 do
+		local t, r = self:GetTemperature(l), self:GetRainfall(l)
+		latitudesByTempRain[mFloor(t) .. " " .. mFloor(r)] = l
+		numLine = numLine .. mMax(0, mFloor((t-1)/10)) .. mMax(0, mFloor((r-1)/10))
+		local terrain = self:NearestTempRainThing(t, r, TerrainDictionary)
+		if terrain then
+			local terrainType = terrain.terrainType
+			local featureList = {}
+			for i, featureType in pairs(terrain.features) do
+				tInsert(featureList, FeatureDictionary[featureType])
+			end
+			local feature = self:NearestTempRainThing(t, r, featureList) or FeatureDictionary[featureNone]
+			if feature.percent == 0 then feature = FeatureDictionary[featureNone] end
+			if terrainLatitudeAreas[terrainType] == nil then terrainLatitudeAreas[terrainType] = 0 end
+			terrainLatitudeAreas[terrainType] = terrainLatitudeAreas[terrainType] + 1
+			line = line .. terrainChars[terrain.terrainType] .. featureChars[feature.featureType]
+		else
+			line = line .. "  "
+		end
+	end
+	local terrainAreas = {}
+	for r = 100, 0, -3 do
+		local line = ""
+		for t = 0, 100, 3 do
+			local terrain = self:NearestTempRainThing(t, r, TerrainDictionary)
+			if terrain then
+				local terrainType = terrain.terrainType
+				local featureList = {}
+				for i, featureType in pairs(terrain.features) do
+					tInsert(featureList, FeatureDictionary[featureType])
+				end
+				local feature = self:NearestTempRainThing(t, r, featureList) or FeatureDictionary[featureNone]
+				if feature.percent == 0 then feature = FeatureDictionary[featureNone] end
+				if terrainAreas[terrainType] == nil then terrainAreas[terrainType] = 0 end
+				terrainAreas[terrainType] = terrainAreas[terrainType] + 1
+				local lastChar = " "
+				for lr = r-2, r+2 do
+					for lt = t-2, t+2 do
+						if latitudesByTempRain[lt .. " " ..lr] then
+							lastChar = "/"
+							break
+						end
+					end
+					if lastChar == "/" then break end
+				end
+				line = line .. terrainChars[terrain.terrainType] .. featureChars[feature.featureType] .. lastChar
+			else
+				line = line .. "   "
+			end
+		end
+		EchoDebug(line)
+	end
+	EchoDebug("latitudes 0 to 90:")
+	EchoDebug(line)
+	EchoDebug(numLine)
+	for i, terrain in pairs(TerrainDictionary) do
+		EchoDebug(GameInfo.Terrains[terrain.terrainType].Description, terrainAreas[terrain.terrainType], terrainLatitudeAreas[terrain.terrainType])
+	end
+end
+
+function Space:Compute()
+    self.iW, self.iH = Map.GetGridSize()
+    self.iA = self.iW * self.iH
+    self.areaMod = mFloor(mSqrt(self.iA) / 30)
+    self.coastalMod = self.areaMod
+    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
+    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
+    self.nonOceanArea = self.iA
+    self.w = self.iW - 1
+    self.h = self.iH - 1
+    self.halfWidth = self.w / 2
+    self.halfHeight = self.h / 2
+    self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
+    self.xFakeLatitudeConversion = 180 / self.iW
+    self.yFakeLatitudeConversion = 180 / self.iH
+    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
+    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
+    self:DoCentuariIfActivated()
+    -- lake generation scales with global rainfall:
+    local rainfallScale = self.rainfallMidpoint / 50
+    self.minLakes = mFloor( self.minLakes * rainfallScale )
+	self.lakeRegionPercent = mFloor( self.lakeRegionPercent * rainfallScale )
+	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
+	EchoDebug(self.minLakes .. " minimum lakes", self.lakeRegionPercent .. " percent lake regions", self.lakeynessMax .. " maximum region lakeyness")
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
@@ -2118,15 +2224,19 @@ function Space:Compute()
 	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
     if self.contaminatedWater and self.contaminatedSoil then
     	FeatureDictionary[featureFallout].percent = 70
-    	FeatureDictionary[featureFallout].rainfall = {0, 100}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
     elseif self.contaminatedWater then
     	FeatureDictionary[featureFallout].percent = 70
-    	FeatureDictionary[featureFallout].rainfall = {65, 100}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
     elseif self.contaminatedSoil then
     	FeatureDictionary[featureFallout].percent = 70
     	FeatureDictionary[featureFallout].limitRatio = 0.85
-    	FeatureDictionary[featureFallout].rainfall = {0, 25}
+    	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
+    elseif falloutEnabled then
+    	FeatureDictionary[featureFallout].percent = 18
+		FeatureDictionary[featureFallout].points = {{t=mRandom(0, 100),r=mRandom(0, 100)}}
     end
+    self:PrintClimate()
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
@@ -2759,7 +2869,7 @@ function Space:PickOceans()
 	elseif self.wrapY and not self.wrapX then
 		print("why have a vertically wrapped map?")
 	end
-	EchoDebug(#self.oceans .. " oceans", self.nonOceanPolygons .. " non-ocean polygons", self.nonOceanArea .. " non-ocean hexes")
+	EchoDebug(#self.oceans .. " oceans")
 end
 
 function Space:PickOceansCylinder()
@@ -3008,6 +3118,19 @@ end
 function Space:PickContinents()
 	self.filledArea = 0
 	self.filledPolygons = 0
+	if self.oceanNumber == -1 then
+		-- option to have no water has been selected
+		local continent = {}
+		for i, polygon in pairs(self.polygons) do
+			polygon.continent = continent
+			tInsert(continent, polygon)
+			self.filledPolygons = self.filledPolygons + 1
+			self.filledArea = self.filledArea + #polygon.hexes
+		end
+		tInsert(self.continents, continent)
+		EchoDebug("whole-world continent of " .. #continent .. " polygons")
+		return
+	end
 	for astronomyIndex, basin in pairs(self.astronomyBasins) do
 		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons...")
 		self:PickContinentsInBasin(astronomyIndex)
@@ -3294,6 +3417,33 @@ function Space:PickRegions()
 	end
 end
 
+function Space:TempRainDist(t1, r1, t2, r2)
+	local tdist = mAbs(t2 - t1)
+	local rdist = mAbs(r2 - r1)
+	return tdist^2 + rdist^2
+end
+
+function Space:NearestTempRainThing(temperature, rainfall, things)
+	local nearestDist = 20000
+	local nearest
+	local dearest = {}
+	for i, thing in pairs(things) do
+		if thing.points then
+			for p, point in pairs(thing.points) do
+				local trdist = self:TempRainDist(point.t, point.r, temperature, rainfall)
+				if trdist < nearestDist then
+					nearestDist = trdist
+					nearest = thing
+				end
+			end
+		else
+			tInsert(dearest, thing)
+		end
+	end
+	nearest = nearest or tGetRandom(dearest)
+	return nearest
+end
+
 function Space:FillRegions()
 	self.rainfallSpanMin, self.rainfallSpanMax = 100, 0
 	self.temperatureSpanMin, self.temperatureSpanMax = 100, 0
@@ -3553,6 +3703,11 @@ function Space:FindRiverSeeds()
 	self.majorRiverSeeds = {}
 	self.minorRiverSeeds = {}
 	self.tinyRiverSeeds = {}
+	if self.oceanNumber == -1 and #self.lakeSubPolygons == 0 then
+		-- no rivers can be drawn if there are no bodies of water on the map
+		EchoDebug("no bodies of water on the map and therefore no rivers")
+		return
+	end
 	local lakeCount = 0
 	local rainSeedCount = 0
 	for ih, hex in pairs(self.hexes) do
@@ -4248,7 +4403,7 @@ end
 function Space:GetTemperature(latitude)
 	local rise = self.temperatureMax - self.temperatureMin
 	local temp, temp2
-	if latitude then
+	if latitude and not self.crazyClimate then
 		local distFromPole = (90 - latitude) ^ self.polarExponent
 		temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
 	else
@@ -4262,7 +4417,8 @@ end
 
 function Space:GetRainfall(latitude)
 	local rain, rain2
-	if latitude then
+	if latitude and not self.crazyClimate then
+		--[[
 		if latitude > 75 then -- polar
 			rain = (self.rainfallMidpoint/4) + ( (self.rainfallPlusMinus/4) * (mCos((mPi/15) * (latitude+15))) )
 		elseif latitude > 37.5 then -- temperate
@@ -4270,6 +4426,8 @@ function Space:GetRainfall(latitude)
 		else -- tropics and desert
 			rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/25)))
 		end
+		]]--
+		rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
 	else
 		local rise = self.rainfallMax - self.rainfallMin
 		rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin

@@ -22,6 +22,8 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 
 [b]Islands:[/b] How many large and small islands. [i]Few[/i], [i]Some[/i], or [i]Many[/i]. More islands has a side effect of smaller continents.
 
+[b]Land at Poles:[/b] Allow land to extend into the poles. [i]Yes[/i] or [i]No[/i].
+
 [b]Climate Realism:[/b] [i]Off[/i] creates any kind of terrain wherever (including ice in the ocean). [i]On[/i] puts ice at the poles and creates an earth-like climate.
 
 [b]Fallout:[/b] [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
