@@ -844,8 +844,8 @@ oasis}
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=41,r=50}, {t=97,r=47}, {t=12,r=0}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=41,r=100}, {t=13,r=72}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureNone] = { points = {{t=32,r=52}, {t=12,r=0}, {t=97,r=60}, {t=46,r=66}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=44,r=100}, {t=0,r=60}}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=96,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 10, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
@@ -862,16 +862,33 @@ oasis}
 
 	-- for Alpha Centauri Maps:
 
+	--[[
+grassland {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}
+plains {{t=0,r=50}}
+desert {{t=100,r=0}, {t=73,r=0}}
+tundra}
+snow}
+none {{t=0,r=0}}
+forest}
+jungle {{t=100,r=100}}
+marsh {{t=82,r=61}}
+oasis}
+
+
+
+
+	]]--
+
 	TerrainDictionaryCentauri = {
-		[terrainGrass] = { temperature = {0, 100, 50}, rainfall = {0, 100, 50}, features = { featureNone, featureJungle, featureMarsh } },
-		[terrainPlains] = { temperature = {0, 100, 50}, rainfall = {0, 90, 35}, features = { featureNone, } },
-		[terrainDesert] = { temperature = {0, 100}, rainfall = {0, 6, 0}, features = { featureNone, } },
+		[terrainGrass] = { points = {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainPlains] = { points = {{t=0,r=50}}, features = { featureNone, } },
+		[terrainDesert] = { points = {{t=100,r=0}, {t=73,r=0}}, features = { featureNone, } },
 	}
 
 	FeatureDictionaryCentauri = {
-		[featureNone] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 100, limitRatio = -1, hill = true },
-		[featureJungle] = { temperature = {90, 100}, rainfall = {90, 100}, percent = 100, limitRatio = 0.95, hill = false },
-		[featureMarsh] = { temperature = {10, 90}, rainfall = {10, 90}, percent = 80, limitRatio = 0.95, hill = true },
+		[featureNone] = { points = {{t=0,r=0}}, percent = 100, limitRatio = -1, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.95, hill = false },
+		[featureMarsh] = { points = {{t=82,r=61}}, percent = 75, limitRatio = 0.95, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
