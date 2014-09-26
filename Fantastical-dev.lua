@@ -1662,7 +1662,7 @@ function Region:GiveParameters()
 	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent or #self.space.lakeSubPolygons < self.space.minLakes
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
-	self.marshy = mRandom(1, 100) < self.space.marshyRegionPercent
+	self.marshy = self.space.marshHexCount < self.space.marshMinHexes
 	self.marshyness = 0
 	if self.marshy then self.marshyness = mRandom(self.space.marshynessMin, self.space.marshynessMax) end
 	-- EchoDebug("latitude " .. self.minLatitude .. " < " .. self.latitude .." < " .. self.maxLatitude, "temperature " .. self.temperatureMin .. " < " .. self.temperatureAvg .. " < " .. self.temperatureMax, "rainfall " .. self.rainfallMin .. " < " .. self.rainfallAvg .. " < " .. self.rainfallMax)
@@ -1766,7 +1766,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
 	local hill = mRandom(1, 100) < self.hillyness
-	local marsh = not hill and not mountain and (mRandom(1, 100) < self.marshyness or not self.space.hasOneMarsh)
+	local marsh = not hill and not mountain and mRandom(1, 100) < self.marshyness
 	if lake then
 		mountain = false
 		hill = false
@@ -1866,7 +1866,7 @@ function Region:Fill()
 					else
 						hex.featureType = featureNone
 					end
-					if hex.featureType == featureMarsh then self.space.hasOneMarsh = true end
+					if hex.featureType == featureMarsh then self.space.marshHexCount = self.space.marshHexCount + 1 end
 					hex.temperature = element.temperature
 					hex.rainfall = element.rainfall
 					filledHexes[hex] = true
@@ -1999,9 +1999,9 @@ Space = class(function(a)
 	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
-	a.marshyRegionPercent = 10
 	a.marshynessMin = 5
-	a.marshynessMax = 33
+	a.marshynessMax = 50
+	a.marshMinHexRatio = 0.015
 	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
 	a.roadCount = 5 -- how many polygon-to-polygon 'ancient' roads
 	a.falloutEnabled = false -- place fallout on the map?
@@ -3462,13 +3462,20 @@ function Space:NearestTempRainThing(temperature, rainfall, things)
 end
 
 function Space:FillRegions()
+	self.marshMinHexes = mFloor(self.marshMinHexRatio * self.filledArea)
+	self.marshHexCount = 0
+	EchoDebug(self.marshMinHexes .. " minimum marsh hexes")
 	self.rainfallSpanMin, self.rainfallSpanMax = 100, 0
 	self.temperatureSpanMin, self.temperatureSpanMax = 100, 0
 	-- self.latitudeSpanMin, self.latitudeSpanMax = 90, 0
-	for i, region in pairs(self.regions) do
+	local regionBuffer = tDuplicate(self.regions)
+	-- for i, region in pairs(self.regions) do
+	while #regionBuffer > 0 do
+		local region = tRemoveRandom(regionBuffer)
 		region:CreateCollection()
 		region:Fill()
 	end
+	EchoDebug(self.marshHexCount .. " total marsh hexes")
 	EchoDebug("rainfall spans: " .. self.rainfallSpanMin .. " to " .. self.rainfallSpanMax)
 	EchoDebug("temperature spans: " .. self.temperatureSpanMin .. " to " .. self.temperatureSpanMax)
 	-- EchoDebug("latitude spans: " .. self.latitudeSpanMin .. " to " .. self.latitudeSpanMax)
