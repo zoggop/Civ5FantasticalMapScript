@@ -1,6 +1,3 @@
-Planned v9:
-- adjust terrain calcs somehow so that wasteland rainfall doesn't produce grassland over plains. (what was wrong with simple distance, rather than having all these bounds in the dictionary  too?)
-
 don't know how to implement:
 - for centauri maps, change wonder conditions for: uranium flats (?), monsoon jungle (fountain of youth), sunny mesa (sri pada), geothermal shallows (old faithful)
 
@@ -9,7 +6,12 @@ low priority:
 - make coastal ice not interfere with navigation?
 - make wonder placement fix work?
 
+Done (v10)
+- adjust region temperature rainfall deviations
+- make marshyness a region attribute, not a blanket chance across all grassland
+
 Done (v9)
+- new climate system
 - option for no sea on the map at all (whole-world continent)
 - lake generation based on global rainfall, like river generation
 - option for no land at poles

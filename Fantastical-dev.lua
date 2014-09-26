@@ -833,7 +833,7 @@ oasis}
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=95,r=22}, {t=71,r=66}, {t=66,r=25}, {t=64,r=32}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout }, specialFeature = featureMarsh },
+		[terrainGrass] = { points = {{t=95,r=22}, {t=71,r=66}, {t=66,r=25}, {t=64,r=32}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
 		[terrainPlains] = { points = {{t=25,r=38}, {t=22,r=66}, {t=27,r=24}, {t=24,r=20}}, features = { featureNone, featureForest, featureFallout } },
 		[terrainDesert] = { points = {{t=95,r=13}, {t=26,r=0}, {t=61,r=0}, {t=37,r=0}, {t=24,r=16}, {t=76,r=2}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
 		[terrainTundra] = { points = {{t=7,r=0}, {t=5,r=63}, {t=6,r=38}, {t=8,r=17}, {t=7,r=66}}, features = { featureNone, featureForest, featureFallout } },
@@ -847,7 +847,7 @@ oasis}
 		[featureNone] = { points = {{t=32,r=52}, {t=12,r=0}, {t=97,r=60}, {t=46,r=66}}, percent = 100, limitRatio = -1, hill = true },
 		[featureForest] = { points = {{t=44,r=100}, {t=0,r=60}}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=96,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
-		[featureMarsh] = { points = {}, percent = 5, limitRatio = 0.33, hill = false },
+		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
 	}
@@ -1766,7 +1766,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
 	local hill = mRandom(1, 100) < self.hillyness
-	local marsh = not hill and not mountain and mRandom(1, 100) < self.marshyness
+	local marsh = not hill and not mountain and (mRandom(1, 100) < self.marshyness or not self.space.hasOneMarsh)
 	if lake then
 		mountain = false
 		hill = false
@@ -1784,11 +1784,16 @@ function Region:CreateElement(temperature, rainfall, lake)
 			tInsert(featureList, FeatureDictionary[featureType])
 		end
 		if featureType == featureMarsh and marsh then
-			featureList = { FeatureDictionaryCentauri[featureMarsh] }
+			featureList = { FeatureDictionary[featureMarsh] }
 			break
 		end
 	end
-	local bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
+	local bestFeature
+	if #featureList == 1 then
+		bestFeature = featureList[1]
+	else
+		bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
+	end
 	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
 	if bestFeature.featureType == featureNone and bestTerrain.specialFeature then
 		local sFeature = FeatureDictionary[bestTerrain.specialFeature]
@@ -1861,6 +1866,7 @@ function Region:Fill()
 					else
 						hex.featureType = featureNone
 					end
+					if hex.featureType == featureMarsh then self.space.hasOneMarsh = true end
 					hex.temperature = element.temperature
 					hex.rainfall = element.rainfall
 					filledHexes[hex] = true
@@ -1993,9 +1999,9 @@ Space = class(function(a)
 	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
-	a.marshyRegionPercent = 6.5
-	a.marshynessMin = 10
-	a.marshynessMax = 50
+	a.marshyRegionPercent = 10
+	a.marshynessMin = 5
+	a.marshynessMax = 33
 	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
 	a.roadCount = 5 -- how many polygon-to-polygon 'ancient' roads
 	a.falloutEnabled = false -- place fallout on the map?
