@@ -1659,7 +1659,7 @@ function Region:GiveParameters()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
 	if self.mountainous then self.mountainousness = mRandom(self.space.mountainousnessMin, self.space.mountainousnessMax) end
-	self.lakey = mRandom(1, 100) < self.space.lakeRegionPercent or #self.space.lakeSubPolygons < self.space.minLakes
+	self.lakey = #self.space.lakeSubPolygons < self.space.minLakes
 	self.lakeyness = 0
 	if self.lakey then self.lakeyness = mRandom(self.space.lakeynessMin, self.space.lakeynessMax) end
 	self.marshy = self.space.marshHexCount < self.space.marshMinHexes
@@ -1995,8 +1995,8 @@ Space = class(function(a)
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
 	-- all lake variables scale with global rainfall in Compute()
+	a.lakeMinRatio = 0.0065
 	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
-	a.lakeRegionPercent = 10 -- of 100 how many regions will have little lakes
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.marshynessMin = 5
@@ -2216,10 +2216,10 @@ function Space:Compute()
     self:DoCentuariIfActivated()
     -- lake generation scales with global rainfall:
     local rainfallScale = self.rainfallMidpoint / 50
-    self.minLakes = mFloor( self.minLakes * rainfallScale )
-	self.lakeRegionPercent = mFloor( self.lakeRegionPercent * rainfallScale )
+    -- self.minLakes = mFloor( self.minLakes * rainfallScale )
+    self.lakeMinRatio = self.lakeMinRatio * rainfallScale
 	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
-	EchoDebug(self.minLakes .. " minimum lakes", self.lakeRegionPercent .. " percent lake regions", self.lakeynessMax .. " maximum region lakeyness")
+	EchoDebug(self.lakeMinRatio .. " minimum lake ratio", self.lakeynessMax .. " maximum region lakeyness")
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
@@ -3134,6 +3134,7 @@ end
 
 function Space:PickContinents()
 	self.filledArea = 0
+	self.filledSubPolygons = 0
 	self.filledPolygons = 0
 	if self.oceanNumber == -1 then
 		-- option to have no water has been selected
@@ -3142,6 +3143,7 @@ function Space:PickContinents()
 			polygon.continent = continent
 			tInsert(continent, polygon)
 			self.filledPolygons = self.filledPolygons + 1
+			self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
 			self.filledArea = self.filledArea + #polygon.hexes
 		end
 		tInsert(self.continents, continent)
@@ -3207,6 +3209,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		local backlog = {}
 		local polarBacklog = {}
 		self.filledArea = self.filledArea + #polygon.hexes
+		self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
 		filledPolygons = filledPolygons + 1
 		local filledContinentArea = #polygon.hexes
 		local continent = { polygon }
@@ -3258,6 +3261,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			end
 			candidate.continent = continent
 			self.filledArea = self.filledArea + #candidate.hexes
+			self.filledSubPolygons = self.filledSubPolygons + #candidate.subPolygons
 			filledContinentArea = filledContinentArea + #candidate.hexes
 			filledPolygons = filledPolygons + 1
 			tInsert(continent, candidate)
@@ -3462,9 +3466,10 @@ function Space:NearestTempRainThing(temperature, rainfall, things)
 end
 
 function Space:FillRegions()
+	self.minLakes = mCeil(self.lakeMinRatio * self.filledSubPolygons)
 	self.marshMinHexes = mFloor(self.marshMinHexRatio * self.filledArea)
 	self.marshHexCount = 0
-	EchoDebug(self.marshMinHexes .. " minimum marsh hexes")
+	EchoDebug(self.minLakes .. " minimum lake subpolygons (of " .. self.filledSubPolygons .. ") ", self.marshMinHexes .. " minimum marsh hexes")
 	self.rainfallSpanMin, self.rainfallSpanMax = 100, 0
 	self.temperatureSpanMin, self.temperatureSpanMax = 100, 0
 	-- self.latitudeSpanMin, self.latitudeSpanMax = 90, 0
@@ -3475,7 +3480,7 @@ function Space:FillRegions()
 		region:CreateCollection()
 		region:Fill()
 	end
-	EchoDebug(self.marshHexCount .. " total marsh hexes")
+	EchoDebug(#self.lakeSubPolygons .. " total lake subpolygons", self.marshHexCount .. " total marsh hexes")
 	EchoDebug("rainfall spans: " .. self.rainfallSpanMin .. " to " .. self.rainfallSpanMax)
 	EchoDebug("temperature spans: " .. self.temperatureSpanMin .. " to " .. self.temperatureSpanMax)
 	-- EchoDebug("latitude spans: " .. self.latitudeSpanMin .. " to " .. self.latitudeSpanMax)
