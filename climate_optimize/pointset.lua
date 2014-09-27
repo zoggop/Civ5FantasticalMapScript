@@ -129,8 +129,8 @@ end
 
 function PointSet:FillLatitudes()
 	self.latitudes = {}
-	for string, values in pairs(self.climate.latitudePoints) do
-		local l, t, r = values.l, values.t, values.r
+	for latitude, values in pairs(self.climate.pseudoLatitudes) do
+		local l, t, r = latitude, values.temperature, values.rainfall
 		local point = self:NearestPoint(t, r)
 		if self.isSub then
 			local superPoint = self.climate.pointSet.latitudes[l]

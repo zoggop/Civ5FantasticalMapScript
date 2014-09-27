@@ -40,7 +40,6 @@ end
 function Point:GiveAdjustment()
 	local areaAvg, latitudeAreaAvg = 0, 0
 	-- precalculate average area for equalizing subregion area within regions
-	--[[
 	if self.isSub and #self.region.containedBy > 0 then
 		for i, regionName in pairs(self.region.containedBy) do
 			local superRegion = self.pointSet.climate.regionsByName[regionName]
@@ -58,9 +57,10 @@ function Point:GiveAdjustment()
 			latitudeAreaAvg = 0
 		end
 	end
-	]]--
+	-- reset adjustments
 	self.tMove, self.rMove, self.tMoveCount, self.rMoveCount = 0, 0, 0, 0
 	self.neighCount = 0
+	-- adjust for missing/excessive areas of neighbors
 	for neighbor, yes in pairs(self.neighbors) do
 		if neighbor.region ~= self.region then
 			local dt = neighbor.t - self.t
@@ -81,17 +81,28 @@ function Point:GiveAdjustment()
 			end
 			self:TempMove((dt * areaAdjustmentMultiplier) * da)
 			self:RainMove((dr * areaAdjustmentMultiplier) * da)
-			--[[
-			if self.isSub and #self.region.containedBy > 0 then
-				local eqa = (self.region.superRegionAreas[neighbor.region] or 0) - areaAvg
-				local eqla = (self.region.superRegionLatitudeAreas[neighbor.region] or 0) - latitudeAreaAvg
-				self:TempMove((dt * areaAdjustmentMultiplier) * eqa)
-				self:RainMove((dr * latitudeAreaAdjustmentMultiplier) * eqla)
-			end
-			]]--
 			self.neighCount = self.neighCount + 1
 		end
 	end
+	if self.isSub then
+		-- adjust for unequal area across superregions
+		for i, regionName in pairs(self.region.containedBy) do
+			local superRegion = self.pointSet.climate.regionsByName[regionName]
+			local da = areaAvg - (self.superRegionAreas[superRegion] or 0)
+			local lda = latitudeAreaAvg - (self.superRegionLatitudeAreas[superRegion] or 0)
+			for ii, point in pairs(self.pointSet.points) do
+				if point.region == superRegion then
+					local dt = superPoint.t - self.t
+					local dr = superPoint.r - self.r
+					self:TempMove((dt * areaAdjustmentMultiplier) * da)
+					self:RainMove((dr * areaAdjustmentMultiplier) * da)
+					self:TempMove((dt * latitudeAreaAdjustmentMultiplier) * lda)
+					self:RainMove((dr * latitudeAreaAdjustmentMultiplier) * lda)
+				end
+			end
+		end
+	end
+	-- adjust for high and low rain and temp
 	if self.region.highT then
 		self:TempMove((100-self.t)*highLowMultiplier)
 	elseif self.region.lowT then
@@ -103,6 +114,7 @@ function Point:GiveAdjustment()
 		self:RainMove((0-self.r)*highLowMultiplier)
 	end
 	-- print(self.tMove, self.rMove, tostring(self.isSub), self.t, self.r)
+	-- average all adjustment moves
 	if mAbs(self.tMove) > 0 and self.tMoveCount > 0 then
 		self.tMove = (self.tMove / self.tMoveCount) * adjustmentIntensity
 	end
@@ -178,7 +190,6 @@ function Point:FillOkay()
 			end
 		end
 	end
-	--[[
 	if self.pointSet.isSub then
 		for i, regionName in pairs(self.region.containedBy) do
 			local region = self.pointSet.climate.regionsByName[regionName]
@@ -187,6 +198,5 @@ function Point:FillOkay()
 			end
 		end
 	end
-	]]--
 	return true
 end
