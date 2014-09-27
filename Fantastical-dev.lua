@@ -835,8 +835,8 @@ plains {{t=19,r=41}}
 desert {{t=79,r=14}, {t=56,r=12}}
 tundra {{t=11,r=41}}
 snow {{t=0,r=41}}
-none {{t=99,r=31}, {t=26,r=4}}
-forest {{t=0,r=57}, {t=56,r=100}}
+none {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}
 jungle {{t=100,r=100}}
 
 
@@ -854,9 +854,9 @@ jungle {{t=100,r=100}}
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=99,r=31}, {t=26,r=4}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}}, metaPercent = 50, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureNone] = { points = {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}, metaPercent = 60, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 90, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
@@ -4387,7 +4387,7 @@ function Space:PickCoasts()
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
 				end
-			elseif polygon.oceanIndex then
+			elseif polygon.oceanIndex or polygon.sea.inland then
 				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
