@@ -14,6 +14,34 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 	else
 		a.rainfallPlusMinus = a.rainfallMidpoint
 	end
+	local protoLatitudes = {}
+	for l = 0, mFloor(90/latitudeResolution) do
+		local latitude = l * latitudeResolution
+		local t, r = a:GetTemperature(latitude, true), a:GetRainfall(latitude, true)
+		tInsert(protoLatitudes, { latitude = latitude, t = t, r = r })
+	end
+	local currentLtr
+	local goodLtrs = {}
+	local pseudoLatitudes = {}
+	local pseudoLatitude = 90
+	while #protoLatitudes > 0 do
+		local ltr = tRemove(protoLatitudes)
+		if not currentLtr then
+			currentLtr = ltr
+		else
+			local dist = mSqrt(TempRainDist(currentLtr.t, currentLtr.r, ltr.t, ltr.r))
+			if dist > 3.33 then currentLtr = ltr end
+		end
+		if not goodLtrs[currentLtr] then
+			goodLtrs[currentLtr] = true
+			pseudoLatitudes[pseudoLatitude] = { temperature = mFloor(currentLtr.t), rainfall = mFloor(currentLtr.r) }
+			pseudoLatitude = pseudoLatitude - 1
+		end
+	end
+	print(pseudoLatitude)
+	a.pseudoLatitudes = pseudoLatitudes
+	a.totalLatitudes = 91
+	--[[
 	a.latitudePoints = {}
 	a.totalLatitudes = 0
 	for l = 0, 90, latitudeResolution do
@@ -23,6 +51,7 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 			a.totalLatitudes = a.totalLatitudes + 1
 		end
 	end
+	]]--
 	-- latitudeAreaMutationDistMult = latitudeAreaMutationDistMult * (90 / a.totalLatitudes)
 	-- print(a.totalLatitudes, latitudeAreaMutationDistMult)
 
@@ -51,7 +80,10 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 	elseif parentClimate then
 		a.pointSet = parentClimate.pointSet
 		a.regions = parentClimate.regions
-		a.regionsByName = parentClimate.regionsByName
+		a.superRegionsByName = parentClimate.superRegionsByName
+		for i, region in pairs(parentClimate.regions) do
+			a.regionsByName[region.name] = region
+		end
 	end
 	if subRegions then
 		a.subPointSet = PointSet(a, nil, true)
@@ -191,21 +223,26 @@ function Climate:Optimize()
 	end
 end
 
-function Climate:GetTemperature(latitude)
-	local rise = self.temperatureMax - self.temperatureMin
-	local distFromPole = (90 - latitude) ^ self.polarExponent
-	temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
+function Climate:GetTemperature(latitude, noFloor)
+	local temp
+	if self.pseudoLatitudes and self.pseudoLatitudes[latitude] then
+		temp = pseudoLatitudes[latitude].temperature
+	else
+		local rise = self.temperatureMax - self.temperatureMin
+		local distFromPole = (90 - latitude) ^ self.polarExponent
+		temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
+	end
+	if noFloor then return temp end
 	return mFloor(temp)
 end
 
-function Climate:GetRainfall(latitude)
-	if latitude > 75 then -- polar
-		rain = (self.rainfallMidpoint/4) + ( (self.rainfallPlusMinus/4) * (mCos((mPi/15) * (latitude+15))) )
-	elseif latitude > 37.5 then -- temperate
-		rain = self.rainfallMidpoint + ((self.rainfallPlusMinus/2) * mCos(latitude * (mPi/25)))
-	else -- tropics and desert
-		rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/25)))
+function Climate:GetRainfall(latitude, noFloor)
+	local rain
+	if self.pseudoLatitudes and self.pseudoLatitudes[latitude] then
+		rain = pseudoLatitudes[latitude].rainfall
+	else
+		rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
 	end
-	rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
+	if noFloor then return rain end
 	return mFloor(rain)
 end
