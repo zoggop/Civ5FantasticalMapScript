@@ -873,8 +873,8 @@ jungle {{t=100,r=100}}
 
 	FeatureDictionary = {
 		[featureNone] = { points = {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}, metaPercent = 60, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 90, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}, metaPercent = 65, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 85, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
@@ -2262,7 +2262,6 @@ function Space:CreatePseudoLatitudes()
 				pseudoLatitude = pseudoLatitude - 1
 			end
 		end
-		print(pseudoLatitude)
 		local change = mAbs(pseudoLatitude+1)^1.5 * 0.005
 		if pseudoLatitude < -1 then
 			minDist = minDist + change
@@ -2271,6 +2270,11 @@ function Space:CreatePseudoLatitudes()
 		end
 		iterations = iterations + 1
 	until pseudoLatitude == -1 or iterations > 100
+	if iterations < 101 then
+		EchoDebug("pseudolatitudes created okay")
+	else
+		EchoDebug("bad pseudolatitudes")
+	end
 	self.pseudoLatitudes = pseudoLatitudes
 end
 
@@ -2298,8 +2302,8 @@ function Space:Compute()
     self.lakeMinRatio = self.lakeMinRatio * rainfallScale
 	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
 	EchoDebug(self.lakeMinRatio .. " minimum lake ratio", self.lakeynessMax .. " maximum region lakeyness")
-	FeatureDictionary[featureForest].metaPercent = mMin(100, FeatureDictionary[featureForest].metaPercent * (rainfallScale ^ 2.3))
-	FeatureDictionary[featureJungle].metaPercent = mMin(100, FeatureDictionary[featureJungle].metaPercent * (rainfallScale ^ 2.3))
+	FeatureDictionary[featureForest].metaPercent = mMin(100, FeatureDictionary[featureForest].metaPercent * (rainfallScale ^ 2.2))
+	FeatureDictionary[featureJungle].metaPercent = mMin(100, FeatureDictionary[featureJungle].metaPercent * (rainfallScale ^ 2.2))
 	EchoDebug("forest metapercent: ".. FeatureDictionary[featureForest].metaPercent, "jungle metapercent: " .. FeatureDictionary[featureJungle].metaPercent)
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
