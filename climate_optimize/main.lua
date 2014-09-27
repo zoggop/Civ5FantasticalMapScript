@@ -17,12 +17,12 @@ plains: 61,21
 local terrainRegions = {
 	{ name = "grassland", targetArea = 0.36, highT = true, highR = true,
 		points = {
-			{t = 100, r = 75},
+			-- {t = 100, r = 75},
 			{t = 75, r = 100}
 		},
 		relations = {
 			-- plains = {t = 1, r = 1},
-			desert = {n = -1},
+			desert = {t = -1, r = 1},
 			tundra = {n = -1},
 		},
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
@@ -30,7 +30,7 @@ local terrainRegions = {
 	},
 	{ name = "plains", targetArea = 0.26, noLowT = true, noLowR = true,
 		points = {
-			{t = 75, r = 50},
+			-- {t = 75, r = 50},
 			{t = 50, r = 75}
 		},
 		relations = {
@@ -43,21 +43,21 @@ local terrainRegions = {
 	},
 	{ name = "desert", targetArea = 0.195, lowR = true,
 		points = {
-			{t = 25, r = 0},
-			{t = 75, r = 0}
+			-- {t = 25, r = 0},
+			{t = 80, r = 0}
 		},
 		relations = {
 			plains = {r = -1},
 			tundra = {t = 1},
-			grassland = {n = -1},
+			grassland = {t = 1, r = -1},
 		},
 		subRegionNames = {"none", "oasis"},
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.13, noLowR = true, contiguous = true,
+	{ name = "tundra", targetArea = 0.13, contiguous = true,
 		points = {
 			{t = 3, r = 25},
-			{t = 1, r = 75}
+			-- {t = 1, r = 75}
 		},
 		relations = {
 			desert = {t = -1},
@@ -68,10 +68,10 @@ local terrainRegions = {
 		subRegionNames = {"none", "forest"},
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.065, lowT = true, maxR = 75, contiguous = true,
+	{ name = "snow", targetArea = 0.065, lowT = true, contiguous = true,
 		points = {
 			{t = 0, r = 25},
-			{t = 0, r = 70},
+			-- {t = 0, r = 70},
 		},
 		subRegionNames = {"none"},
 		relations = {
@@ -85,7 +85,7 @@ local terrainRegions = {
 -- 
 
 local featureRegions = {
-	{ name = "none", targetArea = 0.70,
+	{ name = "none", targetArea = 0.73,
 		points = {
 			{t = 60, r = 40},
 			-- {t = 55, r = 45},
@@ -112,6 +112,7 @@ local featureRegions = {
 		relations = {},
 		color = {0, 255, 0, 127}
 	},
+	--[[
 	{ name = "marsh", targetArea = 0.02, highR = true,
 		points = {
 			{t = 40, r = 75},
@@ -128,6 +129,7 @@ local featureRegions = {
 		relations = {},
 		color = {255, 0, 0, 127}
 	},
+	]]--
 }
 
 nullFeatureRegions = {
@@ -198,6 +200,26 @@ function love.keyreleased(key)
 		paused = not paused
 	elseif key == "f" then
 		myClimate = Climate(nil, featureRegions, myClimate)
+	elseif key == "up" then
+		myClimate:SetPolarExponent(myClimate.polarExponent+0.1)
+	elseif key == "down" then
+		myClimate:SetPolarExponent(myClimate.polarExponent-0.1)
+	elseif key == "right" then
+		myClimate.temperatureMin = myClimate.temperatureMin + 5
+		myClimate:ResetLatitudes()
+	elseif key == "left" then
+		myClimate.temperatureMin = myClimate.temperatureMin - 5
+		myClimate:ResetLatitudes()
+	elseif key == "pagedown" then
+		myClimate.temperatureMax = myClimate.temperatureMax + 5
+		myClimate:ResetLatitudes()
+	elseif key == "pageup" then
+		myClimate.temperatureMax = myClimate.temperatureMax - 5
+		myClimate:ResetLatitudes()
+	elseif key == "." then
+		myClimate:SetRainfallMidpoint(myClimate.rainfallMidpoint + 1)
+	elseif key == "," then
+		myClimate:SetRainfallMidpoint(myClimate.rainfallMidpoint - 1)
 	elseif key == "l" or key == "v" then
 		-- load points from file
 		local lines
@@ -226,7 +248,9 @@ function love.keyreleased(key)
 						local t, r = tonumber(tr[1]), tonumber(tr[2])
 						print(regionName, t, r, type(regionName), type(t), type(r))
 						local region = myClimate.subRegionsByName[regionName] or myClimate.superRegionsByName[regionName]
+						local pointSet
 						if region then
+							print('got region')
 							if myClimate.subRegionsByName[regionName] then
 								pointSet = myClimate.subPointSet
 								print("sub")
@@ -241,6 +265,7 @@ function love.keyreleased(key)
 				end
 			end
 			print('points loaded')
+			print(#myClimate.pointSet.points, #myClimate.subPointSet.points)
 		end
 	end
 end
@@ -255,6 +280,7 @@ function love.mousepressed(x, y, button)
 		local t, r = DisplayToGrid(x, y)
 		local pointSet = myClimate[buttonPointSets[button]]
 		local point = pointSet:NearestPoint(t, r)
+		if not point then return end
 		if love.keyboard.isDown( 'lctrl' ) then
 			if love.keyboard.isDown( 'lshift' ) then
 				-- delete a point
@@ -301,28 +327,19 @@ end
 function love.draw()
 	for t, rains in pairs(myClimate.pointSet.grid) do
 		for r, point in pairs(rains) do
-			if point.t == t and point.r == r then
-				love.graphics.setColor( 0, 0, 0 )
-				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
-			elseif myClimate.latitudePoints[t .. " " .. r] then
-				love.graphics.setColor( 127, 0, 0 )
-				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
-			else
-				love.graphics.setColor( point.region.color )
-				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
-			end
+			love.graphics.setColor( point.region.color )
+			love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 		end
 	end
 	for t, rains in pairs(myClimate.subPointSet.grid) do
 		for r, point in pairs(rains) do
-			if point.t == t and point.r == r then
-				love.graphics.setColor( 255, 255, 255 )
-				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
-			else
-				love.graphics.setColor( point.region.color )
-				love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
-			end
+			love.graphics.setColor( point.region.color )
+			love.graphics.rectangle("fill", t*displayMult, displayMultHundred-r*displayMult, displayMult, displayMult)
 		end
+	end
+	love.graphics.setColor( 127, 0, 0 )
+	for latitude, values in pairs(myClimate.pseudoLatitudes) do
+		love.graphics.rectangle("fill", values.temperature*displayMult, displayMultHundred-values.rainfall*displayMult, displayMult, displayMult)
 	end
 	local y = 0
 	for name, region in pairs(myClimate.regionsByName) do
@@ -335,6 +352,8 @@ function love.draw()
 		y = y + 50
 	end
 	for i, point in pairs(myClimate.pointSet.points) do
+		love.graphics.setColor( 255, 255, 255 )
+		love.graphics.rectangle("fill", point.t*displayMult, displayMultHundred-point.r*displayMult, displayMult, displayMult)
 		if point.fixed then
 			love.graphics.setColor( 255, 0, 255 )
 		else
@@ -343,6 +362,8 @@ function love.draw()
 		love.graphics.print( point.region.name .. "\n" .. (point.latitudeArea or "nil") .. "\n" .. (point.area or "nil") .. "\n" .. point.t .. "," .. point.r .. "\n" .. mFloor(point.tMove or 0) .. "," .. mFloor(point.rMove or 0), point.t*displayMult, displayMultHundred-point.r*displayMult)
 	end
 	for i, point in pairs(myClimate.subPointSet.points) do
+		love.graphics.setColor( 0, 0, 0 )
+		love.graphics.rectangle("fill", point.t*displayMult, displayMultHundred-point.r*displayMult, displayMult, displayMult)
 		if point.fixed then
 			love.graphics.setColor( 255, 0, 255 )
 		else
@@ -352,6 +373,8 @@ function love.draw()
 	end
 	love.graphics.setColor(255, 0, 0)
 	love.graphics.print(mFloor(myClimate.pointSet.distance or "nil") .. " " .. mFloor(myClimate.subPointSet.distance or "nil"), 10, displayMultHundred + 70)
+	love.graphics.setColor(255, 0, 255)
+	love.graphics.print("polar exponent: " .. myClimate.polarExponent .. "   minimum temperature: " .. myClimate.temperatureMin .. "   maximum temperature: " .. myClimate.temperatureMax .. "   rainfall midpoint: " .. myClimate.rainfallMidpoint, 10, displayMultHundred + 50)
 end
 
 function love.update(dt)
