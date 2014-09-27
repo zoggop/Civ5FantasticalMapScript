@@ -830,42 +830,36 @@ jungle {{t=96,r=100}}
 marsh}
 oasis}
 
-grassland {{t=57,r=44}}
-plains {{t=23,r=44}}
-desert {{t=62,r=0}, {t=24,r=0}}
-tundra {{t=9,r=44}, {t=8,r=0}}
-snow {{t=0,r=0}, {t=0,r=44}}
-none {{t=50,r=50}}
-
-grassland {{t=66,r=76}}
-plains {{t=30,r=46}}
-desert {{t=80,r=0}}
-tundra {{t=12,r=41}}
-snow {{t=0,r=40}}
-none {{t=73,r=17}, {t=56,r=16}, {t=47,r=73}}
-forest {{t=4,r=92}, {t=56,r=100}}
+grassland {{t=76,r=41}, {t=64,r=41}}
+plains {{t=19,r=41}}
+desert {{t=79,r=14}, {t=56,r=12}}
+tundra {{t=11,r=41}}
+snow {{t=0,r=41}}
+none {{t=99,r=31}, {t=26,r=4}}
+forest {{t=0,r=57}, {t=56,r=100}}
 jungle {{t=100,r=100}}
+
 
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=66,r=76}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=30,r=46}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=80,r=0}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
-		[terrainTundra] = { points = {{t=12,r=41}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { points = {{t=0,r=40}}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=76,r=41}, {t=64,r=41}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=19,r=41}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=79,r=14}, {t=56,r=12}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
+		[terrainTundra] = { points = {{t=11,r=41}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=41}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
 	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=73,r=17}, {t=20,r=0}, {t=47,r=73}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=4,r=92}, {t=56,r=100}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureNone] = { points = {{t=99,r=31}, {t=26,r=4}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}}, metaPercent = 50, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
-		[featureFallout] = { points = {{t=50,r=0}}, percent = 0, limitRatio = 0.75, hill = true },
+		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -1659,6 +1653,12 @@ function Region:DoSpanCalcs()
 end
 
 function Region:GiveParameters()
+	self.blockFeatures = {}
+	for featureType, feature in pairs(FeatureDictionary) do
+		if feature.metaPercent then
+			self.blockFeatures[featureType] = mRandom(1, 100) > feature.metaPercent
+		end
+	end
 	-- get latitude (real or fake)
 	self:GiveLatitude()
 	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
@@ -1796,12 +1796,14 @@ function Region:CreateElement(temperature, rainfall, lake)
 	local bestTerrain = self.space:NearestTempRainThing(temperature, rainfall, TerrainDictionary)
 	local featureList = {}
 	for i, featureType in pairs(bestTerrain.features) do
-		if featureType ~= featureFallout or self.space.falloutEnabled then
-			tInsert(featureList, FeatureDictionary[featureType])
-		end
-		if featureType == featureMarsh and marsh then
-			featureList = { FeatureDictionary[featureMarsh] }
-			break
+		if FeatureDictionary[featureType] then
+			if not FeatureDictionary[featureType].disabled then
+				tInsert(featureList, FeatureDictionary[featureType])
+			end
+			if featureType == featureMarsh and marsh then
+				featureList = { FeatureDictionary[featureMarsh] }
+				break
+			end
 		end
 	end
 	local bestFeature
@@ -1810,7 +1812,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 	else
 		bestFeature = self.space:NearestTempRainThing(temperature, rainfall, featureList)
 	end
-	if bestFeature == nil or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
+	if bestFeature == nil or self.blockFeatures[bestFeature.featureType] or mRandom(1, 100) > bestFeature.percent then bestFeature = FeatureDictionary[bestTerrain.features[1]] end -- default to the first feature in the list
 	if bestFeature.featureType == featureNone and bestTerrain.specialFeature then
 		local sFeature = FeatureDictionary[bestTerrain.specialFeature]
 		if mRandom(1, 100) < sFeature.percent then bestFeature = sFeature end
@@ -2295,21 +2297,24 @@ function Space:Compute()
     self.nonOceanPolygons = self.polygonCount
     -- set fallout options
 	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
-    if self.contaminatedWater and self.contaminatedSoil then
-    	FeatureDictionary[featureFallout].percent = 35
-    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
-    elseif self.contaminatedWater then
-    	FeatureDictionary[featureFallout].percent = 35
-    	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
-    elseif self.contaminatedSoil then
-    	FeatureDictionary[featureFallout].percent = 40
-    	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
-    elseif self.falloutEnabled then
-    	FeatureDictionary[featureFallout].percent = 25
-    	local l = mRandom(0, 60)
-    	EchoDebug("fallout latitude: " .. l)
-		FeatureDictionary[featureFallout].points = {{t=self:GetTemperature(l),r=self:GetRainfall(l)}}
-    end
+	if self.falloutEnabled then
+		FeatureDictionary[featureFallout].disabled = nil
+	    if self.contaminatedWater and self.contaminatedSoil then
+	    	FeatureDictionary[featureFallout].percent = 35
+	    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
+	    elseif self.contaminatedWater then
+	    	FeatureDictionary[featureFallout].percent = 35
+	    	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
+	    elseif self.contaminatedSoil then
+	    	FeatureDictionary[featureFallout].percent = 40
+	    	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
+	    else
+	    	FeatureDictionary[featureFallout].percent = 25
+	    	local l = mRandom(0, 60)
+	    	EchoDebug("fallout latitude: " .. l)
+			FeatureDictionary[featureFallout].points = {{t=self:GetTemperature(l),r=self:GetRainfall(l)}}
+	    end
+	end
     if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     self:PrintClimate()

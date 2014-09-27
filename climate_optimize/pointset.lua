@@ -64,10 +64,12 @@ function PointSet:NearestPoint(t, r)
 			nearestPoint = point
 		end
 	end
-	if self.isSub then
+	if self.isSub and t > -1 and t < 101 and r > -1 and r < 101 then
 		local superPoint = self.climate.pointSet.grid[t][r]
-		if not superPoint.region.subRegions[nearestPoint.region] then
-			nearestPoint = self.defaultPoint
+		if superPoint then
+			if not superPoint.region.subRegions[nearestPoint.region] then
+				nearestPoint = self.defaultPoint
+			end
 		end
 	end
 	return nearestPoint
