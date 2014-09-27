@@ -587,18 +587,18 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
 	values = {
-			[1] = { name = "Ice Age", values = {1.4, 0, 65} },
-			[2] = { name = "Cool", values = {1.3, 0, 80} },
+			[1] = { name = "Ice Age", values = {1.6, 0, 45} },
+			[2] = { name = "Cool", values = {1.4, 0, 84} },
 			[3] = { name = "Temperate", values = {1.2, 0, 100} },
 			[4] = { name = "Hot", values = {1.1, 5, 100} },
-			[5] = { name = "Jurassic", values = {0.9, 10, 100} },
+			[5] = { name = "Jurassic", values = {0.9, 14, 100} },
 			[6] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
 	values = {
 			[1] = { name = "Wasteland", values = {16} },
-			[2] = { name = "Arid", values = {34} },
+			[2] = { name = "Arid", values = {39} },
 			[3] = { name = "Normal", values = {50} },
 			[4] = { name = "Wet", values = {58} },
 			[5] = { name = "Waterlogged", values = {63} },
@@ -839,15 +839,33 @@ none {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}
 forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}
 jungle {{t=100,r=100}}
 
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}}
+tundra {{t=11,r=41}, {t=8,r=50}}
+snow {{t=0,r=41}, {t=1,r=49}}
+none {{t=99,r=31}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
+jungle {{t=100,r=100}}
+
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=99,r=31}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
+jungle {{t=100,r=100}}
+
 
 ]]--
 
 	TerrainDictionary = {
-		[terrainGrass] = { points = {{t=76,r=41}, {t=64,r=41}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		[terrainPlains] = { points = {{t=19,r=41}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainDesert] = { points = {{t=79,r=14}, {t=56,r=12}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
-		[terrainTundra] = { points = {{t=11,r=41}}, features = { featureNone, featureForest, featureFallout } },
-		[terrainSnow] = { points = {{t=0,r=41}}, features = { featureNone, featureFallout } },
+		[terrainGrass] = { points = {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+		[terrainPlains] = { points = {{t=19,r=41}, {t=21,r=50}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainDesert] = { points = {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
+		[terrainTundra] = { points = {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}, features = { featureNone, featureForest, featureFallout } },
+		[terrainSnow] = { points = {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}, features = { featureNone, featureFallout } },
 	}
 
 	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
@@ -2245,10 +2263,11 @@ function Space:CreatePseudoLatitudes()
 			end
 		end
 		print(pseudoLatitude)
+		local change = mAbs(pseudoLatitude+1)^1.5 * 0.005
 		if pseudoLatitude < -1 then
-			minDist = minDist + 0.01
+			minDist = minDist + change
 		elseif pseudoLatitude > -1 then
-			minDist = minDist - 0.01
+			minDist = minDist - change
 		end
 		iterations = iterations + 1
 	until pseudoLatitude == -1 or iterations > 100
@@ -2279,6 +2298,9 @@ function Space:Compute()
     self.lakeMinRatio = self.lakeMinRatio * rainfallScale
 	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
 	EchoDebug(self.lakeMinRatio .. " minimum lake ratio", self.lakeynessMax .. " maximum region lakeyness")
+	FeatureDictionary[featureForest].metaPercent = mMin(100, FeatureDictionary[featureForest].metaPercent * (rainfallScale ^ 2.3))
+	FeatureDictionary[featureJungle].metaPercent = mMin(100, FeatureDictionary[featureJungle].metaPercent * (rainfallScale ^ 2.3))
+	EchoDebug("forest metapercent: ".. FeatureDictionary[featureForest].metaPercent, "jungle metapercent: " .. FeatureDictionary[featureJungle].metaPercent)
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)

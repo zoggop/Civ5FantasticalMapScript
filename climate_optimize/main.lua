@@ -200,6 +200,26 @@ function love.keyreleased(key)
 		paused = not paused
 	elseif key == "f" then
 		myClimate = Climate(nil, featureRegions, myClimate)
+	elseif key == "up" then
+		myClimate:SetPolarExponent(myClimate.polarExponent+0.1)
+	elseif key == "down" then
+		myClimate:SetPolarExponent(myClimate.polarExponent-0.1)
+	elseif key == "right" then
+		myClimate.temperatureMin = myClimate.temperatureMin + 5
+		myClimate:ResetLatitudes()
+	elseif key == "left" then
+		myClimate.temperatureMin = myClimate.temperatureMin - 5
+		myClimate:ResetLatitudes()
+	elseif key == "pagedown" then
+		myClimate.temperatureMax = myClimate.temperatureMax + 5
+		myClimate:ResetLatitudes()
+	elseif key == "pageup" then
+		myClimate.temperatureMax = myClimate.temperatureMax - 5
+		myClimate:ResetLatitudes()
+	elseif key == "." then
+		myClimate:SetRainfallMidpoint(myClimate.rainfallMidpoint + 1)
+	elseif key == "," then
+		myClimate:SetRainfallMidpoint(myClimate.rainfallMidpoint - 1)
 	elseif key == "l" or key == "v" then
 		-- load points from file
 		local lines
@@ -353,6 +373,8 @@ function love.draw()
 	end
 	love.graphics.setColor(255, 0, 0)
 	love.graphics.print(mFloor(myClimate.pointSet.distance or "nil") .. " " .. mFloor(myClimate.subPointSet.distance or "nil"), 10, displayMultHundred + 70)
+	love.graphics.setColor(255, 0, 255)
+	love.graphics.print("polar exponent: " .. myClimate.polarExponent .. "   minimum temperature: " .. myClimate.temperatureMin .. "   maximum temperature: " .. myClimate.temperatureMax .. "   rainfall midpoint: " .. myClimate.rainfallMidpoint, 10, displayMultHundred + 50)
 end
 
 function love.update(dt)

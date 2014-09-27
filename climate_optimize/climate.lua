@@ -226,7 +226,7 @@ end
 function Climate:GetTemperature(latitude, noFloor)
 	local temp
 	if self.pseudoLatitudes and self.pseudoLatitudes[latitude] then
-		temp = pseudoLatitudes[latitude].temperature
+		temp = self.pseudoLatitudes[latitude].temperature
 	else
 		local rise = self.temperatureMax - self.temperatureMin
 		local distFromPole = (90 - latitude) ^ self.polarExponent
@@ -239,10 +239,69 @@ end
 function Climate:GetRainfall(latitude, noFloor)
 	local rain
 	if self.pseudoLatitudes and self.pseudoLatitudes[latitude] then
-		rain = pseudoLatitudes[latitude].rainfall
+		rain = self.pseudoLatitudes[latitude].rainfall
 	else
 		rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
 	end
 	if noFloor then return rain end
 	return mFloor(rain)
+end
+
+function Climate:SetPolarExponent(pExponent)
+	self.polarExponent = pExponent
+	self.polarExponentMultiplier = 90 ^ pExponent
+	self:ResetLatitudes()
+end
+
+function Climate:SetRainfallMidpoint(rMidpoint)
+	self.rainfallMidpoint = rMidpoint
+	if self.rainfallMidpoint > 50 then
+		self.rainfallPlusMinus = 100 - self.rainfallMidpoint
+	else
+		self.rainfallPlusMinus = self.rainfallMidpoint
+	end
+	self:ResetLatitudes()
+end
+
+function Climate:ResetLatitudes()
+	self.pseudoLatitudes = nil
+	local pseudoLatitudes
+	local minDist = 3.33
+	local iterations = 0
+	repeat
+		local protoLatitudes = {}
+		for l = 0, mFloor(90/latitudeResolution) do
+			local latitude = l * latitudeResolution
+			local t, r = self:GetTemperature(latitude, true), self:GetRainfall(latitude, true)
+			tInsert(protoLatitudes, { latitude = latitude, t = t, r = r })
+		end
+		local currentLtr
+		local goodLtrs = {}
+		pseudoLatitudes = {}
+		local pseudoLatitude = 90
+		while #protoLatitudes > 0 do
+			local ltr = tRemove(protoLatitudes)
+			if not currentLtr then
+				currentLtr = ltr
+			else
+				local dist = mSqrt(TempRainDist(currentLtr.t, currentLtr.r, ltr.t, ltr.r))
+				if dist > minDist then currentLtr = ltr end
+			end
+			if not goodLtrs[currentLtr] then
+				goodLtrs[currentLtr] = true
+				pseudoLatitudes[pseudoLatitude] = { temperature = mFloor(currentLtr.t), rainfall = mFloor(currentLtr.r) }
+				pseudoLatitude = pseudoLatitude - 1
+			end
+		end
+		print(pseudoLatitude)
+		local change = mAbs(pseudoLatitude+1)^1.5 * 0.005
+		if pseudoLatitude < -1 then
+			minDist = minDist + change
+		elseif pseudoLatitude > -1 then
+			minDist = minDist - change
+		end
+		iterations = iterations + 1
+	until pseudoLatitude == -1 or iterations > 100
+	self.pseudoLatitudes = pseudoLatitudes
+	self.totalLatitudes = 91
 end
