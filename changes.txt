@@ -7,6 +7,7 @@ low priority:
 - make wonder placement fix work?
 
 Done (v10)
+- make numbers of lakes more consistent by only using a minimum lake subpolygon count (scaled to number of filled hexes)
 - adjust region temperature rainfall deviations
 - make marshyness a region attribute, not a blanket chance across all grassland
 

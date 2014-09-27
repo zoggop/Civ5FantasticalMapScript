@@ -1987,9 +1987,9 @@ Space = class(function(a)
 	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.temperatureMaxDeviation = 15 -- how much at maximum can a temperature deviate from its avg
 	a.rainfallDice = 1 -- just like temperature above
-	a.rainfallMaxDeviation = 5 -- just like temperature above
+	a.rainfallMaxDeviation = 15 -- just like temperature above
 	a.temperatureAvgRatio = 0.4 -- how much to recede a region's min and max temperature to its average
-	a.rainfallAvgRatio = 0.625 -- how much to recede a region's min and max rainfall to its average
+	a.rainfallAvgRatio = 0.65 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
@@ -2239,18 +2239,19 @@ function Space:Compute()
     -- set fallout options
 	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
     if self.contaminatedWater and self.contaminatedSoil then
-    	FeatureDictionary[featureFallout].percent = 70
+    	FeatureDictionary[featureFallout].percent = 35
     	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
     elseif self.contaminatedWater then
-    	FeatureDictionary[featureFallout].percent = 70
+    	FeatureDictionary[featureFallout].percent = 35
     	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
     elseif self.contaminatedSoil then
-    	FeatureDictionary[featureFallout].percent = 70
-    	FeatureDictionary[featureFallout].limitRatio = 0.85
+    	FeatureDictionary[featureFallout].percent = 40
     	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
-    elseif falloutEnabled then
-    	FeatureDictionary[featureFallout].percent = 18
-		FeatureDictionary[featureFallout].points = {{t=mRandom(0, 100),r=mRandom(0, 100)}}
+    elseif self.falloutEnabled then
+    	FeatureDictionary[featureFallout].percent = 25
+    	local l = mRandom(0, 60)
+    	EchoDebug("fallout latitude: " .. l)
+		FeatureDictionary[featureFallout].points = {{t=self:GetTemperature(l),r=self:GetRainfall(l)}}
     end
     if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     -- self:PrintClimate()
