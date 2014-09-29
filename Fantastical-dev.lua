@@ -608,18 +608,19 @@ local OptionDictionary = {
 	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
 	values = {
 			[1] = { name = "None", values = {false, false, false, false} },
-			[2] = { name = "A Bit", values = {true, false, false, false} },
-			[3] = { name = "Post-Apocalyptic", values = {false, false, false, true} },
+			[2] = { name = "Post-Apocalyptic", values = {false, false, false, true} },
+			[3] = { name = "A Bit", values = {true, false, false, false} },
 			[4] = { name = "Contaminated Soil", values = {true, false, true, false} },
 			[5] = { name = "Contaminated Water", values = {true, true, false, false} },
 			[6] = { name = "Contaminated Everything", values = {true, true, true, false} },
 		}
 	},
-	{ name = "Ancient Roads & Cities", sortpriority = 11, keys = { "roadCount" }, default = 2,
+	{ name = "Ancient Roads", sortpriority = 11, keys = { "ancientCitiesCount" }, default = 2,
 	values = {
 			[1] = { name = "None", values = {0} },
-			[2] = { name = "Some", values = {5} },
-			[3] = { name = "Many", values = {10} },
+			[2] = { name = "Few", values = {3} },
+			[3] = { name = "Some", values = {6} },
+			[4] = { name = "Many", values = {9} },
 		}
 	},
 }
@@ -1189,6 +1190,9 @@ function Hex:SetFeature()
 		end
 	end
 	if self.subPolygon.nuked and self.plotType ~= plotOcean and (self.improvementType == improvementCityRuins or mRandom(1, 100) < 67) then
+		self.featureType = featureFallout
+	end
+	if self.polygon.nuked and not self.subPolygon.nuked and self.plotType ~= plotOcean and mRandom(1, 100) < 33 then
 		self.featureType = featureFallout
 	end
 	self.plot:SetFeatureType(self.featureType)
@@ -2050,8 +2054,7 @@ Space = class(function(a)
 	a.marshynessMax = 50
 	a.marshMinHexRatio = 0.015
 	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
-	a.roadCount = 5 -- how many polygon-to-polygon 'ancient' roads
-	a.ancientCitiesCount = 12
+	a.ancientCitiesCount = 3
 	a.falloutEnabled = false -- place fallout on the map?
 	a.postApocalyptic = false -- place fallout around ancient cities
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
@@ -2436,8 +2439,8 @@ function Space:Compute()
 	self:DrawLakeRivers()
 	EchoDebug("drawing rivers...")
 	self:DrawRivers()
-	if self.roadCount > 0 then
-		EchoDebug("drawing roads...")
+	if self.ancientCitiesCount > 0 or self.postApocalyptic then
+		EchoDebug("drawing ancient cities and roads...")
 		self:DrawRoads()
 	end
 	if self.mapLabelsEnabled then
@@ -4384,26 +4387,12 @@ function Space:DrawRoad(origHex, destHex)
 	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y .. " " .. tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
 end
 
-function Space:DrawRoadPolygonToPolygon(polygon, toPolygon)
-	local origHex = self:GetHexByXY(polygon.x, polygon.y)
-	local destHex = self:GetHexByXY(toPolygon.x, toPolygon.y)
-	self:DrawRoad(origHex, destHex)
-	if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
-		origHex.improvementType = improvementCityRuins
-		if self.postApocalyptic then origHex.subPolygon.nuked = true end
-	end
-	if destHex.plotType ~= plotMountain and destHex.plotType ~= plotOcean then
-		destHex.improvementType = improvementCityRuins
-		if self.postApocalyptic then destHex.subPolygon.nuked = true end
-	end
-end
-
-function Space:DrawRoadsOnContinent(continent, roadNumber)
-	roadNumber = roadNumber or 2
+function Space:DrawRoadsOnContinent(continent, cityNumber)
+	cityNumber = cityNumber or 2
 	-- pick city polygons
 	local cityPolygons = {}
 	local polygonBuffer = tDuplicate(continent)
-	while #cityPolygons < roadNumber and #polygonBuffer > 0 do
+	while #cityPolygons < cityNumber and #polygonBuffer > 0 do
 		local polygon = tRemoveRandom(polygonBuffer)
 		local farEnough = true
 		for i, toPolygon in pairs(cityPolygons) do
@@ -4415,19 +4404,18 @@ function Space:DrawRoadsOnContinent(continent, roadNumber)
 		end
 		if farEnough then
 			tInsert(cityPolygons, polygon)
-		end
-	end
-	if #cityPolygons < 2 then
-		-- create the one city if there's only one and stop
-		if #cityPolygons == 1 then
-			local origHex = self:GetHexByXY(cityPolygons[1].x, cityPolygons[1].y)
+			-- draw city ruins and potential fallout
+			local origHex = self:GetHexByXY(polygon.x, polygon.y)
 			if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
 				origHex.improvementType = improvementCityRuins
-				if self.postApocalyptic then origHex.subPolygon.nuked = true end
+				if self.postApocalyptic then
+					polygon.nuked = true
+					origHex.subPolygon.nuked = true
+				end
 			end
 		end
-		return #cityPolygons
 	end
+	if #cityPolygons < 2 or (self.postApocalyptic and self.ancientCitiesCount == 0) then return #cityPolygons end
 	-- find the two cities with longest distance
 	local maxDist = 0
 	local maxDistPolygons
@@ -4443,7 +4431,11 @@ function Space:DrawRoadsOnContinent(continent, roadNumber)
 		end
 	end
 	-- draw the longest road
-	self:DrawRoadPolygonToPolygon(maxDistPolygons[1], maxDistPolygons[2], true)
+	local origHex = self:GetHexByXY(maxDistPolygons[1].x, maxDistPolygons[1].y)
+	local destHex = self:GetHexByXY(maxDistPolygons[2].x, maxDistPolygons[2].y)
+	self:DrawRoad(origHex, destHex)
+	origHex.road = nil
+	destHex.road = nil
 	-- draw the other connecting roads
 	for i, polygon in pairs(cityPolygons) do
 		if polygon ~= maxDistPolygons[1] and polygon ~= maxDistPolygons[2] then
@@ -4458,32 +4450,26 @@ function Space:DrawRoadsOnContinent(continent, roadNumber)
 				end
 			end
 			local origHex = self:GetHexByXY(polygon.x, polygon.y)
-			if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
-				origHex.improvementType = improvementCityRuins
-				if self.postApocalyptic then origHex.subPolygon.nuked = true end
-			end
 			-- draw road
 			if leastHex then self:DrawRoad(origHex, leastHex) end
+			origHex.road = nil
 		end
 	end
 	return #cityPolygons
 end
 
 function Space:DrawRoads()
-	local ancientCitiesCountdown = self.ancientCitiesCount
+	local cityNumber = self.ancientCitiesCount
+	if self.postApocalyptic and self.ancientCitiesCount == 0 then
+		cityNumber = 3
+	end
 	local cities = 0
 	local continentBuffer = tDuplicate(self.continents)
 	while #continentBuffer > 0 do
 		local continent = tRemoveRandom(continentBuffer)
-		local number
-		if ancientCitiesCountdown <= 2 then
-			number = 2
-		else
-			number = ancientCitiesCountdown
-		end
-		local drawn = self:DrawRoadsOnContinent(continent, number)
-		ancientCitiesCountdown = ancientCitiesCountdown - drawn
-		cities = cities + drawn
+		EchoDebug(continent)
+		local drawn = self:DrawRoadsOnContinent(continent, cityNumber)
+		cities = cities + (drawn or 0)
 		EchoDebug(drawn .. " cities in continent")
 	end
 	EchoDebug(cities .. " ancient cities")
