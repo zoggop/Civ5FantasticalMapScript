@@ -4343,7 +4343,7 @@ function Space:DrawRivers()
 	EchoDebug(drawn .. " drawn ", " river area: " .. self.riverArea, "(" .. rlpercent .. "% of land, " .. rpercent .. "% of map)")
 end
 
-function Space:DrawRoad(origHex, destHex, markIt)
+function Space:DrawRoad(origHex, destHex)
 	local hex = origHex
 	local it = 0
 	local picked = {}
@@ -4353,37 +4353,25 @@ function Space:DrawRoad(origHex, destHex, markIt)
 		end
 		hex.invisibleRoad = true
 		picked[hex] = true
-		if markIt then
-			hex.roadMarked = true
-			tInsert(self.markedRoads[origHex.polygon.continent], hex)
-		end
+		hex.roadMarked = origHex.polygon.continent
+		if self.markedRoads == nil then self.markedRoads = {} end
+		if self.markedRoads[origHex.polygon.continent] == nil then self.markedRoads[origHex.polygon.continent] = {} end
+		tInsert(self.markedRoads[origHex.polygon.continent], hex)
 		if hex == destHex then break end
-		local xdist, ydist = self:WrapDistanceSigned(hex.x, hex.y, destHex.x, destHex.y)
-		local directions
-		if xdist > 1 then
-			directions = { DirNE, DirE, DirSE }
-		elseif xdist < 1 then
-			directions = { DirNW, DirW, DirSW }
-		elseif ydist > 0 then
-			directions = { DirNE, DirNW }
-		elseif ydist < 0 then
-			directions = { DirSE, DirSW }
-		end
-		local leastCost = 10
+		local leastCost = 9999
 		local leastHex
 		for direction, nhex in pairs(hex:Neighbors(directions)) do
-			if not picked[nhex] then
+			if not picked[nhex] and nhex.plotType ~= plotOcean then
+				local cost = 0
 				if nhex == destHex then
-					cost = -1
+					cost = -100
 				elseif nhex.plotType == plotMountain then
 					cost = 3
-				elseif nhex.plotType == plotOcean then
-					cost = 2
 				elseif nhex.plotType == plotHills then
 					cost = 1
-				else
-					cost = 0
 				end
+				local dist = self:HexDistance(nhex.x, nhex.y, destHex.x, destHex.y)
+				cost = cost + dist
 				if cost < leastCost then
 					leastCost = cost
 					leastHex = nhex
@@ -4396,11 +4384,10 @@ function Space:DrawRoad(origHex, destHex, markIt)
 	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y .. " " .. tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
 end
 
-function Space:DrawRoadPolygonToPolygon(polygon, toPolygon, markIt)
+function Space:DrawRoadPolygonToPolygon(polygon, toPolygon)
 	local origHex = self:GetHexByXY(polygon.x, polygon.y)
 	local destHex = self:GetHexByXY(toPolygon.x, toPolygon.y)
-	EchoDebug(origHex, destHex)
-	self:DrawRoad(origHex, destHex, markIt)
+	self:DrawRoad(origHex, destHex)
 	if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
 		origHex.improvementType = improvementCityRuins
 		if self.postApocalyptic then origHex.subPolygon.nuked = true end
@@ -4456,12 +4443,11 @@ function Space:DrawRoadsOnContinent(continent, roadNumber)
 		end
 	end
 	-- draw the longest road
-	self.markedRoads[continent] = {}
 	self:DrawRoadPolygonToPolygon(maxDistPolygons[1], maxDistPolygons[2], true)
 	-- draw the other connecting roads
 	for i, polygon in pairs(cityPolygons) do
 		if polygon ~= maxDistPolygons[1] and polygon ~= maxDistPolygons[2] then
-			-- find the nearest part of the main road
+			-- find the nearest part of the continent's road network
 			local leastDist = 99999
 			local leastHex
 			for h, hex in pairs(self.markedRoads[continent]) do
@@ -4484,20 +4470,21 @@ function Space:DrawRoadsOnContinent(continent, roadNumber)
 end
 
 function Space:DrawRoads()
-	self.markedRoads = {}
 	local ancientCitiesCountdown = self.ancientCitiesCount
 	local cities = 0
-	for i, continent in pairs(self.continents) do
+	local continentBuffer = tDuplicate(self.continents)
+	while #continentBuffer > 0 do
+		local continent = tRemoveRandom(continentBuffer)
 		local number
 		if ancientCitiesCountdown <= 2 then
 			number = 2
 		else
-			number = mRandom(1, mCeil(ancientCitiesCountdown/2))
+			number = ancientCitiesCountdown
 		end
 		local drawn = self:DrawRoadsOnContinent(continent, number)
 		ancientCitiesCountdown = ancientCitiesCountdown - drawn
 		cities = cities + drawn
-		EchoDebug(drawn .. " cities in continent #" .. i)
+		EchoDebug(drawn .. " cities in continent")
 	end
 	EchoDebug(cities .. " ancient cities")
 end
