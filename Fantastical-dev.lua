@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 10
+-- version 11
 
 --------------------------------------------------------------
 if include == nil then
@@ -605,16 +605,17 @@ local OptionDictionary = {
 			[6] = { name = "Random", values = "values" },
 		}
 	},
-	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil" }, default = 1,
+	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
 	values = {
-			[1] = { name = "None", values = {false, false, false} },
-			[2] = { name = "A Bit", values = {true, false, false} },
-			[3] = { name = "Contaminated Soil", values = {true, false, true} },
-			[4] = { name = "Contaminated Water", values = {true, true, false} },
-			[5] = { name = "Contaminated Everything", values = {true, true, true} },
+			[1] = { name = "None", values = {false, false, false, false} },
+			[2] = { name = "A Bit", values = {true, false, false, false} },
+			[3] = { name = "Post-Apocalyptic", values = {false, false, false, true} },
+			[4] = { name = "Contaminated Soil", values = {true, false, true, false} },
+			[5] = { name = "Contaminated Water", values = {true, true, false, false} },
+			[6] = { name = "Contaminated Everything", values = {true, true, true, false} },
 		}
 	},
-	{ name = "Ancient Roads", sortpriority = 11, keys = { "roadCount" }, default = 2,
+	{ name = "Ancient Roads & Cities", sortpriority = 11, keys = { "roadCount" }, default = 2,
 	values = {
 			[1] = { name = "None", values = {0} },
 			[2] = { name = "Some", values = {5} },
@@ -767,6 +768,7 @@ local terrainOcean, terrainCoast, terrainGrass, terrainPlains, terrainDesert, te
 local featureForest, featureJungle, featureIce, featureMarsh, featureOasis, featureFallout, featureAtoll
 local TerrainDictionary, FeatureDictionary
 local TerrainDictionaryCentauri, FeatureDictionaryCentauri
+local improvementCityRuins
 local artOcean, artAmerica, artAsia, artAfrica, artEurope
 local resourceSilver, resourceSpices
 
@@ -816,6 +818,8 @@ local function SetConstants()
 			featureAtoll = thisFeature.ID
 		end
 	end
+
+	improvementCityRuins = GameInfo.Improvements.IMPROVEMENT_CITY_RUINS.ID
 
 --[[
 
@@ -868,13 +872,14 @@ jungle {{t=100,r=100}}
 		[terrainSnow] = { points = {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}, features = { featureNone, featureFallout } },
 	}
 
-	-- percent is how likely it is to show up in a region's collection (if it's the closest rainfall and temperature)
-	-- limitRatio is what fraction of a region's hexes may have this feature (-1 is no limit)
+	-- metaPercent is how like it is be a part of a region's collection *at all*
+	-- percent is how likely it is to show up in a region's collection on a per-element (tile) basis, if it's the closest rainfall and temperature already
+	-- limitRatio is what fraction of a region's hexes at maximum may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
 		[featureNone] = { points = {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}, percent = 100, limitRatio = -1, hill = true },
 		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}, metaPercent = 65, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 85, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 80, percent = 95, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
@@ -1183,6 +1188,9 @@ function Hex:SetFeature()
 			self.featureType = featureFallout
 		end
 	end
+	if self.subPolygon.nuked and self.plotType ~= plotOcean and (self.improvementType == improvementCityRuins or mRandom(1, 100) < 67) then
+		self.featureType = featureFallout
+	end
 	self.plot:SetFeatureType(self.featureType)
 end
 
@@ -1200,12 +1208,15 @@ end
 function Hex:SetRoad()
 	if self.plot == nil then return end
 	if not self.road then return end
-	-- self.plot:SetFeatureType(featureFallout)
-	-- self.plot:SetRouteType(routeRoad)
-	local sqlStatement = "INSERT INTO Ancient_Roads (x, y) VALUES (" .. self.x .. ", " .. self.y .. ");"
-	for whatever in DB.Query(sqlStatement) do
-		EchoDebug(tostring(whatever))
-	end
+	self.plot:SetRouteType(routeRoad)
+	EchoDebug("routeType " .. routeRoad .. " at " .. self.x .. "," .. self.y)
+end
+
+function Hex:SetImprovement()
+	if self.plot == nil then return end
+	if not self.improvementType then return end
+	EchoDebug("improvementType " .. self.improvementType .. " at " .. self.x .. "," .. self.y)
+	self.plot:SetImprovementType(self.improvementType)
 end
 
 function Hex:SetContinentArtType()
@@ -2040,7 +2051,9 @@ Space = class(function(a)
 	a.marshMinHexRatio = 0.015
 	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
 	a.roadCount = 5 -- how many polygon-to-polygon 'ancient' roads
+	a.ancientCitiesCount = 12
 	a.falloutEnabled = false -- place fallout on the map?
+	a.postApocalyptic = false -- place fallout around ancient cities
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
 	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
 	a.mapLabelsEnabled = true -- add place names to the map?
@@ -2325,7 +2338,7 @@ function Space:Compute()
 	-- [featureFallout] = { temperature = {0, 100}, rainfall = {0, 100}, percent = 15, limitRatio = 0.75, hill = true },
 	if self.falloutEnabled then
 		FeatureDictionary[featureFallout].disabled = nil
-	    if self.contaminatedWater and self.contaminatedSoil then
+		if self.contaminatedWater and self.contaminatedSoil then
 	    	FeatureDictionary[featureFallout].percent = 35
 	    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
 	    elseif self.contaminatedWater then
@@ -2789,9 +2802,14 @@ function Space:SetRivers()
 end
 
 function Space:SetRoads()
-	CreateOrOverwriteTable("Ancient_Roads", "x integer DEFAULT 0, y integer DEFAULT 0")
 	for i, hex in pairs(self.hexes) do
 		hex:SetRoad()
+	end
+end
+
+function Space:SetImprovements()
+	for i, hex in pairs(self.hexes) do
+		hex:SetImprovement()
 	end
 end
 
@@ -4325,16 +4343,20 @@ function Space:DrawRivers()
 	EchoDebug(drawn .. " drawn ", " river area: " .. self.riverArea, "(" .. rlpercent .. "% of land, " .. rpercent .. "% of map)")
 end
 
-function Space:DrawRoad(origHex, destHex)
+function Space:DrawRoad(origHex, destHex, markIt)
 	local hex = origHex
 	local it = 0
 	local picked = {}
 	repeat
-		if hex.plotType == plotLand or hex.plotType == plotHills then
+		if hex.polygon.continent == origHex.polygon.continent and (hex.plotType == plotLand or hex.plotType == plotHills) then
 			hex.road = true
 		end
 		hex.invisibleRoad = true
 		picked[hex] = true
+		if markIt then
+			hex.roadMarked = true
+			tInsert(self.markedRoads[origHex.polygon.continent], hex)
+		end
 		if hex == destHex then break end
 		local xdist, ydist = self:WrapDistanceSigned(hex.x, hex.y, destHex.x, destHex.y)
 		local directions
@@ -4371,33 +4393,113 @@ function Space:DrawRoad(origHex, destHex)
 		hex = leastHex or hex
 		it = it + 1
 	until not leastHex or it > 1000
-	EchoDebug(it)
+	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y .. " " .. tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
 end
 
-function Space:DrawRoads()
-	if self.roadCount == 0 then return end
-	local drawnRoads = 0
-	repeat
-		local polygon
-		repeat
-			polygon = tGetRandom(self.polygons)
-		until polygon.continent
-		for n, neighbor in pairs(polygon.neighbors) do
-			if neighbor.continent and (not polygon.roads or not polygon.roads[neighbor]) then
-				toPolygon = neighbor
+function Space:DrawRoadPolygonToPolygon(polygon, toPolygon, markIt)
+	local origHex = self:GetHexByXY(polygon.x, polygon.y)
+	local destHex = self:GetHexByXY(toPolygon.x, toPolygon.y)
+	EchoDebug(origHex, destHex)
+	self:DrawRoad(origHex, destHex, markIt)
+	if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
+		origHex.improvementType = improvementCityRuins
+		if self.postApocalyptic then origHex.subPolygon.nuked = true end
+	end
+	if destHex.plotType ~= plotMountain and destHex.plotType ~= plotOcean then
+		destHex.improvementType = improvementCityRuins
+		if self.postApocalyptic then destHex.subPolygon.nuked = true end
+	end
+end
+
+function Space:DrawRoadsOnContinent(continent, roadNumber)
+	roadNumber = roadNumber or 2
+	-- pick city polygons
+	local cityPolygons = {}
+	local polygonBuffer = tDuplicate(continent)
+	while #cityPolygons < roadNumber and #polygonBuffer > 0 do
+		local polygon = tRemoveRandom(polygonBuffer)
+		local farEnough = true
+		for i, toPolygon in pairs(cityPolygons) do
+			local dist = self:HexDistance(polygon.x, polygon.y, toPolygon.x, toPolygon.y)
+			if dist < 3 then
+				farEnough = false
 				break
 			end
 		end
-		if toPolygon then
-			self:DrawRoad(self:GetHexByXY(polygon.x, polygon.y), self:GetHexByXY(toPolygon.x, toPolygon.y))
-			if polygon.roads == nil then polygon.roads = {} end
-			if toPolygon.roads == nil then toPolygon.roads = {} end
-			polygon.roads[toPolygon] = true
-			toPolygon.roads[polygon] = true
-			EchoDebug("road from ", polygon, " to " , toPolygon)
-			drawnRoads = drawnRoads + 1
+		if farEnough then
+			tInsert(cityPolygons, polygon)
 		end
-	until drawnRoads >= self.roadCount
+	end
+	if #cityPolygons < 2 then
+		-- create the one city if there's only one and stop
+		if #cityPolygons == 1 then
+			local origHex = self:GetHexByXY(cityPolygons[1].x, cityPolygons[1].y)
+			if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
+				origHex.improvementType = improvementCityRuins
+				if self.postApocalyptic then origHex.subPolygon.nuked = true end
+			end
+		end
+		return #cityPolygons
+	end
+	-- find the two cities with longest distance
+	local maxDist = 0
+	local maxDistPolygons
+	local cityBuffer = tDuplicate(cityPolygons)
+	while #cityBuffer > 0 do
+		local polygon = tRemove(cityBuffer)
+		for i, toPolygon in pairs(cityBuffer) do
+			local dist = self:HexDistance(polygon.x, polygon.y, toPolygon.x, toPolygon.y)
+			if dist > maxDist then
+				maxDist = dist
+				maxDistPolygons = {polygon, toPolygon}
+			end
+		end
+	end
+	-- draw the longest road
+	self.markedRoads[continent] = {}
+	self:DrawRoadPolygonToPolygon(maxDistPolygons[1], maxDistPolygons[2], true)
+	-- draw the other connecting roads
+	for i, polygon in pairs(cityPolygons) do
+		if polygon ~= maxDistPolygons[1] and polygon ~= maxDistPolygons[2] then
+			-- find the nearest part of the main road
+			local leastDist = 99999
+			local leastHex
+			for h, hex in pairs(self.markedRoads[continent]) do
+				local dist = self:HexDistance(polygon.x, polygon.y, hex.x, hex.y)
+				if dist < leastDist then
+					leastDist = dist
+					leastHex = hex
+				end
+			end
+			local origHex = self:GetHexByXY(polygon.x, polygon.y)
+			if origHex.plotType ~= plotMountain and origHex.plotType ~= plotOcean then
+				origHex.improvementType = improvementCityRuins
+				if self.postApocalyptic then origHex.subPolygon.nuked = true end
+			end
+			-- draw road
+			if leastHex then self:DrawRoad(origHex, leastHex) end
+		end
+	end
+	return #cityPolygons
+end
+
+function Space:DrawRoads()
+	self.markedRoads = {}
+	local ancientCitiesCountdown = self.ancientCitiesCount
+	local cities = 0
+	for i, continent in pairs(self.continents) do
+		local number
+		if ancientCitiesCountdown <= 2 then
+			number = 2
+		else
+			number = mRandom(1, mCeil(ancientCitiesCountdown/2))
+		end
+		local drawn = self:DrawRoadsOnContinent(continent, number)
+		ancientCitiesCountdown = ancientCitiesCountdown - drawn
+		cities = cities + drawn
+		EchoDebug(drawn .. " cities in continent #" .. i)
+	end
+	EchoDebug(cities .. " ancient cities")
 end
 
 function Space:PickCoasts()
@@ -4753,7 +4855,7 @@ function AddFeatures()
 	print("Setting Feature Types (Fantastical) ...")
 	mySpace:SetFeatures()
 	print("Setting roads instead (Fantastical) ...")
-	mySpace:SetRoads()
+	-- mySpace:SetRoads()
 end
 
 function AddRivers()
@@ -4778,6 +4880,55 @@ function DetermineContinents()
 		EchoDebug("using default continent stamper...")
 		Map.DefaultContinentStamper()
 	end
+end
+
+------------------------------------------------------------------------------
+-- below is civ's default AddGoodies() from MapGenerator.lua, but with a very small change to add roads and city ruins
+function AddGoodies()
+
+	print("-------------------------------");
+	print("Map Generation - Adding Goodies");
+	
+	-- If an era setting wants no goodies, don't place any.
+	local startEra = Game.GetStartEra();
+	if(GameInfo.Eras[startEra].NoGoodies) then
+		print("** The Era specified NO GOODY HUTS");
+		return;
+	end
+
+	if (Game.IsOption(GameOptionTypes.GAMEOPTION_NO_GOODY_HUTS)) then
+		print("** The game specified NO GOODY HUTS");
+		return false;
+	end
+
+	-- Check XML for any and all Improvements flagged as "Goody" and distribute them.
+	for improvement in GameInfo.Improvements() do
+		local tilesPerGoody = improvement.TilesPerGoody;
+		
+		if(improvement.Goody and tilesPerGoody > 0) then
+		
+			local improvementID = improvement.ID;
+			for index, plot in Plots(Shuffle) do
+				if ( not plot:IsWater() ) then
+					
+					-- Prevents too many goodies from clustering on any one landmass.
+					local area = plot:Area();
+					local improvementCount = area:GetNumImprovements(improvementID);
+					local scaler = (area:GetNumTiles() + (tilesPerGoody/2))/tilesPerGoody;	
+					if (improvementCount < scaler) then
+						
+						if (CanPlaceGoodyAt(improvement, plot)) then
+							plot:SetImprovementType(improvementID);
+						end
+					end
+				end
+			end
+		end
+	end
+	print("-------------------------------");
+	print('setting Fantastical routes and improvements...')
+	mySpace:SetRoads()
+	mySpace:SetImprovements()
 end
 
 -------------------------------------------------------------------------------
