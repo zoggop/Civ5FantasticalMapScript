@@ -22,7 +22,7 @@ g_Properties = {}
 --------------------------------------------------------------------
 local mapWidth, mapHeight = Map.GetGridSize()
 local mapArea = mapWidth * mapHeight
-local bigArea = mCeil(mapArea / 8)
+local bigArea = math.ceil(mapArea / 8)
 local featureIce = FeatureTypes.FEATURE_ICE
 local g_SaveData	= Modding.OpenSaveData();
 local g_MapManager = InstanceManager:new("Map", "Anchor", Controls.MapContainer)
@@ -48,7 +48,7 @@ function F_ActivePlayerTurnStart()
 						end
 					end
 				end
-				local necessaryHexRatio = mMax( 0.5, 1 - (validHexCount / mapArea) )
+				local necessaryHexRatio = math.max( 0.5, 1 - (validHexCount / mapArea) )
 				allRevealed = revealedHexCount > (validHexCount * necessaryHexRatio)
 			else
 				for h, hex in pairs(label.Hexes) do

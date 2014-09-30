@@ -6,6 +6,12 @@ low priority:
 - make coastal ice not interfere with navigation?
 - make wonder placement fix work?
 
+Done (v11)
+- fix creating names even when place names mod isn't activated
+- add option for post apocalyptic fallout placement, around city ruins (whether or not the road network is there)
+- new system for creating road *networks* that connect city ruins instead of just a few scattered roads.
+- in-mapscript road placement (no need for the mod or Fantastical_Main)
+
 Done (v10)
 - refine climate system again
 - make numbers of lakes more consistent by only using a minimum lake subpolygon count (scaled to number of filled hexes)

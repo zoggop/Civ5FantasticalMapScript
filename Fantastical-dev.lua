@@ -4472,7 +4472,6 @@ function Space:DrawRoads()
 	local continentBuffer = tDuplicate(self.continents)
 	while #continentBuffer > 0 do
 		local continent = tRemoveRandom(continentBuffer)
-		EchoDebug(continent)
 		local drawn = self:DrawRoadsOnContinent(continent, cityNumber)
 		cities = cities + (drawn or 0)
 		EchoDebug(drawn .. " cities in continent")

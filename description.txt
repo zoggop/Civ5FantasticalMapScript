@@ -26,8 +26,8 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 
 [b]Climate Realism:[/b] [i]Off[/i] creates any kind of terrain wherever (including ice in the ocean). [i]On[/i] puts ice at the poles and creates an earth-like climate.
 
-[b]Fallout:[/b] [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
+[b]Fallout:[/b] [i]Post-Apocalyptic[/i] puts fallout near ancient city ruins (which will be connected by roads if [b]Ancient Roads[/b] is enabled). [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
 
-[b]Ancient Roads:[/b] [i]Some[/i] and [i]Many[/i] produce preexisting road networks, in places flooded by water, overgrown with trees, and blocked by landslides.
+[b]Ancient Roads:[/b] [i]Few[/i], [i]Some[/i], and [i]Many[/i] produce road networks that connect city ruins.
 
 [b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Ice Age[/i] to [i]Jurassic[/i], and [b]Rainfall[/b] from [i]Wasteland[/i] to [i]Waterlogged[/i].
