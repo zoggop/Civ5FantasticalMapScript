@@ -2059,7 +2059,7 @@ Space = class(function(a)
 	a.postApocalyptic = false -- place fallout around ancient cities
 	a.contaminatedWater = false -- place fallout in rainy areas and along rivers?
 	a.contaminatedSoil = false -- place fallout in dry areas and in mountains?
-	a.mapLabelsEnabled = true -- add place names to the map?
+	a.mapLabelsEnabled = false -- add place names to the map?
 	a.regionLabelsMax = 10 -- maximum number of labelled regions
 	a.rangeLabelsMax = 5 -- maximum number of labelled mountain ranges (descending length)
 	a.riverLabelsMax = 5 -- maximum number of labelled rivers (descending length)
@@ -2342,13 +2342,13 @@ function Space:Compute()
 	if self.falloutEnabled then
 		FeatureDictionary[featureFallout].disabled = nil
 		if self.contaminatedWater and self.contaminatedSoil then
-	    	FeatureDictionary[featureFallout].percent = 35
+	    	FeatureDictionary[featureFallout].percent = 30
 	    	FeatureDictionary[featureFallout].points = {{t=50,r=100}, {t=50,r=0}}
 	    elseif self.contaminatedWater then
 	    	FeatureDictionary[featureFallout].percent = 35
 	    	FeatureDictionary[featureFallout].points = {{t=50,r=100}}
 	    elseif self.contaminatedSoil then
-	    	FeatureDictionary[featureFallout].percent = 40
+	    	FeatureDictionary[featureFallout].percent = 35
 	    	FeatureDictionary[featureFallout].points = {{t=50,r=0}}
 	    else
 	    	FeatureDictionary[featureFallout].percent = 25
@@ -4351,27 +4351,30 @@ function Space:DrawRoad(origHex, destHex)
 	local it = 0
 	local picked = {}
 	repeat
-		if hex.polygon.continent == origHex.polygon.continent and (hex.plotType == plotLand or hex.plotType == plotHills) then
+		if hex.polygon.continent == origHex.polygon.continent and (hex.plotType == plotLand or hex.plotType == plotHills) and hex.featureType ~= featureMarsh then
 			hex.road = true
+			hex.roadMarked = origHex.polygon.continent
+			if self.markedRoads == nil then self.markedRoads = {} end
+			if self.markedRoads[origHex.polygon.continent] == nil then self.markedRoads[origHex.polygon.continent] = {} end
+			tInsert(self.markedRoads[origHex.polygon.continent], hex)
 		end
 		hex.invisibleRoad = true
 		picked[hex] = true
-		hex.roadMarked = origHex.polygon.continent
-		if self.markedRoads == nil then self.markedRoads = {} end
-		if self.markedRoads[origHex.polygon.continent] == nil then self.markedRoads[origHex.polygon.continent] = {} end
-		tInsert(self.markedRoads[origHex.polygon.continent], hex)
 		if hex == destHex then break end
 		local leastCost = 9999
 		local leastHex
 		for direction, nhex in pairs(hex:Neighbors(directions)) do
-			if not picked[nhex] and nhex.plotType ~= plotOcean then
+			if not picked[nhex] and (nhex.plotType == plotLand or nhex.plotType == plotHills) and nhex.featureType ~= featureMarsh then
 				local cost = 0
 				if nhex == destHex then
-					cost = -100
-				elseif nhex.plotType == plotMountain then
-					cost = 3
-				elseif nhex.plotType == plotHills then
-					cost = 1
+					leastHex = nhex
+					break
+				end
+				if nhex.plotType == plotHills then
+					cost = cost + 1
+				end
+				if nhex.onRiver[hex] or hex.onRiver[nhex] then
+					cost = cost + 1
 				end
 				local dist = self:HexDistance(nhex.x, nhex.y, destHex.x, destHex.y)
 				cost = cost + dist
@@ -4384,7 +4387,7 @@ function Space:DrawRoad(origHex, destHex)
 		hex = leastHex or hex
 		it = it + 1
 	until not leastHex or it > 1000
-	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y .. " " .. tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
+	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y, tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
 end
 
 function Space:DrawRoadsOnContinent(continent, cityNumber)
@@ -4442,11 +4445,13 @@ function Space:DrawRoadsOnContinent(continent, cityNumber)
 			-- find the nearest part of the continent's road network
 			local leastDist = 99999
 			local leastHex
-			for h, hex in pairs(self.markedRoads[continent]) do
-				local dist = self:HexDistance(polygon.x, polygon.y, hex.x, hex.y)
-				if dist < leastDist then
-					leastDist = dist
-					leastHex = hex
+			if self.markedRoads and self.markedRoads[continent] then
+				for h, hex in pairs(self.markedRoads[continent]) do
+					local dist = self:HexDistance(polygon.x, polygon.y, hex.x, hex.y)
+					if dist < leastDist then
+						leastDist = dist
+						leastHex = hex
+					end
 				end
 			end
 			local origHex = self:GetHexByXY(polygon.x, polygon.y)
