@@ -16,7 +16,7 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 
 [b]World Wrap:[/b] The map can be either a [i]Globe[/i] with east-west wrapping, or a [i]Realm[/i] with no wrapping
 
-[b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]Zero[/i] to [i]Four[/i]. (On [i]Realm[/i] maps this means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.)
+[b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]No Oceans[/i] to [i]Four[/i]. [i]No Oceans[/i] creates a map without any large bodies of water, only small lakes ([b]Continents/Ocean[/b] and [b]Islands[/b] will be ignored). [i]No Major Oceans[/i] means the whole map could be traversed without astronomy, i.e., all land could be connected by coast. On [i]Realm[/i] maps the number means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.
 
 [b]Continents/Ocean:[/b] The number of large continents per ocean, [i]One[/i] to [i]Four[/i]. (On [i]Realm[/i] maps this sets the number of major continents, regardless of how many sides of ocean there are.)
 
@@ -30,4 +30,4 @@ This script (version 6) is compatible with [url=http://steamcommunity.com/shared
 
 [b]Ancient Roads:[/b] [i]Few[/i], [i]Some[/i], and [i]Many[/i] produce road networks that connect city ruins.
 
-[b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Ice Age[/i] to [i]Jurassic[/i], and [b]Rainfall[/b] from [i]Wasteland[/i] to [i]Waterlogged[/i].
+[b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Snowball[/i] to [i]Global Tropics[/i], and [b]Rainfall[/b] from [i]Arrakis[/i] to [i]Arboria[/i].
