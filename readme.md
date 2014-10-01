@@ -25,7 +25,7 @@ This script (version 6) is compatible with [Alpha Centauri Maps](http://steamcom
 
 Place Fantastical-dev.lua into Documents\my games\Sid Meier's Civilization 5\Maps\
 
-The map will show up as "Fantastical (dev)" in the game setup dialogue. Note that installing it this way will not allow Place Names or Ancient Roads.
+The map will show up as "Fantastical (dev)" in the game setup dialogue.
 
 #### Method Two
 
@@ -41,10 +41,12 @@ Subscribe to the [Steam Workshop](http://steamcommunity.com/sharedfiles/filedeta
 
 **Islands:** How many large and small islands. *Few*, *Some*, or *Many*. More islands has a side effect of smaller continents.
 
+**Land at Poles:** Allow land to extend into the poles. *Yes* or *No*.
+
 **Climate Realism:** *Off* creates any kind of terrain wherever (including ice in the ocean). *On* puts ice at the poles and creates an earth-like climate.
 
-**Fallout:** *A Bit* places bits of fallout around the map. *Contaminated Soil* places fallout in dry areas. *Contaminated Water* places fallout along rivers and coasts and in wet areas. *Contaminated Everything* places fallout heavily all over the place.
+**Fallout:** *Post-Apocalyptic* puts fallout near ancient city ruins (which will be connected by roads if **Ancient Roads** is enabled). *A Bit* places bits of fallout around the map. *Contaminated Soil* places fallout in dry areas. *Contaminated Water* places fallout along rivers and coasts and in wet areas. *Contaminated Everything* places fallout heavily all over the place.
 
-**Ancient Roads:** *Some* and *Many* produce preexisting road networks, in places flooded by water, overgrown with trees, and blocked by landslides.
+**Ancient Roads:** *Few*, *Some*, and *Many* produce road networks that connect city ruins.
 
 **World Age**, **Temperature**, **Rainfall**: All have more than the usual number of options. **World Age** goes from *1 Billion Years* to *6 Billion Years*, **Temperature** from *Ice Age* to *Jurassic*, and **Rainfall** from *Wasteland* to *Waterlogged*.
