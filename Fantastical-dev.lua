@@ -585,7 +585,7 @@ local OptionDictionary = {
 			[2] = { name = "On", values = {true} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
 	values = {
 			[1] = { name = "Snowball", values = {1.8, 0, 20} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 45} },
@@ -597,7 +597,7 @@ local OptionDictionary = {
 			[8] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 4,
 	values = {
 			[1] = { name = "Arrakis", values = {0} },
 			[2] = { name = "Very Arid", values = {16} },
@@ -4812,6 +4812,7 @@ function GetMapScriptInfo()
 		IconAtlas = "WORLDTYPE_FANTASTICAL_ATLAS",
 		IconIndex = 0,
 		CustomOptions = custOpts,
+		FolderType = "NULL",
 	}
 end
 
@@ -4846,6 +4847,14 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+	--[[
+	for row in GameInfo.Map_Sizes() do
+		for k, v in pairs(row) do
+			print(k, v)
+		end
+		print('end of row\n')
+	end
+	]]--
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
