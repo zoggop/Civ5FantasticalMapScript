@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 13
+-- version 14
 
 --------------------------------------------------------------
 if include == nil then
@@ -585,24 +585,28 @@ local OptionDictionary = {
 			[2] = { name = "On", values = {true} },
 		}
 	},
-	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 3,
+	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
 	values = {
-			[1] = { name = "Ice Age", values = {1.6, 0, 45} },
-			[2] = { name = "Cool", values = {1.4, 0, 84} },
-			[3] = { name = "Temperate", values = {1.2, 0, 100} },
-			[4] = { name = "Hot", values = {1.1, 5, 100} },
-			[5] = { name = "Jurassic", values = {0.9, 14, 100} },
-			[6] = { name = "Random", values = "keys" },
+			[1] = { name = "Snowball", values = {1.8, 0, 20} },
+			[2] = { name = "Ice Age", values = {1.6, 0, 45} },
+			[3] = { name = "Cool", values = {1.4, 0, 84} },
+			[4] = { name = "Temperate", values = {1.2, 0, 100} },
+			[5] = { name = "Hot", values = {1.1, 5, 100} },
+			[6] = { name = "Jurassic", values = {0.9, 14, 100} },
+			[7] = { name = "Global Tropics", values = {0.7, 25, 100} },
+			[8] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 3,
+	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 4,
 	values = {
-			[1] = { name = "Wasteland", values = {16} },
-			[2] = { name = "Arid", values = {39} },
-			[3] = { name = "Normal", values = {50} },
-			[4] = { name = "Wet", values = {58} },
-			[5] = { name = "Waterlogged", values = {63} },
-			[6] = { name = "Random", values = "values" },
+			[1] = { name = "Arrakis", values = {0} },
+			[2] = { name = "Very Arid", values = {16} },
+			[3] = { name = "Arid", values = {39} },
+			[4] = { name = "Normal", values = {50} },
+			[5] = { name = "Wet", values = {58} },
+			[6] = { name = "Very Wet", values = {63} },
+			[7] = { name = "Arboria", values = {84} },
+			[8] = { name = "Random", values = "values" },
 		}
 	},
 	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
@@ -862,7 +866,41 @@ none {{t=99,r=31}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
 forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
 jungle {{t=100,r=100}}
 
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=87,r=44}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
+jungle {{t=100,r=100}, {t=75,r=100}}
 
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=87,r=44}, {t=8,r=3}, {t=22,r=75}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}, {t=7,r=75}}
+jungle {{t=100,r=100}, {t=75,r=100}}
+
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=87,r=44}, {t=8,r=3}, {t=43,r=33}, {t=59,r=39}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
+jungle {{t=100,r=100}, {t=75,r=100}}
+
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=87,r=44}, {t=20,r=23}, {t=19,r=75}, {t=43,r=33}, {t=59,r=39}, {t=40,r=73}, {t=28,r=58}, {t=62,r=53}}
+forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}
+jungle {{t=100,r=100}, {t=75,r=100}}
 ]]--
 
 	TerrainDictionary = {
@@ -878,9 +916,9 @@ jungle {{t=100,r=100}}
 	-- limitRatio is what fraction of a region's hexes at maximum may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}, metaPercent = 65, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}}, metaPercent = 80, percent = 95, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureNone] = { points = {{t=87,r=44}, {t=20,r=23}, {t=19,r=75}, {t=43,r=33}, {t=59,r=39}, {t=40,r=73}, {t=28,r=58}, {t=62,r=53}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}, {t=75,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
@@ -2535,8 +2573,8 @@ function Space:ComputeCoasts()
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
 				for hi, hex in pairs(subPolygon.hexes) do
 					local bad = false
-					if self.polarMaxLandRatio == 0 and hex.y ~= 0 and hex.y ~= self.h then
-						-- try not to interfere w/ navigation at poles if no land at poles
+					if self.polarMaxLandRatio == 0 and self.useMapLatitudes and hex.y ~= 0 and hex.y ~= self.h then
+						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
 						for d, nhex in pairs(hex:Neighbors()) do
 							if nhex.polygon.continent then
 								bad = true
@@ -4774,6 +4812,7 @@ function GetMapScriptInfo()
 		IconAtlas = "WORLDTYPE_FANTASTICAL_ATLAS",
 		IconIndex = 0,
 		CustomOptions = custOpts,
+		FolderType = "NULL",
 	}
 end
 
@@ -4808,6 +4847,14 @@ end
 local mySpace
 
 function GeneratePlotTypes()
+	--[[
+	for row in GameInfo.Map_Sizes() do
+		for k, v in pairs(row) do
+			print(k, v)
+		end
+		print('end of row\n')
+	end
+	]]--
     print("Generating Plot Types (Fantastical) ...")
 	SetConstants()
     mySpace = Space()
