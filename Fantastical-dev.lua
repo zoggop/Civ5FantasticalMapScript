@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 11
+-- version 13
 
 --------------------------------------------------------------
 if include == nil then
@@ -340,8 +340,8 @@ local LabelDictionary ={
 		Sea = { "Sea", "Shallows", "Reef" },
 		Bay = { "Bay", "Cove", "Gulf" },
 		Straights = { "Straights", "Sound", "Channel" },
-		Cape = { "Cape" },
-		Islet = { "Key", "Cay", "Ait", "Key", "Cay", "Ait" },
+		Cape = { "Cape", "Cape", "Cape" },
+		Islet = "Key",
 		Island = { "Island", "Isle" },
 		Mountains = { "Heights", "Highlands", "Spires", "Crags" },
 		Hills = { "Hills", "Plateau", "Fell" },
@@ -901,32 +901,25 @@ jungle {{t=100,r=100}}
 	-- for Alpha Centauri Maps:
 
 	--[[
-grassland {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}
-plains {{t=0,r=50}}
-desert {{t=100,r=0}, {t=73,r=0}}
+grassland {{t=50,r=53}}
+plains {{t=50,r=14}}
+desert {{t=50,r=0}}
 tundra}
 snow}
-none {{t=0,r=0}}
-forest}
-jungle {{t=100,r=100}}
-marsh {{t=82,r=61}}
-oasis}
-
-
-
+none {{t=50,r=50}}
 
 	]]--
 
 	TerrainDictionaryCentauri = {
-		[terrainGrass] = { points = {{t=51,r=50}, {t=100,r=20}, {t=73,r=20}}, features = { featureNone, featureJungle, featureMarsh } },
-		[terrainPlains] = { points = {{t=0,r=50}}, features = { featureNone, } },
-		[terrainDesert] = { points = {{t=100,r=0}, {t=73,r=0}}, features = { featureNone, } },
+		[terrainGrass] = { points = {{t=50,r=50}}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainPlains] = { points = {{t=50,r=14}}, features = { featureNone, } },
+		[terrainDesert] = { points = {{t=50,r=0}}, features = { featureNone, } },
 	}
 
 	FeatureDictionaryCentauri = {
 		[featureNone] = { points = {{t=0,r=0}}, percent = 100, limitRatio = -1, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.95, hill = false },
-		[featureMarsh] = { points = {{t=82,r=61}}, percent = 75, limitRatio = 0.95, hill = true },
+		[featureMarsh] = { points = {{t=82,r=61}}, percent = 70, limitRatio = 0.9, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -2318,9 +2311,14 @@ function Space:Compute()
     self.lakeMinRatio = self.lakeMinRatio * rainfallScale
 	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
 	EchoDebug(self.lakeMinRatio .. " minimum lake ratio", self.lakeynessMax .. " maximum region lakeyness")
-	FeatureDictionary[featureForest].metaPercent = mMin(100, FeatureDictionary[featureForest].metaPercent * (rainfallScale ^ 2.2))
-	FeatureDictionary[featureJungle].metaPercent = mMin(100, FeatureDictionary[featureJungle].metaPercent * (rainfallScale ^ 2.2))
-	EchoDebug("forest metapercent: ".. FeatureDictionary[featureForest].metaPercent, "jungle metapercent: " .. FeatureDictionary[featureJungle].metaPercent)
+	if FeatureDictionary[featureForest] and FeatureDictionary[featureForest].metaPercent then
+		FeatureDictionary[featureForest].metaPercent = mMin(100, FeatureDictionary[featureForest].metaPercent * (rainfallScale ^ 2.2))
+		EchoDebug("forest metapercent: " .. FeatureDictionary[featureForest].metaPercent)
+	end
+	if FeatureDictionary[featureJungle] and FeatureDictionary[featureJungle].metaPercent then
+		FeatureDictionary[featureJungle].metaPercent = mMin(100, FeatureDictionary[featureJungle].metaPercent * (rainfallScale ^ 2.2))
+		EchoDebug("jungle metapercent: " .. FeatureDictionary[featureJungle].metaPercent)
+	end
     self.freshFreezingTemperature = self.freezingTemperature * 1.12
     if self.useMapLatitudes then
     	self.realmHemisphere = mRandom(1, 2)
@@ -2357,7 +2355,7 @@ function Space:Compute()
 			FeatureDictionary[featureFallout].points = {{t=self:GetTemperature(l),r=self:GetRainfall(l)}}
 	    end
 	end
-    if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
+    -- if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     self:PrintClimate()
     EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
@@ -2537,7 +2535,8 @@ function Space:ComputeCoasts()
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
 				for hi, hex in pairs(subPolygon.hexes) do
 					local bad = false
-					if self.centauri and hex.y ~= 0 and hex.y ~= self.h then
+					if self.polarMaxLandRatio == 0 and hex.y ~= 0 and hex.y ~= self.h then
+						-- try not to interfere w/ navigation at poles if no land at poles
 						for d, nhex in pairs(hex:Neighbors()) do
 							if nhex.polygon.continent then
 								bad = true
@@ -3629,7 +3628,7 @@ function Space:LabelSubPolygonsByPolygon()
 				end
 			end
 		until #subPolygonBuffer == 0
-	until #polygonBuffer == 0 or (self.subPolygonLabelsMax and labelled >= self.subPolygonLabelsMax)
+	until #polygonBuffer == 0 -- or (self.subPolygonLabelsMax and labelled >= self.subPolygonLabelsMax)
 	EchoDebug(#polygonBuffer)
 end
 
@@ -3770,7 +3769,7 @@ function Space:LabelMap()
 		river.x, river.y = hex.x, hex.y
 		river.astronomyIndex = hex.polygon.astronomyIndex
 		if LabelThing(river) then n = n + 1 end
-		if n == self.riverLabelsMax then break end
+		-- if n == self.riverLabelsMax then break end
 	end
 	EchoDebug("labelling regions...")
 	local regionsLabelled = 0
@@ -3778,14 +3777,14 @@ function Space:LabelMap()
 	repeat
 		local region = tRemoveRandom(regionBuffer)
 		if region:Label() then regionsLabelled = regionsLabelled + 1 end
-	until #regionBuffer == 0 or regionsLabelled >= self.regionLabelsMax
+	until #regionBuffer == 0 -- or regionsLabelled >= self.regionLabelsMax
 	EchoDebug("labelling tiny islands...")
 	local tinyIslandBuffer = tDuplicate(self.tinyIslandSubPolygons)
 	local tinyIslandsLabelled = 0
 	repeat
 		local subPolygon = tRemoveRandom(tinyIslandBuffer)
 		if LabelThing(subPolygon) then tinyIslandsLabelled = tinyIslandsLabelled + 1 end
-	until #tinyIslandBuffer == 0 or tinyIslandsLabelled >= self.tinyIslandLabelsMax
+	until #tinyIslandBuffer == 0 -- or tinyIslandsLabelled >= self.tinyIslandLabelsMax
 	EchoDebug("labelling bays, straights, and capes")
 	self:LabelSubPolygonsByPolygon()
 	EchoDebug("labelling mountain ranges...")
@@ -3834,7 +3833,7 @@ function Space:LabelMap()
 			local thing = { rangeLength = #range, x = x, y = y, rainfallAvg = rainfallAvg, temperatureAvg = temperatureAvg, astronomyIndex = range[1].polygons[1].astronomyIndex, hexes = hexes }
 			if LabelThing(thing) then rangesLabelled = rangesLabelled + 1 end
 		end
-		if rangesLabelled == self.rangeLabelsMax then break end
+		-- if rangesLabelled == self.rangeLabelsMax then break end
 	end
 end
 
