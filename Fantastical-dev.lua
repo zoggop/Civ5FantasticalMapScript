@@ -1067,6 +1067,7 @@ Hex = class(function(a, space, x, y, index)
 	a.edges = {}
 	a.subEdges = {}
 	a.onRiver = {}
+	a.onRiverMile = {}
 end)
 
 function Hex:Place(relax)
@@ -4076,8 +4077,8 @@ function Space:DrawRiver(seed)
 				if hex.onRiver[newHex] or pairHex.onRiver[newHex] or (onRiver[hex] and onRiver[hex][newHex]) or (onRiver[pairHex] and onRiver[pairHex][newHex]) then
 					-- EchoDebug("WOULD CONNECT TO ANOTHER RIVER OR ITSELF", it)
 					if seed.fork and it > 2 and (hex.onRiver[newHex] == seed.flowsInto or pairHex.onRiver[newHex] == seed.flowsInto) then
-						EchoDebug("would connect to source")
-						-- forks can flow into the same river
+						-- EchoDebug("would connect to source")
+						stop = true -- unfortunately, the way civ 5 draws rivers doesn't allow rivers to split and join
 					else
 						stop = true
 					end
@@ -4131,9 +4132,15 @@ function Space:DrawRiver(seed)
 			end
 		end
 		if seed.fork and it > 2 then
+			-- none of this comes into play because of the way civ 5 draws rivers
 			if hex.onRiver[newHex] == seed.flowsInto or pairHex.onRiver[newHex] == seed.flowsInto then
 				-- forks can connect to source
-				EchoDebug("fork connecting to source")
+				local sourceRiverMile = hex.onRiverMile[newHex] or pairHex.onRiverMile[newHex]
+				if sourceRiverMile < seed.flowsIntoRiverMile then
+					seed.reverseFlow = true
+				end
+				EchoDebug("fork connecting to source", sourceRiverMile, seed.flowsIntoRiverMile, seed.reverseFlow)
+				seed.connectsToSource = true
 				done = newHex
 				break
 			end
@@ -4251,18 +4258,34 @@ function Space:InkRiver(river, seed, seedSpawns, done)
 	local riverThing = { path = river, seed = seed, done = done, riverLength = #river, tributaries = {} }
 	for f, flow in pairs(river) do
 		if flow.hex.ofRiver == nil then flow.hex.ofRiver = {} end
+		if seed.reverseFlow then flow.flowDirection = GetOppositeFlowDirection(flow.flowDirection) end
+		--[[
+		if seed.connectsToSource and not seed.reverseFlow and f == #river then
+			flow.flowDirection = GetOppositeFlowDirection(flow.flowDirection)
+		end
+		if seed.connectsToSource and seed.reverseFlow and f == 1 then
+			flow.flowDirection = GetOppositeFlowDirection(flow.flowDirection)
+		end
+		]]--
 		flow.hex.ofRiver[flow.direction] = flow.flowDirection
 		flow.hex.onRiver[flow.pairHex] = riverThing
 		flow.pairHex.onRiver[flow.hex] = riverThing
+		local riverMile = f
+		if seed.growsDownstream then riverMile = #river - (f-1) end
+		flow.hex.onRiverMile[flow.pairHex] = riverMile
+		flow.pairHex.onRiverMile[flow.hex] = riverMile
 		if not flow.hex.isRiver then self.riverArea = self.riverArea + 1 end
 		if not flow.pairHex.isRiver then self.riverArea = self.riverArea + 1 end
 		flow.hex.isRiver = true
 		flow.pairHex.isRiver = true
 		-- EchoDebug(flow.hex:Locate() .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake) .. " " .. tostring(flow.hex.mountainRange), " / ", flow.pairHex:Locate() .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake).. " " .. tostring(flow.pairHex.mountainRange))
 	end
-	for nit, newseeds in pairs(seedSpawns) do
+	for f, newseeds in pairs(seedSpawns) do
 		for nsi, newseed in pairs(newseeds) do
 			newseed.flowsInto = riverThing
+			local riverMile = f
+			if seed.growsDownstream then riverMile = #river - (f-1) end
+			newseed.flowsIntoRiverMile = riverMile
 			if newseed.minor then
 				tInsert(self.minorForkSeeds, newseed)
 			elseif newseed.tiny then
@@ -4341,8 +4364,8 @@ function Space:DrawRivers()
 				local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
 				local rainfall = endRainfall or seed.rainfall
 				if (seed.doneAnywhere or done) and river and #river > 0 then
-					if seed.minor and seed.fork and river then EchoDebug("minor fork is " .. #river .. " long") end
-					if seed.tiny and seed.fork and river then EchoDebug("tiny fork is " .. #river .. " long") end
+					-- if seed.minor and seed.fork and river then EchoDebug("minor fork is " .. #river .. " long") end
+					-- if seed.tiny and seed.fork and river then EchoDebug("tiny fork is " .. #river .. " long") end
 					-- if alwaysDraw then rainfall = 101 end
 					if rainfall > maxRiverRainfall then
 						if maxRiverData then tInsert(laterRiverSeeds, maxRiverData.seed) end
