@@ -920,7 +920,7 @@ jungle {{t=100,r=100}, {t=75,r=100}}
 		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}, {t=75,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
-		[featureOasis] = { points = {}, percent = 5, limitRatio = 0.01, hill = false },
+		[featureOasis] = { points = {}, percent = 3, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
@@ -2050,8 +2050,7 @@ Space = class(function(a)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
-	a.riverRainMultiplier = 0.25 -- modifies rainfall effect on river inking. 0 is no rivers (except between lakes, which are not based on rain)
-	a.riverSpawnRainfall = 85 -- how much rainfall spawns a river seed even without mountains/hills
+	a.riverForkRatio = 0.33 -- how much of the river area should be reserved for forks
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
 	a.mountainRangeMaxEdges = 4 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33 -- what ratio of the total mountain ranges should be coastal
@@ -3887,7 +3886,6 @@ function Space:FindRiverSeeds()
 		return
 	end
 	local lakeCount = 0
-	local rainSeedCount = 0
 	for ih, hex in pairs(self.hexes) do
 		if (hex.polygon.continent and not hex.subPolygon.lake) or hex.subPolygon.tinyIsland then
 			local neighs, polygonNeighs, subPolygonNeighs, hexNeighs, oceanNeighs, lakeNeighs, mountainNeighs, dryNeighs = {}, {}, {}, {}, {}, {}, {}, {}
@@ -3947,7 +3945,7 @@ function Space:FindRiverSeeds()
 				end
 			end
 			for nhex, d in pairs(subPolygonNeighs) do
-				local oceanSeed, hillSeed, rainSeed, connectsToOcean, connectsToLake
+				local oceanSeed, hillSeed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					local rainfall = mMin(hex.subPolygon.rainfall, nhex.subPolygon.rainfall, nnhex.subPolygon.rainfall or 100)
 					if oceanNeighs[nnhex] then
@@ -3963,9 +3961,6 @@ function Space:FindRiverSeeds()
 						if mountainNeighs[nnhex] or inTheHills then
 							hillSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, toWater = true, spawnSeeds = true, growsDownstream = true }
 						end
-						if rainfall > self.riverSpawnRainfall then
-							rainSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, minor = true, dontConnect = true, avoidConnection = true, toWater = true, spawnSeeds = true, growsDownstream = true }
-						end
 					end
 					if lakeNeighs[nnhex] then
 						connectsToLake = true
@@ -3975,13 +3970,10 @@ function Space:FindRiverSeeds()
 					tInsert(self.minorRiverSeeds, oceanSeed)
 				elseif hillSeed and not connectsToOcean and not connectsToLake then
 					tInsert(self.minorRiverSeeds, hillSeed)
-				elseif rainSeed and not connectsToOcean and not connectsToLake then
-					tInsert(self.minorRiverSeeds, rainSeed)
-					rainSeedCount = rainSeedCount + 1
 				end
 			end
 			for nhex, d in pairs(hexNeighs) do
-				local oceanSeed, hillSeed, rainSeed, connectsToOcean, connectsToLake
+				local oceanSeed, hillSeed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					local rainfall = mMin(hex.rainfall, nhex.rainfall, nnhex.rainfall or 100)
 					if oceanNeighs[nnhex] then
@@ -3997,9 +3989,6 @@ function Space:FindRiverSeeds()
 						if mountainNeighs[nnhex] or inTheHills then
 							hillSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, toWater = true, growsDownstream = true }
 						end
-						if rainfall > self.riverSpawnRainfall then
-							rainSeed = { hex = hex, pairHex = nhex, direction = d, lastHex = nnhex, lastDirection = neighs[nnhex], rainfall = rainfall, tiny = true, dontConnect = true, avoidConnection = true, toWater = true, growsDownstream = true }
-						end
 					end
 					if lakeNeighs[nnhex] then
 						connectsToLake = true
@@ -4009,14 +3998,10 @@ function Space:FindRiverSeeds()
 					tInsert(self.tinyRiverSeeds, oceanSeed)
 				elseif hillSeed and not connectsToOcean and not connectsToLake then
 					tInsert(self.tinyRiverSeeds, hillSeed)
-				elseif rainSeed and not connectsToOcean and not connectsToLake then
-					tInsert(self.tinyRiverSeeds, rainSeed)
-					rainSeedCount = rainSeedCount + 1
 				end
 			end
 		end
 	end
-	EchoDebug(rainSeedCount .. " rain seeds") 
 	EchoDebug(lakeCount .. " lakes ", #self.majorRiverSeeds .. " major ", #self.minorRiverSeeds .. " minor ", #self.tinyRiverSeeds .. " tiny")
 end
 
@@ -4167,7 +4152,7 @@ function Space:DrawRiver(seed)
 					end
 				end
 			elseif seed.minor then
-				tiny, toHills, avoidConnection, avoidWater, doneAnywhere, alwaysDraw = true, true, true, true, true
+				tiny, toHills, avoidConnection, avoidWater, alwaysDraw = true, true, true, true
 				if hex.subPolygon == newHex.subPolygon then
 					spawnNew = true
 				end
@@ -4341,15 +4326,16 @@ function Space:DrawRivers()
 	local forkSeedBoxes = { "minorForkSeeds", "tinyForkSeeds" }
 	self.riverLandRatio = self.riverLandRatio * (self.rainfallMidpoint / 50)
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
-	local prescribedMainArea = prescribedRiverArea * 0.75
-	local prescribedForkArea = prescribedRiverArea - prescribedMainArea
-	local drawn = 0
-	local lastRecycleDrawn = 0
+	local prescribedForkArea = prescribedRiverArea * self.riverForkRatio
+	local prescribedMainArea = prescribedRiverArea - prescribedForkArea
+	local inked = 0
+	local lastCycleInked = 0
 	local recycles = 0
 	local riversByRainfall = {}
 	local maxRiverRainfall = 0
 	local maxRiverData
-	local preInkCycles = 0
+	local preInkRivers = 0
+	local preInkCompared = 0
 	local boxes = mainSeedBoxes
 	while self.riverArea < prescribedRiverArea do
 		local anySeedsAtAll
@@ -4369,78 +4355,114 @@ function Space:DrawRivers()
 					-- if alwaysDraw then rainfall = 101 end
 					if rainfall > maxRiverRainfall then
 						if maxRiverData then tInsert(laterRiverSeeds, maxRiverData.seed) end
-						maxRainfall = rainfall
+						maxRiverRainfall = rainfall
 						maxRiverData = {river = river, seed = seed, seedSpawns = seedSpawns, done = done}
+						preInkCompared = preInkCompared + 1
 					else
 						tInsert(laterRiverSeeds, seed)
 					end
+					preInkRivers = preInkRivers + 1
 				else --if not seed.retries or seed.retries < 2 then
 					tInsert(laterRiverSeeds, seed)
 				end
 			end
 		end
-		preInkCycles = preInkCycles + 1
-		if preInkCycles > 5 or not anySeedsAtAll then
-			if maxRiverData then
-				local riverData = maxRiverData
-				local river, seed, seedSpawns, done = riverData.river, riverData.seed, riverData.seedSpawns, riverData.done
-				self:InkRiver(river, seed, seedSpawns, done)
-				drawn = drawn + 1
-				lastRecycleDrawn = lastRecycleDrawn + 1
-				if self.riverArea >= prescribedRiverArea then break end
-				if boxes == mainSeedBoxes and self.riverArea >= prescribedMainArea then
-					EchoDebug(self.riverArea .. " meets non-fork prescription of " .. mFloor(prescribedMainArea))
-					EchoDebug(drawn .. " rivers drawn so far")
-					EchoDebug(#self.minorForkSeeds, #self.tinyForkSeeds)
-					boxes = forkSeedBoxes
-				end
+		if (preInkCompared > 1 or preInkRivers > 3) and maxRiverData then
+			EchoDebug(preInkRivers, preInkCompared, "rainfall: " .. maxRiverRainfall, " length: " .. #maxRiverData.river)
+			local riverData = maxRiverData
+			local river, seed, seedSpawns, done = riverData.river, riverData.seed, riverData.seedSpawns, riverData.done
+			self:InkRiver(river, seed, seedSpawns, done)
+			inked = inked + 1
+			lastCycleInked = lastCycleInked + 1
+			if self.riverArea >= prescribedRiverArea then break end
+			if boxes == mainSeedBoxes and self.riverArea >= prescribedMainArea then
+				EchoDebug(self.riverArea .. " meets non-fork prescription of " .. mFloor(prescribedMainArea))
+				EchoDebug(inked .. " rivers inked so far")
+				EchoDebug(#self.minorForkSeeds .. " minor fork seeds", #self.tinyForkSeeds .. " tiny fork seeds")
+				boxes = forkSeedBoxes
+				laterRiverSeeds = {}
+				recycles = 0
+				lastCycleInked = 0
 			end
 			maxRiverData = nil
-			maxRainfall = 0
-			preInkCycles = 0
+			maxRiverRainfall = 0
+			preInkRivers = 0
+			preInkCompared = 0
 		end
 		if not anySeedsAtAll then
 			if #laterRiverSeeds > 0 then
-				if lastRecycleDrawn == 0 then
-					EchoDebug("none drawn from last cycle")
-					break
-				elseif recycles > 5 then
+				if recycles > 5 and lastCycleInked == 0 then
+					EchoDebug("none inked after five cycles")
+					if boxes == mainSeedBoxes then
+						EchoDebug(self.riverArea .. " does not meet non-fork prescription of " .. mFloor(prescribedMainArea))
+						EchoDebug(inked .. " rivers inked so far")
+						EchoDebug(#self.minorForkSeeds .. " minor fork seeds", #self.tinyForkSeeds .. " tiny fork seeds")
+						boxes = forkSeedBoxes
+						laterRiverSeeds = {}
+						recycles = 0
+						lastCycleInked = 0
+					else
+						break
+					end
+				elseif recycles > 5 and #laterRiverSeeds > 1000 then
 					EchoDebug("too many recycles")
-					break
+					if boxes == mainSeedBoxes then
+						EchoDebug(self.riverArea .. " does not meet non-fork prescription of " .. mFloor(prescribedMainArea))
+						EchoDebug(inked .. " rivers inked so far")
+						EchoDebug(#self.minorForkSeeds .. " minor fork seeds", #self.tinyForkSeeds .. " tiny fork seeds")
+						boxes = forkSeedBoxes
+						laterRiverSeeds = {}
+						recycles = 0
+						lastCycleInked = 0
+					else
+						break
+					end
 				else
-					EchoDebug("recycling " .. #laterRiverSeeds .. " unused river seeds (" .. lastRecycleDrawn ..  " rivers drawn from last cycle" .. ")...")
+					EchoDebug("recycling " .. #laterRiverSeeds .. " unused river seeds (" .. lastCycleInked ..  " rivers inked last cycle" .. ")...")
 					EchoDebug("current river area: " .. self.riverArea .. " of " .. mFloor(prescribedRiverArea) .. " prescribed")
 					for si, seed in pairs(laterRiverSeeds) do
 						seed.retries = (seed.retries or 0) + 1
-						if seed.major then
-							tInsert(self.majorRiverSeeds, seed)
-						elseif seed.minor then
-							if seed.fork then
-								tInsert(self.minorForkSeeds, seed)
-							else
-								tInsert(self.minorRiverSeeds, seed)
-							end
-						elseif seed.tiny then
-							if seed.fork then
-								tInsert(self.tinyForkSeeds, seed)
-							else
-								tInsert(self.tinyRiverSeeds, seed)
+						if seed.retries < 4 then
+							if seed.major then
+								tInsert(self.majorRiverSeeds, seed)
+							elseif seed.minor then
+								if seed.fork then
+									tInsert(self.minorForkSeeds, seed)
+								else
+									tInsert(self.minorRiverSeeds, seed)
+								end
+							elseif seed.tiny then
+								if seed.fork then
+									tInsert(self.tinyForkSeeds, seed)
+								else
+									tInsert(self.tinyRiverSeeds, seed)
+								end
 							end
 						end
 					end
-					lastRecycleDrawn = 0
+					lastCycleInked = 0
 					recycles = recycles + 1
 				end
 			else
 				EchoDebug("no seeds available at all")			
-				break
+				if boxes == mainSeedBoxes then
+					EchoDebug(self.riverArea .. " does not meet non-fork prescription of " .. mFloor(prescribedMainArea))
+					EchoDebug(inked .. " rivers inked so far")
+					EchoDebug(#self.minorForkSeeds .. " minor fork seeds", #self.tinyForkSeeds .. " tiny fork seeds")
+					boxes = forkSeedBoxes
+					laterRiverSeeds = {}
+					recycles = 0
+					lastCycleInked = 0
+				else
+					break
+				end
 			end
 			laterRiverSeeds = {}
 		end
 	end
 	local rlpercent = mFloor( (self.riverArea / self.filledArea) * 100 )
 	local rpercent = mFloor( (self.riverArea / self.iA) * 100 )
-	EchoDebug(drawn .. " drawn ", " river area: " .. self.riverArea, "(" .. rlpercent .. "% of land, " .. rpercent .. "% of map)")
+	EchoDebug(inked .. " inked ", " river area: " .. self.riverArea, "(" .. rlpercent .. "% of land, " .. rpercent .. "% of map)")
 end
 
 function Space:DrawRoad(origHex, destHex)
