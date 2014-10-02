@@ -4074,7 +4074,7 @@ function Space:DrawRiver(seed)
 			local stop
 			if seed.avoidConnection then
 				if hex.onRiver[newHex] or pairHex.onRiver[newHex] or (onRiver[hex] and onRiver[hex][newHex]) or (onRiver[pairHex] and onRiver[pairHex][newHex]) then
-					-- EchoDebug("WOULD CONNECT TO ANOTHER RIVER OR ITSELF")
+					-- EchoDebug("WOULD CONNECT TO ANOTHER RIVER OR ITSELF", it)
 					if seed.fork and it > 2 and (hex.onRiver[newHex] == seed.flowsInto or pairHex.onRiver[newHex] == seed.flowsInto) then
 						EchoDebug("would connect to source")
 						-- forks can flow into the same river
@@ -4125,7 +4125,7 @@ function Space:DrawRiver(seed)
 		end
 		if seed.toHills then
 			if self:HillsOrMountains(newHex, hex, pairHex) >= 2 then
-				-- EchoDebug("FOUND HILLS/MOUNTAINS")
+				-- EchoDebug("FOUND HILLS/MOUNTAINS", it)
 				done = newHex
 				break
 			end
@@ -4209,10 +4209,10 @@ function Space:DrawRiver(seed)
 			useHex = true
 			usePair = true
 		end
-		if useHex and hex.onRiver[newHex] ~= seed.flowsInto or onRiver[hex][newHex] then
+		if (hex.onRiver[newHex] and hex.onRiver[newHex] ~= seed.flowsInto) or onRiver[hex][newHex] then
 			useHex = false
 		end
-		if usePair and pairHex.onRiver[newHex] ~= seed.flowsInto or onRiver[pairHex][newHex] then
+		if (pairHex.onRiver[newHex] and pairHex.onRiver[newHex] ~= seed.flowsInto) or onRiver[pairHex][newHex] then
 			usePair = false
 		end
 		if useHex and usePair then
@@ -4314,43 +4314,75 @@ function Space:DrawRivers()
 	self.minorForkSeeds, self.tinyForkSeeds = {}, {}
 	local laterRiverSeeds = {}
 	local seedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds", "minorForkSeeds", "tinyForkSeeds" }
+	local mainSeedBoxes = { "majorRiverSeeds", "minorRiverSeeds", "tinyRiverSeeds" }
+	local forkSeedBoxes = { "minorForkSeeds", "tinyForkSeeds" }
 	self.riverLandRatio = self.riverLandRatio * (self.rainfallMidpoint / 50)
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
+	local prescribedMainArea = prescribedRiverArea * 0.75
+	local prescribedForkArea = prescribedRiverArea - prescribedMainArea
 	local drawn = 0
 	local lastRecycleDrawn = 0
+	local recycles = 0
+	local riversByRainfall = {}
+	local maxRiverRainfall = 0
+	local maxRiverData
+	local preInkCycles = 0
+	local boxes = mainSeedBoxes
 	while self.riverArea < prescribedRiverArea do
-		local anyAreaAtAll
-		for i, box in pairs(seedBoxes) do
+		local anySeedsAtAll
+		for i, box in pairs(boxes) do
 			local seeds = self[box]
 			if #seeds > 0 then
-				anyAreaAtAll = true
-				local inked
+				anySeedsAtAll = true
 				local seed = tRemoveRandom(seeds)
 				-- local list = ""
 				-- for key, value in pairs(seed) do list = list .. key .. ": " .. tostring(value) .. ", " end
 				-- EchoDebug("drawing river seed #" .. si, list)
 				local river, done, seedSpawns, endRainfall = self:DrawRiver(seed)
 				local rainfall = endRainfall or seed.rainfall
-				if (seed.doneAnywhere and river and #river > 0) or done then
-					local drawIt = seed.alwaysDraw or (Map.Rand(100, "river chance") < rainfall * self.riverRainMultiplier)
-					-- EchoDebug(endRainfall or seed.rainfall, " rainfall ", (endRainfall or seed.rainfall) * 0.67, tostring(drawIt))
-					if drawIt then
-						self:InkRiver(river, seed, seedSpawns, done)
-						drawn = drawn + 1
-						lastRecycleDrawn = lastRecycleDrawn + 1
-						inked = true
-						if self.riverArea >= prescribedRiverArea then break end
+				if (seed.doneAnywhere or done) and river and #river > 0 then
+					if seed.minor and seed.fork and river then EchoDebug("minor fork is " .. #river .. " long") end
+					if seed.tiny and seed.fork and river then EchoDebug("tiny fork is " .. #river .. " long") end
+					-- if alwaysDraw then rainfall = 101 end
+					if rainfall > maxRiverRainfall then
+						if maxRiverData then tInsert(laterRiverSeeds, maxRiverData.seed) end
+						maxRainfall = rainfall
+						maxRiverData = {river = river, seed = seed, seedSpawns = seedSpawns, done = done}
+					else
+						tInsert(laterRiverSeeds, seed)
 					end
-				end
-				if not inked and (not seed.retries or seed.retries < 2) then
+				else --if not seed.retries or seed.retries < 2 then
 					tInsert(laterRiverSeeds, seed)
 				end
 			end
 		end
-		if not anyAreaAtAll and self.riverArea < prescribedRiverArea then
+		preInkCycles = preInkCycles + 1
+		if preInkCycles > 5 or not anySeedsAtAll then
+			if maxRiverData then
+				local riverData = maxRiverData
+				local river, seed, seedSpawns, done = riverData.river, riverData.seed, riverData.seedSpawns, riverData.done
+				self:InkRiver(river, seed, seedSpawns, done)
+				drawn = drawn + 1
+				lastRecycleDrawn = lastRecycleDrawn + 1
+				if self.riverArea >= prescribedRiverArea then break end
+				if boxes == mainSeedBoxes and self.riverArea >= prescribedMainArea then
+					EchoDebug(self.riverArea .. " meets non-fork prescription of " .. mFloor(prescribedMainArea))
+					EchoDebug(drawn .. " rivers drawn so far")
+					EchoDebug(#self.minorForkSeeds, #self.tinyForkSeeds)
+					boxes = forkSeedBoxes
+				end
+			end
+			maxRiverData = nil
+			maxRainfall = 0
+			preInkCycles = 0
+		end
+		if not anySeedsAtAll then
 			if #laterRiverSeeds > 0 then
 				if lastRecycleDrawn == 0 then
 					EchoDebug("none drawn from last cycle")
+					break
+				elseif recycles > 5 then
+					EchoDebug("too many recycles")
 					break
 				else
 					EchoDebug("recycling " .. #laterRiverSeeds .. " unused river seeds (" .. lastRecycleDrawn ..  " rivers drawn from last cycle" .. ")...")
@@ -4374,11 +4406,13 @@ function Space:DrawRivers()
 						end
 					end
 					lastRecycleDrawn = 0
+					recycles = recycles + 1
 				end
 			else
 				EchoDebug("no seeds available at all")			
 				break
 			end
+			laterRiverSeeds = {}
 		end
 	end
 	local rlpercent = mFloor( (self.riverArea / self.filledArea) * 100 )
