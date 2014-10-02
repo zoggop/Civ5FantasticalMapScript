@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 14
+-- version 15
 
 --------------------------------------------------------------
 if include == nil then
@@ -4317,8 +4317,8 @@ function Space:DrawRivers()
 	self.riverLandRatio = self.riverLandRatio * (self.rainfallMidpoint / 50)
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
 	local drawn = 0
+	local lastRecycleDrawn = 0
 	while self.riverArea < prescribedRiverArea do
-		local lastRecycleDrawn = 0
 		local anyAreaAtAll
 		for i, box in pairs(seedBoxes) do
 			local seeds = self[box]
@@ -4342,7 +4342,7 @@ function Space:DrawRivers()
 						if self.riverArea >= prescribedRiverArea then break end
 					end
 				end
-				if not inked then
+				if not inked and (not seed.retries or seed.retries < 2) then
 					tInsert(laterRiverSeeds, seed)
 				end
 			end
@@ -4352,25 +4352,28 @@ function Space:DrawRivers()
 				if lastRecycleDrawn == 0 then
 					EchoDebug("none drawn from last cycle")
 					break
-				end
-				EchoDebug("(" .. lastRecycleDrawn .. " rivers drawn from last cycle)")
-				EchoDebug("(recycling " .. #laterRiverSeeds .. " unused river seeds...)")
-				for si, seed in pairs(laterRiverSeeds) do
-					if seed.major then
-						tInsert(self.majorRiverSeeds, seed)
-					elseif seed.minor then
-						if seed.fork then
-							tInsert(self.minorForkSeeds, seed)
-						else
-							tInsert(self.minorRiverSeeds, seed)
-						end
-					elseif seed.tiny then
-						if seed.fork then
-							tInsert(self.tinyForkSeeds, seed)
-						else
-							tInsert(self.tinyRiverSeeds, seed)
+				else
+					EchoDebug("recycling " .. #laterRiverSeeds .. " unused river seeds (" .. lastRecycleDrawn ..  " rivers drawn from last cycle" .. ")...")
+					EchoDebug("current river area: " .. self.riverArea .. " of " .. mFloor(prescribedRiverArea) .. " prescribed")
+					for si, seed in pairs(laterRiverSeeds) do
+						seed.retries = (seed.retries or 0) + 1
+						if seed.major then
+							tInsert(self.majorRiverSeeds, seed)
+						elseif seed.minor then
+							if seed.fork then
+								tInsert(self.minorForkSeeds, seed)
+							else
+								tInsert(self.minorRiverSeeds, seed)
+							end
+						elseif seed.tiny then
+							if seed.fork then
+								tInsert(self.tinyForkSeeds, seed)
+							else
+								tInsert(self.tinyRiverSeeds, seed)
+							end
 						end
 					end
+					lastRecycleDrawn = 0
 				end
 			else
 				EchoDebug("no seeds available at all")			
