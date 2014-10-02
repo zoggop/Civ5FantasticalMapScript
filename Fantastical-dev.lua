@@ -137,6 +137,19 @@ local function AngleDist(angle1, angle2)
 	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
 end
 
+local function IncreaseDeviationToMinimum(numMin, numMax, minDeviation)
+	if mAbs(numMax - numMin) < minDeviation then
+		local deviationDeficit = minDeviation - mAbs(numMax - numMin)
+		local minDist = numMin
+		local maxDist = 100 - numMax
+		local minRatio = minDist / (minDist + maxDist)
+		local maxRatio = maxDist / (minDist + maxDist)
+		numMax = mMin(100, numMax + (deviationDeficit * maxRatio))
+		numMin = mMax(0, numMin - (deviationDeficit * minRatio))
+	end
+	return numMin, numMax
+end
+
 ------------------------------------------------------------------------------
 -- FOR CREATING CITY NAMES: MARKOV CHAINS
 -- ADAPTED FROM drow <drow@bin.sh> http://donjon.bin.sh/code/name/
@@ -901,6 +914,27 @@ snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
 none {{t=87,r=44}, {t=20,r=23}, {t=19,r=75}, {t=43,r=33}, {t=59,r=39}, {t=40,r=73}, {t=28,r=58}, {t=62,r=53}}
 forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}
 jungle {{t=100,r=100}, {t=75,r=100}}
+
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=89,r=56}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=68}}
+forest {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=100}, {t=44,r=68}}
+jungle {{t=100,r=100}, {t=83,r=100}}
+
+grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
+plains {{t=19,r=41}, {t=21,r=50}}
+desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
+tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
+snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
+none {{t=89,r=58}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=66}}
+forest {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}
+jungle {{t=100,r=100}, {t=86,r=100}}
+
+
+
 ]]--
 
 	TerrainDictionary = {
@@ -916,9 +950,9 @@ jungle {{t=100,r=100}, {t=75,r=100}}
 	-- limitRatio is what fraction of a region's hexes at maximum may have this feature (-1 is no limit)
 
 	FeatureDictionary = {
-		[featureNone] = { points = {{t=87,r=44}, {t=20,r=23}, {t=19,r=75}, {t=43,r=33}, {t=59,r=39}, {t=40,r=73}, {t=28,r=58}, {t=62,r=53}}, percent = 100, limitRatio = -1, hill = true },
-		[featureForest] = { points = {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}, percent = 100, limitRatio = 0.85, hill = true },
-		[featureJungle] = { points = {{t=100,r=100}, {t=75,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+		[featureNone] = { points = {{t=89,r=58}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=66}}, percent = 100, limitRatio = -1, hill = true },
+		[featureForest] = { points = {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}, percent = 100, limitRatio = 0.85, hill = true },
+		[featureJungle] = { points = {{t=100,r=100}, {t=86,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
 		[featureOasis] = { points = {}, percent = 3, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
@@ -1692,6 +1726,7 @@ function Region:GiveRainfall()
 	self.rainfallMin = mMin(100, mMax(0, mMin(rainA, rainB)))
 	self.rainfallMin = (self.rainfallMin * self.space.inverseRainfallAvgRatio) + (self.rainfallAvg * self.space.rainfallAvgRatio)
 	self.rainfallMax = (self.rainfallMax * self.space.inverseRainfallAvgRatio) + (self.rainfallAvg * self.space.rainfallAvgRatio)
+	self.rainfallMin, self.rainfallMax = IncreaseDeviationToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinDeviation)
 end
 
 function Region:GiveTemperature()
@@ -1703,6 +1738,7 @@ function Region:GiveTemperature()
 	self.temperatureMin = mMin(100, mMax(0, mMin(tempA, tempB)))
 	self.temperatureMin = (self.temperatureMin * self.space.inverseTemperatureAvgRatio) + (self.temperatureAvg * self.space.temperatureAvgRatio)
 	self.temperatureMax = (self.temperatureMax * self.space.inverseTemperatureAvgRatio) + (self.temperatureAvg * self.space.temperatureAvgRatio)
+	self.temperatureMin, self.temperatureMax = IncreaseDeviationToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinDeviation)
 end
 
 function Region:DoSpanCalcs()
@@ -2055,7 +2091,7 @@ Space = class(function(a)
 	a.mountainRangeMaxEdges = 4 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33 -- what ratio of the total mountain ranges should be coastal
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
-	a.mountainRangeMult = 1.35 -- higher mult means more (globally) scattered mountains
+	a.mountainRangeMult = 1.4 -- higher mult means more (globally) scattered mountains
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
@@ -2066,9 +2102,11 @@ Space = class(function(a)
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 100 -- highest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.temperatureMaxDeviation = 15 -- how much at maximum can a temperature deviate from its avg
+	a.temperatureMaxDeviation = 2 -- how much at maximum can a temperature deviate from its latitude
+	a.temperatureMinDeviation = 7 -- how much temperature range must a region have
 	a.rainfallDice = 1 -- just like temperature above
-	a.rainfallMaxDeviation = 15 -- just like temperature above
+	a.rainfallMaxDeviation = 3 -- just like temperature above
+	a.rainfallMinDeviation = 10 -- just like temperature above
 	a.temperatureAvgRatio = 0.4 -- how much to recede a region's min and max temperature to its average
 	a.rainfallAvgRatio = 0.65 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
