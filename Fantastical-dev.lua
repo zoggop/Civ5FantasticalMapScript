@@ -4317,8 +4317,8 @@ function Space:DrawRivers()
 	self.riverLandRatio = self.riverLandRatio * (self.rainfallMidpoint / 50)
 	local prescribedRiverArea = self.riverLandRatio * self.filledArea
 	local drawn = 0
-	local lastRecycleDrawn = 0
 	while self.riverArea < prescribedRiverArea do
+		local lastRecycleDrawn = 0
 		local anyAreaAtAll
 		for i, box in pairs(seedBoxes) do
 			local seeds = self[box]
@@ -4350,9 +4350,10 @@ function Space:DrawRivers()
 		if not anyAreaAtAll and self.riverArea < prescribedRiverArea then
 			if #laterRiverSeeds > 0 then
 				if lastRecycleDrawn == 0 then
-					EchoDebug("none drawn from last recycle")
+					EchoDebug("none drawn from last cycle")
 					break
 				end
+				EchoDebug("(" .. lastRecycleDrawn .. " rivers drawn from last cycle)")
 				EchoDebug("(recycling " .. #laterRiverSeeds .. " unused river seeds...)")
 				for si, seed in pairs(laterRiverSeeds) do
 					if seed.major then
@@ -4371,7 +4372,6 @@ function Space:DrawRivers()
 						end
 					end
 				end
-				lastRecycleDrawn = 0
 			else
 				EchoDebug("no seeds available at all")			
 				break
