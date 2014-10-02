@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 15
+-- version 16
 
 --------------------------------------------------------------
 if include == nil then
@@ -2056,7 +2056,6 @@ Space = class(function(a)
 	a.coastRangeRatio = 0.33 -- what ratio of the total mountain ranges should be coastal
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
 	a.mountainRangeMult = 1.35 -- higher mult means more (globally) scattered mountains
-	a.mountainCoreTenacity = 9 -- 0 to 10, higher is more range-like mountains, less widely scattered
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
@@ -4033,6 +4032,10 @@ function Space:DrawRiver(seed)
 			-- EchoDebug("SEED ALREADY CONNECTS TO RIVER")
 			return
 		end
+		if lastHex.isRiver then
+			-- EchoDebug("WOULD BE TOO CLOSE TO ANOTHER RIVER")
+			stop = true
+		end
 	end
 	local river = {}
 	local onRiver = {}
@@ -4065,6 +4068,20 @@ function Space:DrawRiver(seed)
 						-- EchoDebug("would connect to source")
 						stop = true -- unfortunately, the way civ 5 draws rivers doesn't allow rivers to split and join
 					else
+						stop = true
+					end
+				end
+				if newHex.isRiver then
+					if seed.flowsInto then
+						for riverThing, yes in pairs(newHex.isRiver) do
+							if riverThing ~= seed.flowsInto then
+								stop = true
+								-- EchoDebug("WOULD BE TOO CLOSE TO ANOTHER RIVER")
+								break
+							end
+						end
+					else
+						-- EchoDebug("WOULD BE TOO CLOSE TO ANOTHER RIVER")
 						stop = true
 					end
 				end
@@ -4261,8 +4278,10 @@ function Space:InkRiver(river, seed, seedSpawns, done)
 		flow.pairHex.onRiverMile[flow.hex] = riverMile
 		if not flow.hex.isRiver then self.riverArea = self.riverArea + 1 end
 		if not flow.pairHex.isRiver then self.riverArea = self.riverArea + 1 end
-		flow.hex.isRiver = true
-		flow.pairHex.isRiver = true
+		flow.hex.isRiver = flow.hex.isRiver or {}
+		flow.pairHex.isRiver = flow.pairHex.isRiver or {}
+		flow.hex.isRiver[seed.flowsInto or riverThing] = true
+		flow.pairHex.isRiver[seed.flowsInto or riverThing] = true
 		-- EchoDebug(flow.hex:Locate() .. ": " .. tostring(flow.hex.plotType) .. " " .. tostring(flow.hex.subPolygon.lake) .. " " .. tostring(flow.hex.mountainRange), " / ", flow.pairHex:Locate() .. ": " .. tostring(flow.pairHex.plotType) .. " " .. tostring(flow.pairHex.subPolygon.lake).. " " .. tostring(flow.pairHex.mountainRange))
 	end
 	for f, newseeds in pairs(seedSpawns) do
@@ -4643,7 +4662,7 @@ function Space:ResizeMountains(prescribedArea)
 	if #self.mountainHexes > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainHexes)
-			if hex.mountainRangeCore and #self.mountainHexes > #self.mountainCoreHexes and Map.Rand(11, "core mountain remove") < self.mountainCoreTenacity then
+			if hex.mountainRangeCore and #self.mountainHexes > #self.mountainCoreHexes then
 				tInsert(self.mountainHexes, hex)
 			else
 				if Map.Rand(10, "hill dice") < self.hillChance then
