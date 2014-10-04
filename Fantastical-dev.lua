@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 17
+-- version 18
 
 --------------------------------------------------------------
 if include == nil then
@@ -840,90 +840,6 @@ local function SetConstants()
 	improvementCityRuins = GameInfo.Improvements.IMPROVEMENT_CITY_RUINS.ID
 
 --[[
-
-grassland {{t=95,r=22}, {t=71,r=66}, {t=66,r=25}, {t=64,r=32}}
-plains {{t=25,r=38}, {t=22,r=66}, {t=27,r=24}, {t=24,r=20}}
-desert {{t=95,r=13}, {t=26,r=0}, {t=61,r=0}, {t=37,r=0}, {t=24,r=16}, {t=76,r=2}}
-tundra {{t=7,r=0}, {t=5,r=63}, {t=6,r=38}, {t=8,r=17}, {t=7,r=66}}
-snow {{t=0,r=62}, {t=0,r=1}, {t=0,r=37}, {t=0,r=16}}
-none {{t=41,r=50}, {t=12,r=0}, {t=96,r=48}}
-forest {{t=41,r=100}, {t=13,r=72}}
-jungle {{t=96,r=100}}
-marsh}
-oasis}
-
-grassland {{t=76,r=41}, {t=64,r=41}}
-plains {{t=19,r=41}}
-desert {{t=79,r=14}, {t=56,r=12}}
-tundra {{t=11,r=41}}
-snow {{t=0,r=41}}
-none {{t=99,r=31}, {t=8,r=3}, {t=27,r=63}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=63}, {t=43,r=63}}
-jungle {{t=100,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}}
-tundra {{t=11,r=41}, {t=8,r=50}}
-snow {{t=0,r=41}, {t=1,r=49}}
-none {{t=99,r=31}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
-jungle {{t=100,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=99,r=31}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
-jungle {{t=100,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=87,r=44}, {t=8,r=3}, {t=35,r=63}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
-jungle {{t=100,r=100}, {t=75,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=87,r=44}, {t=8,r=3}, {t=22,r=75}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}, {t=7,r=75}}
-jungle {{t=100,r=100}, {t=75,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=87,r=44}, {t=8,r=3}, {t=43,r=33}, {t=59,r=39}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=16,r=63}, {t=42,r=62}}
-jungle {{t=100,r=100}, {t=75,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=87,r=44}, {t=20,r=23}, {t=19,r=75}, {t=43,r=33}, {t=59,r=39}, {t=40,r=73}, {t=28,r=58}, {t=62,r=53}}
-forest {{t=0,r=57}, {t=56,r=100}, {t=11,r=75}, {t=44,r=73}, {t=28,r=100}, {t=52,r=64}}
-jungle {{t=100,r=100}, {t=75,r=100}}
-
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=89,r=56}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=68}}
-forest {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=100}, {t=44,r=68}}
-jungle {{t=100,r=100}, {t=83,r=100}}
-
 grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
 plains {{t=19,r=41}, {t=21,r=50}}
 desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
@@ -932,9 +848,6 @@ snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
 none {{t=89,r=58}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=66}}
 forest {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}
 jungle {{t=100,r=100}, {t=86,r=100}}
-
-
-
 ]]--
 
 	TerrainDictionary = {
@@ -983,7 +896,7 @@ none {{t=50,r=50}}
 	]]--
 
 	TerrainDictionaryCentauri = {
-		[terrainGrass] = { points = {{t=50,r=50}}, features = { featureNone, featureJungle, featureMarsh } },
+		[terrainGrass] = { points = {{t=50,r=58}}, features = { featureNone, featureJungle, featureMarsh } },
 		[terrainPlains] = { points = {{t=50,r=14}}, features = { featureNone, } },
 		[terrainDesert] = { points = {{t=50,r=0}}, features = { featureNone, } },
 	}
@@ -991,7 +904,7 @@ none {{t=50,r=50}}
 	FeatureDictionaryCentauri = {
 		[featureNone] = { points = {{t=0,r=0}}, percent = 100, limitRatio = -1, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}}, percent = 100, limitRatio = 0.95, hill = false },
-		[featureMarsh] = { points = {{t=82,r=61}}, percent = 70, limitRatio = 0.9, hill = true },
+		[featureMarsh] = { points = {{t=82,r=61}}, percent = 65, limitRatio = 0.9, hill = true },
 	}
 
 	-- doing it this way just so the declarations above are shorter
@@ -4949,6 +4862,20 @@ end
 ------------------------------------------------------------------------------
 
 function GetMapScriptInfo()
+	local activatedMods = Modding.GetActivatedMods()
+	if activatedMods then
+		for i,v in ipairs(activatedMods) do
+			local title = Modding.GetModProperty(v.ID, v.Version, "Name")
+			if title == "Alpha Centauri Maps" then
+				EchoDebug("Alpha Centauri Maps enabled, changing default map options...")
+				OptionDictionary[2].default = 3 -- one ocean
+				OptionDictionary[3].default = 3 -- three continents
+				OptionDictionary[7].default = 2 -- climate realism on
+				OptionDictionary[11].default = 1 -- ancient roads none
+				break
+			end
+		end
+	end
 	local world_age, temperature, rainfall, sea_level, resources = GetCoreMapOptions()
 	local custOpts = GetCustomOptions()
 	tInsert(custOpts, resources)
