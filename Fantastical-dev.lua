@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 16
+-- version 17
 
 --------------------------------------------------------------
 if include == nil then
@@ -4523,47 +4523,57 @@ function Space:DrawRivers()
 end
 
 function Space:DrawRoad(origHex, destHex)
-	local hex = origHex
 	local it = 0
-	local picked = {}
+	local picked = { [destHex] = true }
+	local rings = { {destHex} }
+	local containsOrig = false
+	-- collect rings
 	repeat
-		if hex.polygon.continent == origHex.polygon.continent and (hex.plotType == plotLand or hex.plotType == plotHills) and hex.featureType ~= featureMarsh then
-			hex.road = true
-			hex.roadMarked = origHex.polygon.continent
-			if self.markedRoads == nil then self.markedRoads = {} end
-			if self.markedRoads[origHex.polygon.continent] == nil then self.markedRoads[origHex.polygon.continent] = {} end
-			tInsert(self.markedRoads[origHex.polygon.continent], hex)
+		local ring = {}
+		for i, hex in pairs(rings[#rings]) do
+			for direction, nhex in pairs(hex:Neighbors()) do
+				if not picked[nhex] and (nhex.plotType == plotLand or nhex.plotType == plotHills) then
+					picked[nhex] = true
+					tInsert(ring, nhex)
+					if nhex == origHex then
+						containsOrig = true
+						break
+					end
+				end
+			end
+			if containsOrig then break end
 		end
-		hex.invisibleRoad = true
-		picked[hex] = true
-		if hex == destHex then break end
-		local leastCost = 9999
-		local leastHex
-		for direction, nhex in pairs(hex:Neighbors(directions)) do
-			if not picked[nhex] and (nhex.plotType == plotLand or nhex.plotType == plotHills) and nhex.featureType ~= featureMarsh then
-				local cost = 0
-				if nhex == destHex then
-					leastHex = nhex
-					break
-				end
-				if nhex.plotType == plotHills then
-					cost = cost + 1
-				end
-				if nhex.onRiver[hex] or hex.onRiver[nhex] then
-					cost = cost + 1
-				end
-				local dist = self:HexDistance(nhex.x, nhex.y, destHex.x, destHex.y)
-				cost = cost + dist
-				if cost < leastCost then
-					leastCost = cost
-					leastHex = nhex
+		if containsOrig then break end
+		if #ring == 0 then break end
+		tInsert(rings, ring)
+		it = it + 1
+	until it > 1000
+	-- find path through rings and draw road
+	if containsOrig then
+		local hex = origHex
+		for ri = #rings, 1, -1 do
+			hex.road = true
+			self.markedRoads = self.markedRoads or {}
+			self.markedRoads[origHex.polygon.continent] = self.markedRoads[origHex.polygon.continent] or {}
+			tInsert(self.markedRoads[origHex.polygon.continent], hex)
+			local ring = rings[ri]
+			if #ring == 1 then
+				hex = ring[1]
+			else
+				local isNeigh = {}
+				for d, nhex in pairs(hex:Neighbors()) do isNeigh[nhex] = d end
+				for i, rhex in pairs(ring) do
+					if isNeigh[rhex] then
+						hex = rhex
+						break
+					end
 				end
 			end
 		end
-		hex = leastHex or hex
-		it = it + 1
-	until not leastHex or it > 1000
-	EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y, tostring(it) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
+		EchoDebug("road from " .. origHex.x .. "," .. origHex.y .. " to " .. destHex.x .. "," .. destHex.y, tostring(#rings) .. " long, vs hex distance of " .. self:HexDistance(origHex.x, origHex.y, destHex.x, destHex.y))
+	else
+		EchoDebug("no path for road ")
+	end
 end
 
 function Space:DrawRoadsOnContinent(continent, cityNumber)
@@ -4613,8 +4623,8 @@ function Space:DrawRoadsOnContinent(continent, cityNumber)
 	local origHex = self:GetHexByXY(maxDistPolygons[1].x, maxDistPolygons[1].y)
 	local destHex = self:GetHexByXY(maxDistPolygons[2].x, maxDistPolygons[2].y)
 	self:DrawRoad(origHex, destHex)
-	origHex.road = nil
-	destHex.road = nil
+	-- origHex.road = nil
+	-- destHex.road = nil
 	-- draw the other connecting roads
 	for i, polygon in pairs(cityPolygons) do
 		if polygon ~= maxDistPolygons[1] and polygon ~= maxDistPolygons[2] then
@@ -4633,7 +4643,7 @@ function Space:DrawRoadsOnContinent(continent, cityNumber)
 			local origHex = self:GetHexByXY(polygon.x, polygon.y)
 			-- draw road
 			if leastHex then self:DrawRoad(origHex, leastHex) end
-			origHex.road = nil
+			-- origHex.road = nil
 		end
 	end
 	return #cityPolygons
@@ -4961,7 +4971,7 @@ function GetMapInitData(worldSize)
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
-			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 25,
+			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 24,
 			[GameInfo.Worlds.WORLDSIZE_TINY.ID] = 56 * 36,
 			[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = 66 * 42,
 			[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = 80 * 52,
