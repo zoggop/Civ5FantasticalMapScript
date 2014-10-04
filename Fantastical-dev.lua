@@ -4971,7 +4971,7 @@ function GetMapInitData(worldSize)
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
-			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 25,
+			[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = 40 * 24,
 			[GameInfo.Worlds.WORLDSIZE_TINY.ID] = 56 * 36,
 			[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = 66 * 42,
 			[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = 80 * 52,
