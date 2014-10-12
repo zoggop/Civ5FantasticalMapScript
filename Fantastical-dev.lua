@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 18
+-- version 19
 
 --------------------------------------------------------------
 if include == nil then
@@ -607,7 +607,7 @@ local OptionDictionary = {
 			[5] = { name = "Hot", values = {1.1, 5, 100} },
 			[6] = { name = "Jurassic", values = {0.9, 14, 100} },
 			[7] = { name = "Global Tropics", values = {0.7, 25, 100} },
-			[8] = { name = "Random", values = "keys" },
+			[8] = { name = "Random", values = "keys", randomKeys = {2, 3, 4, 5, 6} },
 		}
 	},
 	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 4,
@@ -619,7 +619,7 @@ local OptionDictionary = {
 			[5] = { name = "Wet", values = {58} },
 			[6] = { name = "Very Wet", values = {63} },
 			[7] = { name = "Arboria", values = {84} },
-			[8] = { name = "Random", values = "values" },
+			[8] = { name = "Random", values = "values", lowValues = {30}, highValues = {70} },
 		}
 	},
 	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
@@ -2076,10 +2076,14 @@ function Space:SetOptions(optDict)
 	for optionNumber, option in ipairs(optDict) do
 		local optionChoice = Map.GetCustomOption(optionNumber)
 		if option.values[optionChoice].values == "keys" then
-			optionChoice = mRandom(1, #option.values-1)
+			if option.values[optionChoice].randomKeys then
+				optionChoice = tGetRandom(option.values[optionChoice].randomKeys)
+			else
+				optionChoice = mRandom(1, #option.values-1)
+			end
 		elseif option.values[optionChoice].values == "values" then
-			local lowValues = option.values[1].values
-			local highValues = option.values[#option.values-1].values
+			local lowValues =  option.values[optionChoice].lowValues or option.values[1].values
+			local highValues = option.values[optionChoice].highValues or option.values[#option.values-1].values
 			local randValues = {}
 			for valueNumber, key in pairs(option.keys) do
 				local low, high = lowValues[valueNumber], highValues[valueNumber]
@@ -4888,7 +4892,7 @@ function GetMapScriptInfo()
 		IconAtlas = "WORLDTYPE_FANTASTICAL_ATLAS",
 		IconIndex = 0,
 		CustomOptions = custOpts,
-		FolderType = "NULL",
+		-- Folder = "MAP_FOLDER_ROOT",
 	}
 end
 
