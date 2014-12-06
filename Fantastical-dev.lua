@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 19
+-- version 20
 
 --------------------------------------------------------------
 if include == nil then
@@ -867,7 +867,7 @@ jungle {{t=100,r=100}, {t=86,r=100}}
 		[featureForest] = { points = {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}, {t=86,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
-		[featureOasis] = { points = {}, percent = 3, limitRatio = 0.01, hill = false },
+		[featureOasis] = { points = {}, percent = 2.4, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
@@ -2004,7 +2004,9 @@ Space = class(function(a)
 	a.mountainRangeMaxEdges = 4 -- how many polygon edges long can a mountain range be
 	a.coastRangeRatio = 0.33 -- what ratio of the total mountain ranges should be coastal
 	a.mountainRatio = 0.04 -- how much of the land to be mountain tiles
-	a.mountainRangeMult = 1.4 -- higher mult means more (globally) scattered mountains
+	a.mountainRangeMult = 1.3 -- higher mult means more (globally) scattered mountain ranges
+	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
+	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
 	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
@@ -2451,6 +2453,7 @@ function Space:Compute()
 end
 
 function Space:ComputeLandforms()
+	self.tinyIslandMountainPercent = mCeil(self.mountainTinyIslandMult * self.mountainRatio * 100)
 	for pi, hex in pairs(self.hexes) do
 		if hex.polygon.continent ~= nil then
 			-- near ocean trench?
@@ -2470,6 +2473,10 @@ function Space:ComputeLandforms()
 					tInsert(self.mountainHexes, hex)
 				end
 			end
+		end
+		if hex.subPolygon.tinyIsland and mRandom(1, 100) < self.tinyIslandMountainPercent then
+			hex.plotType = plotMountain
+			tInsert(self.mountainHexes, hex)
 		end
 	end
 	self:AdjustMountains()
@@ -3377,6 +3384,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 end
 
 function Space:PickMountainRanges()
+	self.continentMountainEdgeCounts = {}
 	local edgeBuffer = {}
 	for i, edge in pairs(self.edges) do
 		tInsert(edgeBuffer, edge)
@@ -3411,6 +3419,12 @@ function Space:PickMountainRanges()
 		local range = { edge }
 		edgeCount = edgeCount + 1
 		if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
+		if edge.polygons[1].continent then
+			self.continentMountainEdgeCounts[edge.polygons[1].continent] = (self.continentMountainEdgeCounts[edge.polygons[1].continent] or 0) + 1
+		end
+		if edge.polygons[2].continent and edge.polygons[2].continent ~= edge.polygons[1].continent then
+			self.continentMountainEdgeCounts[edge.polygons[2].continent] = (self.continentMountainEdgeCounts[edge.polygons[2].continent] or 0) + 1
+		end
 		repeat
 			local nextEdges = {}
 			for nextEdge, yes in pairs(edge.connections) do
@@ -3442,6 +3456,12 @@ function Space:PickMountainRanges()
 			tInsert(range, nextEdge)
 			edgeCount = edgeCount + 1
 			if coastRange then coastCount = coastCount + 1 else interiorCount = interiorCount + 1 end
+			if nextEdge.polygons[1].continent then
+				self.continentMountainEdgeCounts[nextEdge.polygons[1].continent] = (self.continentMountainEdgeCounts[nextEdge.polygons[1].continent] or 0) + 1
+			end
+			if nextEdge.polygons[2].continent and nextEdge.polygons[2].continent ~= nextEdge.polygons[1].continent then
+				self.continentMountainEdgeCounts[nextEdge.polygons[2].continent] = (self.continentMountainEdgeCounts[nextEdge.polygons[2].continent] or 0) + 1
+			end
 			edge = nextEdge
 		until #nextEdges == 0 or #range >= self.mountainRangeMaxEdges or coastCount > coastPrescription or interiorCount > interiorPrescription
 		EchoDebug("range ", #range, tostring(coastRange))
@@ -3470,6 +3490,38 @@ function Space:PickMountainRanges()
 		tInsert(self.mountainRanges, range)
 	end
 	EchoDebug(interiorCount .. " interior ranges ", coastCount .. " coastal ranges")
+	self:PickMountainSubPolygons()
+end
+
+-- add one-subpolygon mountain clumps to continents without any mountains
+function Space:PickMountainSubPolygons()
+	local chance = mCeil(1 / (self.mountainSubPolygonMult * self.mountainRatio))
+	local addedSubPolygons = 0
+	for i, continent in pairs(self.continents) do
+		if self.continentMountainEdgeCounts[continent] == nil then
+			for ii, polygon in pairs(continent) do
+				for iii, subPolygon in pairs(polygon.subPolygons) do
+					if not subPolygon.lake and mRandom(1, chance) == 1 then
+						addedSubPolygons = addedSubPolygons + 1
+						subPolygon.mountainRange = true
+						local coreHex = false
+						local hexBuffer = tDuplicate(subPolygon.hexes)
+						while #hexBuffer > 0 do
+							local hex = tRemoveRandom(hexBuffer)
+							if hex.plotType ~= plotOcean then
+								hex.mountainRange = true
+								if not coreHex then
+									hex.mountainRangeCore = true
+									coreHex = true
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	EchoDebug(addedSubPolygons .. " subpolygon mountain clumps")
 end
 
 function Space:PickRegions()
