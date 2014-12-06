@@ -867,7 +867,7 @@ jungle {{t=100,r=100}, {t=86,r=100}}
 		[featureForest] = { points = {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}, percent = 100, limitRatio = 0.85, hill = true },
 		[featureJungle] = { points = {{t=100,r=100}, {t=86,r=100}}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
 		[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
-		[featureOasis] = { points = {}, percent = 3, limitRatio = 0.01, hill = false },
+		[featureOasis] = { points = {}, percent = 2.4, limitRatio = 0.01, hill = false },
 		[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
 	}
 
