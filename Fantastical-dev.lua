@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: zoggop
--- version 20
+-- version 21
 
 --------------------------------------------------------------
 if include == nil then
@@ -539,15 +539,23 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "World Wrap", sortpriority = 1, keys = { "wrapX", "wrapY", "inlandSeasMax" }, default = 1,
+	{ name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio", "ancientCitiesCount" }, default = 1,
 	values = {
-			[1] = { name = "Globe (Wraps East-West)", values = {true, false, 2} },
-			[2] = { name = "Realm (Does Not Wrap)", values = {false, false, 1} },
-			-- [3] = { name = "Donut (Horizontal and Vertical Wrapping)", values = {true, true} },
-			-- sadly wrapY does not work
+			[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15, 0} },
+			[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15, 0} },
+			[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15, 0} },
+			[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15, 0} },
+			[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0, 0} },
+			[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0, 0} },
+			[7] = { name = "Globe w/ Old Roads", values = {true, 2, false, 0.15, 4} },
+			[8] = { name = "Realm w/ Old Roads", values = {false, 1, false, 0.15, 4} },
+			[9] = { name = "Realistic Globe w/ Old Roads", values = {true, 2, true, 0.15, 4} },
+			[10] = { name = "Realistic Realm w/ Old Roads", values = {false, 1, true, 0.15, 4} },
+			[11] = { name = "Globe w/o Polar Land w/ Old Roads", values = {true, 2, false, 0.0, 4} },
+			[12] = { name = "Realistic Globe w/o Polar Land w/ Old Roads", values = {true, 2, true, 0.0, 4} },
 		}
 	},
-	{ name = "Oceans", sortpriority = 2, keys = { "oceanNumber", }, default = 4,
+	{ name = "Oceans", keys = { "oceanNumber", }, default = 4,
 	values = {
 			[1] = { name = "No Oceans", values = {-1} },
 			[2] = { name = "No Major Oceans", values = {0} },
@@ -558,7 +566,7 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Continents/Ocean", sortpriority = 3, keys = { "majorContinentNumber", }, default = 1,
+	{ name = "Continents/Ocean", keys = { "majorContinentNumber", }, default = 1,
 	values = {
 			[1] = { name = "One", values = {1} },
 			[2] = { name = "Two", values = {2} },
@@ -567,7 +575,7 @@ local OptionDictionary = {
 			[5] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Islands", sortpriority = 4, keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
+	{ name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
 	values = {
 			[1] = { name = "Few", values = {10, 1, 0.25} },
 			[2] = { name = "Some", values = {33, 2, 0.5} },
@@ -575,13 +583,7 @@ local OptionDictionary = {
 			[4] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Land at Poles", sortpriority = 5, keys = { "polarMaxLandRatio" }, default = 2,
-	values = {
-			[1] = { name = "No", values = {0.0} },
-			[2] = { name = "Yes", values = {0.15} },
-		}
-	},
-	{ name = "World Age", sortpriority = 6, keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	{ name = "World Age", keys = { "mountainRatio", "hillynessMax" }, default = 4,
 	values = {
 			[1] = { name = "1 Billion Years", values = {0.25, 75} },
 			[2] = { name = "2 Billion Years", values = {0.16, 60} },
@@ -592,13 +594,7 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Climate Realism", sortpriority = 7, keys = { "useMapLatitudes" }, default = 1,
-	values = {
-			[1] = { name = "Off", values = {false} },
-			[2] = { name = "On", values = {true} },
-		}
-	},
-	{ name = "Temperature", sortpriority = 8, keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
+	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
 	values = {
 			[1] = { name = "Snowball", values = {1.8, 0, 20} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 45} },
@@ -610,7 +606,7 @@ local OptionDictionary = {
 			[8] = { name = "Random", values = "keys", randomKeys = {2, 3, 4, 5, 6} },
 		}
 	},
-	{ name = "Rainfall", sortpriority = 9, keys = { "rainfallMidpoint" }, default = 4,
+	{ name = "Rainfall", keys = { "rainfallMidpoint" }, default = 4,
 	values = {
 			[1] = { name = "Arrakis", values = {0} },
 			[2] = { name = "Very Arid", values = {16} },
@@ -622,7 +618,7 @@ local OptionDictionary = {
 			[8] = { name = "Random", values = "values", lowValues = {30}, highValues = {70} },
 		}
 	},
-	{ name = "Fallout", sortpriority = 10, keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
+	{ name = "Fallout", keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
 	values = {
 			[1] = { name = "None", values = {false, false, false, false} },
 			[2] = { name = "Post-Apocalyptic", values = {false, false, false, true} },
@@ -632,20 +628,12 @@ local OptionDictionary = {
 			[6] = { name = "Contaminated Everything", values = {true, true, true, false} },
 		}
 	},
-	{ name = "Ancient Roads", sortpriority = 11, keys = { "ancientCitiesCount" }, default = 2,
-	values = {
-			[1] = { name = "None", values = {0} },
-			[2] = { name = "Few", values = {3} },
-			[3] = { name = "Some", values = {6} },
-			[4] = { name = "Many", values = {9} },
-		}
-	},
 }
 
 local function GetCustomOptions()
 	local custOpts = {}
 	for i, option in ipairs(OptionDictionary) do
-		local opt = { Name = option.name, SortPriority = option.sortpriority, DefaultValue = option.default, Values = {} }
+		local opt = { Name = option.name, SortPriority = i, DefaultValue = option.default, Values = {} }
 		for n, value in pairs(option.values) do
 			opt.Values[n] = value.name
 		end
