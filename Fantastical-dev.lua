@@ -4667,7 +4667,7 @@ function Space:ResizeMountains(prescribedArea)
 	if #self.mountainHexes > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainHexes)
-			if hex.mountainRangeCore and #self.mountainHexes > #self.mountainCoreHexes then
+			if hex.mountainRangeCore and #self.mountainCoreHexes > 0 and #self.mountainHexes > #self.mountainCoreHexes then
 				tInsert(self.mountainHexes, hex)
 			else
 				if Map.Rand(10, "hill dice") < self.hillChance then
@@ -4715,7 +4715,7 @@ end
 
 function Space:AdjustMountains()
 	self.mountainArea = mCeil(self.mountainRatio * self.filledArea)
-	EchoDebug(#self.mountainHexes, self.mountainArea)
+	EchoDebug(#self.mountainHexes, "base mountain hexes", self.mountainArea, "prescribed mountain hexes", #self.mountainCoreHexes, "mountain core hexes")
 	-- first expand them 1.1 times their size
 	-- self:ResizeMountains(#self.mountainHexes * 1.1)
 	-- then adjust to the right amount
