@@ -583,14 +583,14 @@ local OptionDictionary = {
 			[4] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "World Age", keys = { "mountainRatio", "hillynessMax" }, default = 4,
+	{ name = "World Age", keys = { "mountainRatio", "hillynessMax", "hillChance" }, default = 4,
 	values = {
-			[1] = { name = "1 Billion Years", values = {0.25, 75} },
-			[2] = { name = "2 Billion Years", values = {0.16, 60} },
-			[3] = { name = "3 Billion Years", values = {0.08, 50} },
-			[4] = { name = "4 Billion Years", values = {0.04, 40} },
-			[5] = { name = "5 Billion Years", values = {0.02, 30} },
-			[6] = { name = "6 Billion Years", values = {0.0, 20} },
+			[1] = { name = "1 Billion Years", values = {0.25, 75, 5} },
+			[2] = { name = "2 Billion Years", values = {0.16, 60, 4} },
+			[3] = { name = "3 Billion Years", values = {0.08, 50, 3} },
+			[4] = { name = "4 Billion Years", values = {0.04, 40, 3} },
+			[5] = { name = "5 Billion Years", values = {0.02, 30, 2} },
+			[6] = { name = "6 Billion Years", values = {0.005, 20, 1} },
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
