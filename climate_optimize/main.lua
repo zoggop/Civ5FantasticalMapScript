@@ -1,21 +1,25 @@
 require "common"
 require "climate"
 
---[[
-grassland: 49,66
-desert: 23,1
-plains: 21,61
-snow: 0,64
-tundra: 9,62
-grassland: 88,54
-tundra: 14,22
-desert: 59,8
-snow: 1,24
-plains: 61,21
-]]--
+-- local TerrainDictionary = {
+-- 	[terrainGrass] = { points = {}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
+-- 	[terrainPlains] = { points = {}, features = { featureNone, featureForest, featureFallout } },
+-- 	[terrainDesert] = { points = {}, features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis },
+-- 	[terrainTundra] = { points = {}, features = { featureNone, featureForest, featureFallout } },
+-- 	[terrainSnow] = { points = {}, features = { featureNone, featureFallout } },
+-- }
+
+-- local FeatureDictionary = {
+-- 	[featureNone] = { points = {}, percent = 100, limitRatio = -1, hill = true },
+-- 	[featureForest] = { points = {}, percent = 100, limitRatio = 0.85, hill = true },
+-- 	[featureJungle] = { points = {}, percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains },
+-- 	[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
+-- 	[featureOasis] = { points = {}, percent = 2.4, limitRatio = 0.01, hill = false },
+-- 	[featureFallout] = { points = {}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },
+-- }
 
 local terrainRegions = {
-	{ name = "grassland", targetArea = 0.36, highT = true, highR = true,
+	{ name = "grassland", dictName = "terrainGrass", targetArea = 0.36, highT = true, highR = true,
 		points = {
 			-- {t = 100, r = 75},
 			{t = 75, r = 100}
@@ -26,9 +30,10 @@ local terrainRegions = {
 			tundra = {n = -1},
 		},
 		subRegionNames = {"none", "forest", "jungle", "marsh"},
+		remainderString = "features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout }",
 		color = {0, 127, 0}
 	},
-	{ name = "plains", targetArea = 0.26, noLowT = true, noLowR = true,
+	{ name = "plains", dictName = "terrainPlains", targetArea = 0.26, noLowT = true, noLowR = true,
 		points = {
 			-- {t = 75, r = 50},
 			{t = 50, r = 75}
@@ -39,9 +44,10 @@ local terrainRegions = {
 			tundra = {t = 1} 
 		},
 		subRegionNames = {"none", "forest"},
+		remainderString = "features = { featureNone, featureForest, featureFallout }",
 		color = {127, 127, 0}
 	},
-	{ name = "desert", targetArea = 0.195, lowR = true,
+	{ name = "desert", dictName = "terrainDesert", targetArea = 0.195, lowR = true,
 		points = {
 			-- {t = 25, r = 0},
 			{t = 80, r = 0}
@@ -52,9 +58,10 @@ local terrainRegions = {
 			grassland = {t = 1, r = -1},
 		},
 		subRegionNames = {"none", "oasis"},
+		remainderString = "features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis",
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", targetArea = 0.13, contiguous = true,
+	{ name = "tundra", dictName = "terrainTundra", targetArea = 0.13, contiguous = true,
 		points = {
 			{t = 3, r = 25},
 			-- {t = 1, r = 75}
@@ -66,14 +73,16 @@ local terrainRegions = {
 			grassland = {n = -1},
 		},
 		subRegionNames = {"none", "forest"},
+		remainderString = "features = { featureNone, featureForest, featureFallout }",
 		color = {63, 63, 63}
 	},
-	{ name = "snow", targetArea = 0.065, lowT = true, contiguous = true,
+	{ name = "snow", dictName = "terrainSnow", targetArea = 0.065, lowT = true, contiguous = true,
 		points = {
 			{t = 0, r = 25},
 			-- {t = 0, r = 70},
 		},
 		subRegionNames = {"none"},
+		remainderString = "features = { featureNone, featureFallout }",
 		relations = {
 			tundra = {t = -1},
 			plains = {n = -1},
@@ -85,30 +94,33 @@ local terrainRegions = {
 -- 
 
 local featureRegions = {
-	{ name = "none", targetArea = 0.73,
+	{ name = "none", dictName = "featureNone", targetArea = 0.73,
 		points = {
 			{t = 60, r = 40},
 			-- {t = 55, r = 45},
 		},
 		relations = {},
 		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
+		remainderString = "percent = 100, limitRatio = -1, hill = true",
 		color = {255, 255, 255, 0}
 	},
-	{ name = "forest", targetArea = 0.17, highR = true,
+	{ name = "forest", dictName = "featureForest", targetArea = 0.17, highR = true,
 		points = {
 			{t = 45, r = 60},
 			-- {t = 25, r = 40},
 		},
 		relations = {},
 		containedBy = { "grassland", "plains", "tundra" },
+		remainderString = "percent = 100, limitRatio = 0.85, hill = true",
 		color = {255, 255, 0, 127}
 	},
-	{ name = "jungle", targetArea = 0.1, highR = true, highT = true,
+	{ name = "jungle", dictName = "featureJungle", targetArea = 0.1, highR = true, highT = true,
 		points = {
 			{t = 100, r = 100},
 			-- {t = 90, r = 90},
 		},
 		containedBy = { "grassland" },
+		remainderString = "percent = 100, limitRatio = 0.85, hill = true, terrainType = terrainPlains",
 		relations = {},
 		color = {0, 255, 0, 127}
 	},
@@ -170,31 +182,32 @@ function love.keyreleased(key)
 		end
 	elseif key == "o" then
 		-- [terrainGrass] = { points = {{t=47,r=76}, {t=73,r=58}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
-		local block = ""
+		local block = "TerrainDictionary = {\n"
 		for r, region in pairs(myClimate.regions) do
-			local line = region.name .. " {"
+			local pointList = ""
 			for i, point in pairs(myClimate.pointSet.points) do
 				if point.region == region then
-					local part = "{t=" .. point.t .. ",r=" .. point.r .. "}, "
-					line = line .. part
+					pointList = pointList .. "{t=" .. point.t .. ",r=" .. point.r .. "}," 
 				end
 			end
-			line = line:sub(1, -3)
-			line = line .. "}"
-			block = block .. line .. "\n"
+			block = block .. '\t[' .. region.dictName .. '] = { points = {' .. pointList .. '}, ' .. region.remainderString .. " },\n"
 		end
+		block = block .. "}\n\n"
+		block = block .. "FeatureDictionary = {\n"
 		for r, region in pairs(myClimate.subRegions) do
-			local line = region.name .. " {"
+			local pointList = ""
 			for i, point in pairs(myClimate.subPointSet.points) do
 				if point.region == region then
-					local part = "{t=" .. point.t .. ",r=" .. point.r .. "}, "
-					line = line .. part
+					pointList = pointList .. "{t=" .. point.t .. ",r=" .. point.r .. "}," 
 				end
 			end
-			line = line:sub(1, -3)
-			line = line .. "}"
-			block = block .. line .. "\n"
+			block = block .. '\t[' .. region.dictName .. '] = { points = {' .. pointList .. '}, ' .. region.remainderString .. " },\n"
 		end
+		block = block .. [[
+	[featureMarsh] = { points = {}, percent = 100, limitRatio = 0.33, hill = false },
+	[featureOasis] = { points = {}, percent = 2.4, limitRatio = 0.01, hill = false },
+	[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },]]
+		block = block .. "\n}"
 		love.system.setClipboardText( block )
 	elseif key == " " then
 		paused = not paused
@@ -270,17 +283,22 @@ function love.keyreleased(key)
 	end
 end
 
-local buttonPointSets = { l = 'pointSet', r = 'subPointSet' }
+local buttonPointSets = { 'pointSet', 'subPointSet' }
 local mousePress = {}
 local mousePoint = {}
 local mousePointOriginalPosition = {}
 
 function love.mousepressed(x, y, button)
+	print("mouse pressed", x, y, button)
 	if buttonPointSets[button] then
+		print("mouse has command")
 		local t, r = DisplayToGrid(x, y)
 		local pointSet = myClimate[buttonPointSets[button]]
 		local point = pointSet:NearestPoint(t, r)
-		if not point then return end
+		if not point then
+			print("no point under mouse")
+			return
+		end
 		if love.keyboard.isDown( 'lctrl' ) then
 			if love.keyboard.isDown( 'lshift' ) then
 				-- delete a point
@@ -307,6 +325,7 @@ function love.mousepressed(x, y, button)
 			-- fix or unfix the point
 			point.fixed = not point.fixed
 		else
+			print("dragging point")
 			mousePoint[button] = point
 			mousePointOriginalPosition[button] = { t = point.t, r = point.r }
 			point.fixed = true

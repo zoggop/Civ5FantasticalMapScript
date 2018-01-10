@@ -71,3 +71,27 @@ function stringCapitalize(string)
 	first = string.upper(first)
 	return first .. string:sub(2)
 end
+
+function serialize(o, out)
+  out = out or ""
+  if type(o) == "number" then
+  	out = out .. o
+  elseif type(o) == "boolean" then
+  	out = out .. tostring(o)
+  elseif type(o) == "string" then
+  	out = out .. string.format("%q", o)
+  elseif type(o) == "table" then
+  	out = out .. "{\n"
+    for k,v in pairs(o) do
+      out = out .. "  ["
+      out = serialize(k, out)
+      out = out .. "] = "
+      out = serialize(v, out)
+      out = out .. ",\n"
+    end
+    out = out .. "}\n"
+  else
+    error("cannot serialize a " .. type(o))
+  end
+  return out
+end
