@@ -55,7 +55,7 @@ Climate = class(function(a, regions, subRegions, parentClimate)
 	-- latitudeAreaMutationDistMult = latitudeAreaMutationDistMult * (90 / a.totalLatitudes)
 	-- print(a.totalLatitudes, latitudeAreaMutationDistMult)
 
-	a.mutationStrength = mutationStrength
+	a.mutationStrength = mutationStrength + 0
 	a.iterations = 0
 	a.barrenIterations = 0
 	a.nearestString = ""
@@ -156,30 +156,31 @@ function Climate:GiveRegionsExcessAreas(regions)
 end
 
 function Climate:MutatePointSet(pointSet)
-	local mutated = false
 	local mutation = PointSet(self, pointSet)
+	local regions
+	if pointSet.isSub then
+		regions = self.subRegions
+	else
+		regions = self.regions
+	end
 	if mutation:Okay() then
 		mutation:Fill()
 		if mutation:FillOkay() then
-			local regions
-			if pointSet.isSub then
-				regions = self.subRegions
-			else
-				regions = self.regions
-			end
 			self:GiveRegionsExcessAreas(regions)
 			mutation:GiveDistance()
 			if not pointSet.distance or mutation.distance < pointSet.distance then
-				mutated = true
-				pointSet = mutation
+				print("accept mutation", mCeil(pointSet.distance), mCeil(mutation.distance))
 				for i, region in pairs(regions) do
 					region.stableArea = region.area + 0
 					region.stableLatitudeArea = region.latitudeArea + 0
 				end
+				return mutation, true
 			end
 		end
 	end
-	return pointSet, mutated
+	pointSet:Fill()
+	self:GiveRegionsExcessAreas(regions)
+	return pointSet, false
 end
 
 -- get one mutation and use it if it's better
@@ -190,21 +191,21 @@ function Climate:Optimize()
 	local oldPointSet = self.pointSet
 	local mutated, subMutated
 	self.pointSet, mutated = self:MutatePointSet(self.pointSet)
-	if mutated then
-		local oldDist = self.leastSubPointSetDistance or 999999
-		self.subPointSet:Fill()
-		self:GiveRegionsExcessAreas(self.subRegions)
-		self.subPointSet:GiveDistance()
+	-- if mutated then
+	-- 	local oldDist = self.leastSubPointSetDistance or 999999
+	-- 	self.subPointSet:Fill()
+	-- 	self:GiveRegionsExcessAreas(self.subRegions)
+		-- self.subPointSet:GiveDistance()
 		-- print(oldDist, self.subPointSet.distance, oldPointSet, self.pointSet)
-		if self.subPointSet.distance > oldDist + (oldDist * subPointSetDistanceIncreaseTolerance) then
-			self.pointSet = oldPointSet
-			self.subPointSet:Fill()
-			self:GiveRegionsExcessAreas(self.subRegions)
-			self.subPointSet:GiveDistance()
-			mutated = false
-		end
+		-- if self.subPointSet.distance > oldDist + (oldDist * subPointSetDistanceIncreaseTolerance) then
+		-- 	self.pointSet = oldPointSet
+		-- 	self.subPointSet:Fill()
+		-- 	self:GiveRegionsExcessAreas(self.subRegions)
+		-- 	self.subPointSet:GiveDistance()
+		-- 	mutated = false
+		-- end
 		-- print(self.subPointSet.distance)
-	end
+	-- end
 	self.subPointSet, subMutated = self:MutatePointSet(self.subPointSet)
 	if self.subPointSet.distance and self.subPointSet.distance < (self.leastSubPointSetDistance or 999999) then
 		self.leastSubPointSetDistance = self.subPointSet.distance
@@ -214,7 +215,11 @@ function Climate:Optimize()
 	if not mutated and not subMutated then
 		self.barrenIterations = self.barrenIterations + 1
 		if self.barrenIterations > maxBarrenIterations then
-			self.mutationStrength = mMin(self.mutationStrength + 1, maxMutationStrength)
+			if self.mutationStrength == maxMutationStrength then
+				self.mutationStrength = mutationStrength + 0
+			else
+				self.mutationStrength = mMin(self.mutationStrength + 1, maxMutationStrength)
+			end
 			self.barrenIterations = 0
 		end
 	else

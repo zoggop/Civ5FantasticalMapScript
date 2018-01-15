@@ -167,6 +167,12 @@ function Point:FillOkay()
 	if self.region.noHighT and self.highT then return false, "highT" end
 	if self.region.noLowR and self.lowR then return false, "lowR" end
 	if self.region.noHighR and self.highR then return false, "highR" end
+
+	if self.region.lowT and not self.lowT then return false, "no lowT" end
+	if self.region.highT and not self.highT then return false, "no highT" end
+	if self.region.lowR and not self.lowR then return false, "no lowR" end
+	if self.region.highR and not self.highR then return false, "no highR" end
+
 	if self.region.maxR and self.maxR > self.region.maxR then return false, "maxR" end
 	if self.region.minR and self.minR < self.region.minR then return false, "minR" end
 	if self.region.maxT and self.maxT > self.region.maxT then return false, "maxT" end

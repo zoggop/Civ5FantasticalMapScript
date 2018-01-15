@@ -19,7 +19,7 @@ require "climate"
 -- }
 
 local terrainRegions = {
-	{ name = "grassland", dictName = "terrainGrass", targetArea = 0.36, highT = true, highR = true,
+	{ name = "grassland", dictName = "terrainGrass", targetArea = 0.36, highT = true, highR = true, noLowR = true, noLowT = true,
 		points = {
 			-- {t = 100, r = 75},
 			{t = 75, r = 100}
@@ -47,7 +47,7 @@ local terrainRegions = {
 		remainderString = "features = { featureNone, featureForest, featureFallout }",
 		color = {127, 127, 0}
 	},
-	{ name = "desert", dictName = "terrainDesert", targetArea = 0.195, lowR = true,
+	{ name = "desert", dictName = "terrainDesert", targetArea = 0.195, lowR = true, noHighR = true,
 		points = {
 			-- {t = 25, r = 0},
 			{t = 80, r = 0}
@@ -61,7 +61,7 @@ local terrainRegions = {
 		remainderString = "features = { featureNone, featureOasis, featureFallout }, specialFeature = featureOasis",
 		color = {127, 127, 63}
 	},
-	{ name = "tundra", dictName = "terrainTundra", targetArea = 0.13, contiguous = true,
+	{ name = "tundra", dictName = "terrainTundra", targetArea = 0.13, contiguous = true, noHighT = true,
 		points = {
 			{t = 3, r = 25},
 			-- {t = 1, r = 75}
@@ -76,7 +76,7 @@ local terrainRegions = {
 		remainderString = "features = { featureNone, featureForest, featureFallout }",
 		color = {63, 63, 63}
 	},
-	{ name = "snow", dictName = "terrainSnow", targetArea = 0.065, lowT = true, contiguous = true,
+	{ name = "snow", dictName = "terrainSnow", targetArea = 0.065, lowT = true, contiguous = true, noHighT = true,
 		points = {
 			{t = 0, r = 25},
 			-- {t = 0, r = 70},
@@ -101,10 +101,11 @@ local featureRegions = {
 		},
 		relations = {},
 		containedBy = { "grassland", "plains", "desert", "tundra", "snow" },
+		dontEqualizeSuperAreas = true,
 		remainderString = "percent = 100, limitRatio = -1, hill = true",
 		color = {255, 255, 255, 0}
 	},
-	{ name = "forest", dictName = "featureForest", targetArea = 0.17, highR = true,
+	{ name = "forest", dictName = "featureForest", targetArea = 0.17, highR = true, noLowR = true,
 		points = {
 			{t = 45, r = 60},
 			-- {t = 25, r = 40},
@@ -114,7 +115,7 @@ local featureRegions = {
 		remainderString = "percent = 100, limitRatio = 0.85, hill = true",
 		color = {255, 255, 0, 127}
 	},
-	{ name = "jungle", dictName = "featureJungle", targetArea = 0.1, highR = true, highT = true,
+	{ name = "jungle", dictName = "featureJungle", targetArea = 0.1, highR = true, highT = true, noLowR = true, noLowT = true,
 		points = {
 			{t = 100, r = 100},
 			-- {t = 90, r = 90},
@@ -164,6 +165,7 @@ function love.load()
 end
 
 function love.keyreleased(key)
+	print(key)
 	if key == "c" or key == "s" then
 		local output = ""
 		for i, point in pairs(myClimate.pointSet.points) do
@@ -209,7 +211,7 @@ function love.keyreleased(key)
 	[featureFallout] = { points = {{t=50,r=0}}, disabled = true, percent = 0, limitRatio = 0.75, hill = true },]]
 		block = block .. "\n}"
 		love.system.setClipboardText( block )
-	elseif key == " " then
+	elseif key == "space" then
 		paused = not paused
 	elseif key == "f" then
 		myClimate = Climate(nil, featureRegions, myClimate)

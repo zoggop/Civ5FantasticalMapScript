@@ -30,6 +30,16 @@ PointSet = class(function(a, climate, parentPointSet, isSub)
 			point.isSub = a.isSub
 			if point.region.name == "none" then a.defaultPoint = point end
 		-- end
+		local newPoint
+		if math.random() < mutateNewPointChance then
+			print("new point")
+			local newPoint = Point(parentPoint.region, nil, nil, parentPoint)
+			tInsert(a.points, newPoint)
+			newPoint:ResetFillState()
+			newPoint.pointSet = a
+			newPoint.isSub = a.isSub
+			if newPoint.region.name == "none" then a.defaultPoint = newPoint end
+		end
 		for i, pp in pairs(parentPointSet.points) do
 			if pp ~= parentPoint then
 				local point = Point(pp.region, nil, nil, pp, true)
@@ -181,30 +191,37 @@ function PointSet:GiveDistance()
 	local haveRegion = {}
 	local regions = {}
 	for i, point in pairs(self.points) do
-		if point.region.highT then
-			self.distance = self.distance + (100-point.t)
-		elseif point.region.lowT then
-			self.distance = self.distance + point.t
-		end
-		if point.region.highR then
-			self.distance = self.distance + (100-point.r)
-		elseif point.region.lowR then
-			self.distance = self.distance + point.r
-		end
+		-- if point.region.highT then
+		-- 	self.distance = self.distance + (100-point.t)
+		-- elseif point.region.lowT then
+		-- 	self.distance = self.distance + point.t
+		-- end
+		-- if point.region.highR then
+		-- 	self.distance = self.distance + (100-point.r)
+		-- elseif point.region.lowR then
+		-- 	self.distance = self.distance + point.r
+		-- end
 		if not haveRegion[point.region] then
 			tInsert(regions, point.region)
+			haveRegion[point.region] = true
 		end
 	end
 	for i, region in pairs(regions) do
 		self.distance = self.distance + mAbs(region.excessLatitudeArea) * latitudeAreaMutationDistMult
 		self.distance = self.distance + mAbs(region.excessArea) * areaMutationDistMult
-		-- penalize uneven distribution of features across multiple terrains
-		if self.isSub then
+		-- penalize uneven RELATIVE distribution of features across multiple terrains
+		if self.isSub and region.name ~= "none" then
+			local relativeArea, relativeLatitudeArea = {}, {}
 			local areaAvg, latitudeAreaAvg = 0, 0
 			for i, regionName in pairs(region.containedBy) do
 				local superRegion = self.climate.regionsByName[regionName]
-				areaAvg = areaAvg + (region.superRegionAreas[superRegion] or 0)
-				latitudeAreaAvg = latitudeAreaAvg + (region.superRegionLatitudeAreas[superRegion] or 0)
+				relativeArea[superRegion] = (region.superRegionAreas[superRegion] or 0) / superRegion.area
+				relativeLatitudeArea[superRegion] = (region.superRegionLatitudeAreas[superRegion] or 0) / superRegion.latitudeArea
+				print(region.name, superRegion.name, (region.superRegionAreas[superRegion] or 0), superRegion.area)
+				-- areaAvg = areaAvg + (region.superRegionAreas[superRegion] or 0)
+				-- latitudeAreaAvg = latitudeAreaAvg + (region.superRegionLatitudeAreas[superRegion] or 0)
+				areaAvg = areaAvg + relativeArea[superRegion]
+				latitudeAreaAvg = latitudeAreaAvg + relativeLatitudeArea[superRegion]
 			end
 			if areaAvg > 0 and #region.containedBy > 0 then
 				areaAvg = areaAvg / #region.containedBy
@@ -219,9 +236,12 @@ function PointSet:GiveDistance()
 			for i, regionName in pairs(region.containedBy) do
 				local superRegion = self.climate.regionsByName[regionName]
 				-- print(mAbs(region.superRegionAreas[superRegion] - areaAvg) * areaMutationDistMult, mAbs(region.superRegionLatitudeAreas[superRegion] - latitudeAreaAvg) * latitudeAreaMutationDistMult)
-				self.distance = self.distance + mAbs((region.superRegionAreas[superRegion] or 0) - areaAvg) * areaMutationDistMult
-				self.distance = self.distance + mAbs((region.superRegionLatitudeAreas[superRegion] or 0) - latitudeAreaAvg) * latitudeAreaMutationDistMult
+				local d = mAbs(relativeArea[superRegion] - areaAvg) * equalSuperAreaDistMult
+				local ld = mAbs(relativeLatitudeArea[superRegion] - latitudeAreaAvg) * equalSuperAreaDistMult
+				-- print(region.name, superRegion.name, d, ld)
+				self.distance = self.distance + d + ld
 			end
 		end
 	end
+	print("givedistance", mCeil(self.distance), "generation", self.generation)
 end
