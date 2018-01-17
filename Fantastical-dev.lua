@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
--- Author: zoggop
--- version 24
+-- Author: eronoobos
+-- version 25
 
 --------------------------------------------------------------
 if include == nil then
@@ -4766,11 +4766,12 @@ function Space:DisperseFakeLatitude()
 end
 
 function Space:ResizeMountains(prescribedArea)
+	local stubbornMountainHexLimit = mMin(#self.mountainCoreHexes, prescribedArea)
 	if #self.mountainHexes == prescribedArea then return end
 	if #self.mountainHexes > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainHexes)
-			if hex.mountainRangeCore and #self.mountainCoreHexes > 0 and #self.mountainHexes > #self.mountainCoreHexes then
+			if hex.mountainRangeCore and #self.mountainCoreHexes > 0 and #self.mountainHexes > stubbornMountainHexLimit then
 				tInsert(self.mountainHexes, hex)
 			else
 				if Map.Rand(10, "hill dice") < self.hillChance then
