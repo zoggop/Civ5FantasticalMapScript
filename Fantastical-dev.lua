@@ -4766,12 +4766,16 @@ function Space:DisperseFakeLatitude()
 end
 
 function Space:ResizeMountains(prescribedArea)
+	local coreHexesLeft = #self.mountainCoreHexes
 	if #self.mountainHexes > prescribedArea then
 		repeat
 			local hex = tRemoveRandom(self.mountainHexes)
-			if hex.mountainRangeCore and #self.mountainCoreHexes > 0 and #self.mountainCoreHexes < prescribedArea and #self.mountainHexes > #self.mountainCoreHexes then
+			if hex.mountainRangeCore and #self.mountainCoreHexes > 0 and coreHexesLeft < prescribedArea and #self.mountainHexes > coreHexesLeft then
 				tInsert(self.mountainHexes, hex)
 			else
+				if hex.mountainRangeCore then
+					coreHexesLeft = coreHexesLeft - 1
+				end
 				if Map.Rand(10, "hill dice") < self.hillChance then
 					hex.plotType = plotHills
 					if hex.featureType and not FeatureDictionary[hex.featureType].hill then
