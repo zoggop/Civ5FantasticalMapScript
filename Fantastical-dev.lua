@@ -828,17 +828,6 @@ local function SetConstants()
 
 	improvementCityRuins = GameInfo.Improvements.IMPROVEMENT_CITY_RUINS.ID
 
---[[
-grassland {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}
-plains {{t=19,r=41}, {t=21,r=50}}
-desert {{t=79,r=14}, {t=56,r=12}, {t=19,r=11}}
-tundra {{t=11,r=41}, {t=8,r=50}, {t=11,r=11}}
-snow {{t=0,r=41}, {t=1,r=49}, {t=0,r=11}}
-none {{t=89,r=58}, {t=20,r=23}, {t=18,r=76}, {t=43,r=33}, {t=59,r=39}, {t=40,r=76}, {t=27,r=82}, {t=62,r=53}, {t=29,r=48}, {t=39,r=66}}
-forest {{t=0,r=47}, {t=56,r=100}, {t=12,r=76}, {t=44,r=76}, {t=28,r=98}, {t=44,r=66}}
-jungle {{t=100,r=100}, {t=86,r=100}}
-]]--
-
 	TerrainDictionary = {
 		[terrainGrass] = { points = {{t=76,r=41}, {t=64,r=41}, {t=61,r=50}}, features = { featureNone, featureForest, featureJungle, featureMarsh, featureFallout } },
 		[terrainPlains] = { points = {{t=19,r=41}, {t=21,r=50}}, features = { featureNone, featureForest, featureFallout } },
@@ -873,16 +862,6 @@ jungle {{t=100,r=100}, {t=86,r=100}}
 	end
 
 	-- for Alpha Centauri Maps:
-
-	--[[
-grassland {{t=50,r=53}}
-plains {{t=50,r=14}}
-desert {{t=50,r=0}}
-tundra}
-snow}
-none {{t=50,r=50}}
-
-	]]--
 
 	TerrainDictionaryCentauri = {
 		[terrainGrass] = { points = {{t=50,r=58}}, features = { featureNone, featureJungle, featureMarsh } },
@@ -2208,6 +2187,7 @@ function Space:DoCentuariIfActivated()
 			self.centauri = true
 			self.artContinents = { artAsia, artAfrica }
 			TerrainDictionary, FeatureDictionary = TerrainDictionaryCentauri, FeatureDictionaryCentauri
+			climateGrid = nil
 			self.silverCount = mFloor(self.iA / 128)
 			self.spicesCount = mFloor(self.iA / 160)
 			self.polarMaxLandRatio = 0.0
@@ -3696,35 +3676,38 @@ function Space:NearestTempRainThing(temperature, rainfall, things, oneTtwoF)
 	temperature = mMin(self.temperatureMax, temperature)
 	rainfall = mMax(self.rainfallMin, rainfall)
 	rainfall = mMin(self.rainfallMax, rainfall)
-	local pixel = climateGrid[temperature][rainfall]
-	local typeCode = pixel[oneTtwoF]
-	local typeField = "terrainType"
-	if oneTtwoF == 2 then
-		typeField = "featureType"
-	end
-	for i, thing in pairs(things) do
-		if thing[typeField] == typeCode then
-			return thing
+	if climateGrid then
+		local pixel = climateGrid[temperature][rainfall]
+		local typeCode = pixel[oneTtwoF]
+		local typeField = "terrainType"
+		if oneTtwoF == 2 then
+			typeField = "featureType"
 		end
+		for i, thing in pairs(things) do
+			if thing[typeField] == typeCode then
+				return thing
+			end
+		end
+	else
+		local nearestDist = 20000
+		local nearest
+		local dearest = {}
+		for i, thing in pairs(things) do
+			if thing.points then
+				for p, point in pairs(thing.points) do
+					local trdist = self:TempRainDist(point.t, point.r, temperature, rainfall)
+					if trdist < nearestDist then
+						nearestDist = trdist
+						nearest = thing
+					end
+				end
+			else
+				tInsert(dearest, thing)
+			end
+		end
+		nearest = nearest or tGetRandom(dearest)
+		return nearest
 	end
-	-- local nearestDist = 20000
-	-- local nearest
-	-- local dearest = {}
-	-- for i, thing in pairs(things) do
-	-- 	if thing.points then
-	-- 		for p, point in pairs(thing.points) do
-	-- 			local trdist = self:TempRainDist(point.t, point.r, temperature, rainfall)
-	-- 			if trdist < nearestDist then
-	-- 				nearestDist = trdist
-	-- 				nearest = thing
-	-- 			end
-	-- 		end
-	-- 	else
-	-- 		tInsert(dearest, thing)
-	-- 	end
-	-- end
-	-- nearest = nearest or tGetRandom(dearest)
-	-- return nearest
 end
 
 function Space:FillRegions()
