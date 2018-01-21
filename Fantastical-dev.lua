@@ -2315,6 +2315,7 @@ end
 function Space:CreatePseudoLatitudes()
 	local pseudoLatitudes
 	local minDist = 3.33
+	local avgTemp, avgRain
 	local iterations = 0
 	repeat
 		local latitudeResolution = 0.1
@@ -2327,6 +2328,8 @@ function Space:CreatePseudoLatitudes()
 		local currentLtr
 		local goodLtrs = {}
 		local pseudoLatitude = 90
+		local totalTemp = 0
+		local totalRain = 0
 		pseudoLatitudes = {}
 		while #protoLatitudes > 0 do
 			local ltr = tRemove(protoLatitudes)
@@ -2339,6 +2342,8 @@ function Space:CreatePseudoLatitudes()
 			if not goodLtrs[currentLtr] then
 				goodLtrs[currentLtr] = true
 				pseudoLatitudes[pseudoLatitude] = { temperature = mFloor(currentLtr.t), rainfall = mFloor(currentLtr.r) }
+				totalTemp = totalTemp + mFloor(currentLtr.t)
+				totalRain = totalRain + mFloor(currentLtr.r)
 				pseudoLatitude = pseudoLatitude - 1
 			end
 		end
@@ -2348,10 +2353,12 @@ function Space:CreatePseudoLatitudes()
 		elseif pseudoLatitude > -1 then
 			minDist = minDist - change
 		end
+		avgTemp = mFloor(totalTemp / (90 - pseudoLatitude))
+		avgRain = mFloor(totalRain / (90 - pseudoLatitude))
 		iterations = iterations + 1
 	until pseudoLatitude == -1 or iterations > 100
 	if iterations < 101 then
-		EchoDebug("pseudolatitudes created okay")
+		EchoDebug("pseudolatitudes created okay after " .. iterations .. " iterations, " .. avgTemp .. " average temp", avgRain .. " average rain")
 	else
 		EchoDebug("bad pseudolatitudes")
 	end
@@ -2575,6 +2582,7 @@ end
 
 function Space:ComputeCoasts()
 	for i, subPolygon in pairs(self.subPolygons) do
+		subPolygon.temperature = subPolygon.temperature or subPolygon.superPolygon.temperature or self:GetTemperature(subPolygon.latitude)
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
 			if subPolygon.superPolygon.coastal then
 				subPolygon.coast = true
@@ -2592,16 +2600,16 @@ function Space:ComputeCoasts()
 				end
 				if coastTotal > 0 then
 					-- coastTotal = coastTotal + 1
-					-- coastTempTotal = coastTempTotal + self:GetOceanTemperature(subPolygon.latitude)
+					-- coastTempTotal = coastTempTotal + self:GetOceanTemperature(self:GetTemperature(subPolygon.latitude))
 					subPolygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
 				end
 			end
 			if subPolygon.polar then
-				subPolygon.oceanTemperature = -5 -- self:GetOceanTemperature(90)
+				subPolygon.oceanTemperature = -5 -- self:GetOceanTemperature(self:GetTemperature(90))
 			elseif subPolygon.superPolygon.coast and not subPolygon.coast then
-				subPolygon.oceanTemperature = mFloor((subPolygon.superPolygon.oceanTemperature + self:GetOceanTemperature(subPolygon.latitude)) / 2)
+				subPolygon.oceanTemperature = mFloor((subPolygon.superPolygon.oceanTemperature + self:GetOceanTemperature(subPolygon.temperature)) / 2)
 			end
-			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or self:GetOceanTemperature(subPolygon.latitude)
+			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or self:GetOceanTemperature(subPolygon.temperature)
 			local ice
 			if subPolygon.lake then
 				ice = subPolygon.oceanTemperature <= self.freshFreezingTemperature
@@ -2708,7 +2716,7 @@ function Space:ComputeOceanTemperatures()
 		end
 		self.avgOceanLat = mFloor(self.avgOceanLat / totalLats)
 		self.avgOceanTemp = self:GetTemperature(self.avgOceanLat)
-		EchoDebug(self.avgOceanLat .. " is average ocean latitude with temperature of " .. self.avgOceanTemp, " temperature at equator: " .. self:GetTemperature(0))
+		EchoDebug(self.avgOceanLat .. " is average ocean latitude with temperature of " .. mFloor(self.avgOceanTemp), " temperature at equator: " .. self:GetTemperature(0))
 		self.avgOceanTemp = (self.avgOceanTemp * 0.5) + (self:GetTemperature(0) * 0.5)
 	else
 		local totalTemp = 0
@@ -2720,12 +2728,14 @@ function Space:ComputeOceanTemperatures()
 			end
 		end
 		self.avgOceanTemp = totalTemp / tempCount
-		EchoDebug(self.avgOceanTemp .. " is average ocean temperature", "temperature at equator: " .. self:GetTemperature(0))
+		EchoDebug(mFloor(self.avgOceanTemp) .. " is average ocean temperature", "temperature at equator: " .. self:GetTemperature(0))
+		self.avgOceanTemp = self.avgOceanTemp * 0.82 -- adjust to simulate realistic map's lower temp
+		EchoDebug(mFloor(self.avgOceanTemp) .. " simulated realistic average ocean temp")
 		self.avgOceanTemp = (self.avgOceanTemp * 0.5) + (self:GetTemperature(0) * 0.5)
-		self.avgOceanTemp = 0.91 * self.avgOceanTemp
 	end
-	EchoDebug(" adjusted avg ocean temp: " .. self.avgOceanTemp)
+	EchoDebug(" adjusted avg ocean temp: " .. mFloor(self.avgOceanTemp))
 	for p, polygon in pairs(self.polygons) do
+		polygon.temperature = polygon.temperature or self:GetTemperature(polygon.latitude)
 		if polygon.continent == nil then
 			local coastTempTotal = 0
 			local coastTotal = 0
@@ -2749,16 +2759,14 @@ function Space:ComputeOceanTemperatures()
 				polygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
 			end
 			polygon.coastTotal = coastTotal
-			polygon.oceanTemperature = polygon.oceanTemperature or self:GetOceanTemperature(polygon.latitude)
+			polygon.oceanTemperature = polygon.oceanTemperature or self:GetOceanTemperature(polygon.temperature)
 		end
 	end 
 end
 
-function Space:GetOceanTemperature(latitude)
-	local temperature = (self:GetTemperature(latitude) * 0.5) + (self.avgOceanTemp * 0.5)
-	if not self.useMapLatitudes then
-		temperature = temperature * 0.91
-	end
+function Space:GetOceanTemperature(temperature)
+	temperature = (temperature * 0.5) + (self.avgOceanTemp * 0.5)
+	if not self.useMapLatitudes then temperature = temperature * 0.94 end
 	return temperature
 end
 
