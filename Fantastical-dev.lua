@@ -577,8 +577,8 @@ local OptionDictionary = {
 	},
 	{ name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
 	values = {
-			[1] = { name = "Few", values = {10, 1, 0.25} },
-			[2] = { name = "Some", values = {33, 2, 0.5} },
+			[1] = { name = "Few", values = {15, 1, 0.25} },
+			[2] = { name = "Some", values = {40, 2, 0.5} },
 			[3] = { name = "Many", values = {80, 3, 0.75} },
 			[4] = { name = "Random", values = "keys" },
 		}
@@ -2084,7 +2084,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandChance = 33 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
+	a.tinyIslandChance = 40 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -2093,11 +2093,11 @@ Space = class(function(a)
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 99 -- highest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.temperatureMaxDeviation = 4 -- how much at maximum can a temperature deviate from its latitude
-	a.temperatureMinDeviation = 8 -- how much temperature range must a region have
+	a.temperatureMaxDeviation = 6 -- how much at maximum can a temperature deviate from its latitude
+	a.temperatureMinDeviation = 9 -- how much temperature range must a region have
 	a.rainfallDice = 1 -- just like temperature above
-	a.rainfallMaxDeviation = 4 -- just like temperature above
-	a.rainfallMinDeviation = 8 -- just like temperature above
+	a.rainfallMaxDeviation = 6 -- just like temperature above
+	a.rainfallMinDeviation = 9 -- just like temperature above
 	a.temperatureAvgRatio = 0.0 -- how much to recede a region's min and max temperature to its average
 	a.rainfallAvgRatio = 0.0 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
