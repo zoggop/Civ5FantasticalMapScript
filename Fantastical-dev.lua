@@ -2060,7 +2060,7 @@ Space = class(function(a)
 	a.wrapY = false -- globe wraps vertically?
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.subPolygonCount = 2100 -- how many subpolygons
+	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
@@ -2070,8 +2070,8 @@ Space = class(function(a)
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 3 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 9 -- of how many groups of kinds of tiles does a region consist, at maximum
-	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 5 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
+	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
@@ -2096,8 +2096,8 @@ Space = class(function(a)
 	a.temperatureMaxDeviation = 6 -- how much at maximum can a temperature deviate from its latitude
 	a.temperatureMinDeviation = 9 -- how much temperature range must a region have
 	a.rainfallDice = 1 -- just like temperature above
-	a.rainfallMaxDeviation = 6 -- just like temperature above
-	a.rainfallMinDeviation = 9 -- just like temperature above
+	a.rainfallMaxDeviation = 7 -- just like temperature above
+	a.rainfallMinDeviation = 10 -- just like temperature above
 	a.temperatureAvgRatio = 0.0 -- how much to recede a region's min and max temperature to its average
 	a.rainfallAvgRatio = 0.0 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
@@ -2372,6 +2372,7 @@ function Space:Compute()
     self.coastalMod = self.areaMod
     self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
     self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
+    EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
     self.h = self.iH - 1
@@ -2436,7 +2437,8 @@ function Space:Compute()
     -- if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     -- self:PrintClimate()
-    EchoDebug(self.polygonCount .. " polygons", self.iA .. " hexes")
+    self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
+    EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
     if self.subPolygonRelaxations > 0 then
