@@ -1702,6 +1702,9 @@ function Region:GiveLatitude()
 end
 
 function Region:GiveRainfall()
+	if self.rainfallAvg then
+		EchoDebug("already have rainfall")
+		return end
 	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	if self.space.useMapLatitudes then
 		self.rainfallMin, self.rainfallMax = self.space.rainfallMax, self.space.rainfallMin
@@ -1719,6 +1722,10 @@ function Region:GiveRainfall()
 end
 
 function Region:GiveTemperature()
+	if self.temperatureAvg then
+		EchoDebug("already have temperature")
+		return
+	end
 	self.temperatureAvg, self.temperatureMin, self.temperatureMax  = self.space:GetTemperature(self.latitude)
 	if self.space.useMapLatitudes then
 		local tempA, tempB = self.space:GetTemperature(self.maxLatitude), self.space:GetTemperature(self.minLatitude)
@@ -2074,6 +2081,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
+	a.regionRelaxations = 8 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means more consistent non-realistic distribution of terrain types
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverForkRatio = 0.33 -- how much of the river area should be reserved for forks
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -2494,14 +2502,22 @@ function Space:Compute()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 	if not self.useMapLatitudes then
-		EchoDebug("dispersing fake latitude...")
+		-- EchoDebug("dispersing fake latitude...")
 		-- self:DisperseFakeLatitude()
+		EchoDebug("dispersing temperatures and rainfalls...")
 		self:DisperseTemperatureRainfall()
 	end
 	EchoDebug("computing seas...")
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
+	if not self.useMapLatitudes then
+		EchoDebug("relaxing regions temperature/rainfall...")
+		for i = 1, self.regionRelaxations do
+			local integerize = i == self.regionRelaxations
+			self:RelaxRegions(integerize)
+		end
+	end
 	EchoDebug("filling regions...")
 	self:FillRegions()
 	EchoDebug("picking mountain ranges...")
@@ -3692,6 +3708,63 @@ function Space:PickRegions()
 		polygon.region.area = #polygon.hexes
 		polygon.region.archipelago = true
 		tInsert(self.regions, polygon.region)
+	end
+end
+
+function Space:RelaxRegions(integerize)
+	-- map each region's temp/rain cells
+	local tempDiff = self.temperatureMax - self.temperatureMin
+	local rainDiff = self.rainfallMax - self.rainfallMin
+	local maxDistSq = (tempDiff * tempDiff) + (rainDiff * rainDiff)
+	for t = self.temperatureMin, self.temperatureMax do
+		for r = self.rainfallMin, self.rainfallMax do
+			local leastDist = maxDistSq
+			local nearestRegion
+			for i, region in pairs(self.regions) do
+				if not region.temperatureAvg then
+					region:GiveTemperature()
+					region:GiveRainfall()
+				end
+				local dt = t - region.temperatureAvg
+				local dr = r - region.rainfallAvg
+				local dist = (dt * dt) + (dr * dr)
+				if dist < leastDist then
+					leastDist = dist
+					nearestRegion = region
+				end
+			end
+			nearestRegion.temprains = nearestRegion.temprains or {}
+			tInsert(nearestRegion.temprains, {temp=t, rain=r})
+		end
+	end
+	-- determine each region's centroid and relax to it
+	for i, region in pairs(self.regions) do
+		if region.temprains then
+			local totalTemp = 0
+			local totalRain = 0
+			for ii, cell in pairs(region.temprains) do
+				totalTemp = totalTemp + cell.temp
+				totalRain = totalRain + cell.rain
+			end
+			local avgTemp = totalTemp / #region.temprains
+			local avgRain =totalRain / #region.temprains
+			if integerize then
+				avgTemp = mCeil(avgTemp)
+				avgRain = mCeil(avgRain)
+			end
+			-- EchoDebug(i, region.temperatureAvg .. "/" .. region.rainfallAvg, avgTemp .. "/" .. avgRain)
+			local tempUp = region.temperatureMax - region.temperatureAvg
+			local tempDown = region.temperatureAvg - region.temperatureMin
+			local rainUp = region.rainfallMax - region.rainfallAvg
+			local rainDown = region.rainfallAvg - region.rainfallMin
+			region.temperatureAvg = avgTemp
+			region.rainfallAvg = avgRain
+			region.temperatureMin = mMax(avgTemp - tempDown, self.temperatureMin)
+			region.temperatureMax = mMin(avgTemp + tempUp, self.temperatureMax)
+			region.rainfallMin = mMax(avgRain - rainDown, self.rainfallMin)
+			region.rainfallMax = mMin(avgRain + rainUp, self.rainfallMax)
+			region.temprains = nil
+		end
 	end
 end
 
