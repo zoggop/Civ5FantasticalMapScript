@@ -2599,17 +2599,15 @@ function Space:ComputeCoasts()
 					end
 				end
 				if coastTotal > 0 then
-					-- coastTotal = coastTotal + 1
-					-- coastTempTotal = coastTempTotal + self:GetOceanTemperature(self:GetTemperature(subPolygon.latitude))
 					subPolygon.oceanTemperature = mCeil(coastTempTotal / coastTotal)
 				end
 			end
 			if subPolygon.polar then
 				subPolygon.oceanTemperature = -5 -- self:GetOceanTemperature(self:GetTemperature(90))
 			elseif subPolygon.superPolygon.coast and not subPolygon.coast then
-				subPolygon.oceanTemperature = mFloor((subPolygon.superPolygon.oceanTemperature + self:GetOceanTemperature(subPolygon.temperature)) / 2)
+				subPolygon.oceanTemperature = subPolygon.superPolygon.oceanTemperature
 			end
-			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.temperature or self:GetOceanTemperature(subPolygon.temperature)
+			subPolygon.oceanTemperature = subPolygon.oceanTemperature or subPolygon.superPolygon.oceanTemperature or subPolygon.temperature or self:GetOceanTemperature(subPolygon.temperature)
 			local ice
 			if subPolygon.lake then
 				ice = subPolygon.oceanTemperature <= self.freshFreezingTemperature
