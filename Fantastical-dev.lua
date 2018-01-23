@@ -137,15 +137,15 @@ local function AngleDist(angle1, angle2)
 	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
 end
 
-local function IncreaseDeviationToMinimum(numMin, numMax, minDeviation)
-	if mAbs(numMax - numMin) < minDeviation then
-		local deviationDeficit = minDeviation - mAbs(numMax - numMin)
+local function IncreaseSpanToMinimum(numMin, numMax, minSpan)
+	if mAbs(numMax - numMin) < minSpan then
+		local spanDeficit = minSpan - mAbs(numMax - numMin)
 		local minDist = numMin
-		local maxDist = 100 - numMax
+		local maxDist = 99 - numMax
 		local minRatio = minDist / (minDist + maxDist)
 		local maxRatio = maxDist / (minDist + maxDist)
-		numMax = mMin(99, numMax + (deviationDeficit * maxRatio))
-		numMin = mMax(0, numMin - (deviationDeficit * minRatio))
+		numMax = mMin(99, numMax + (spanDeficit * maxRatio))
+		numMin = mMax(0, numMin - (spanDeficit * minRatio))
 	end
 	return numMin, numMax
 end
@@ -1722,7 +1722,7 @@ function Region:GiveRainfall()
 		self.rainfallMin = mRandom(minLowRain, maxLowRain)
 		self.rainfallMax = mRandom(minHighRain, maxHighRain)
 	end
-	self.rainfallMin, self.rainfallMax = IncreaseDeviationToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinDeviation)
+	self.rainfallMin, self.rainfallMax = IncreaseSpanToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinSpan)
 end
 
 function Region:GiveTemperature()
@@ -1743,7 +1743,7 @@ function Region:GiveTemperature()
 		local maxHighTemp = mMax(realHighTemp, devHighTemp)
 		self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
 	end
-	self.temperatureMin, self.temperatureMax = IncreaseDeviationToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinDeviation)
+	self.temperatureMin, self.temperatureMax = IncreaseSpanToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinSpan)
 end
 
 function Region:DoSpanCalcs()
@@ -2111,10 +2111,10 @@ Space = class(function(a)
 	a.temperatureMax = 99 -- highest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.temperatureMaxDeviation = 9 -- how much at maximum can a temperature deviate from its latitude
-	a.temperatureMinDeviation = 10 -- how much temperature range must a region have
+	a.temperatureMinSpan = 10 -- how much temperature range must a region have
 	a.rainfallDice = 1 -- just like temperature above
 	a.rainfallMaxDeviation = 15 -- just like temperature above
-	a.rainfallMinDeviation = 10 -- just like temperature above
+	a.rainfallMinSpan = 10 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
