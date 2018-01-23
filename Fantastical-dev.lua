@@ -577,9 +577,9 @@ local OptionDictionary = {
 	},
 	{ name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
 	values = {
-			[1] = { name = "Few", values = {15, 1, 0.25} },
-			[2] = { name = "Some", values = {40, 2, 0.5} },
-			[3] = { name = "Many", values = {80, 3, 0.75} },
+			[1] = { name = "Few", values = {15, 1, 0.2} },
+			[2] = { name = "Some", values = {40, 2, 0.4} },
+			[3] = { name = "Many", values = {80, 3, 0.8} },
 			[4] = { name = "Random", values = "keys" },
 		}
 	},
@@ -1707,16 +1707,20 @@ function Region:GiveRainfall()
 		return end
 	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	if self.space.useMapLatitudes then
-		self.rainfallMin, self.rainfallMax = self.space.rainfallMax, self.space.rainfallMin
+		local realLowRain, realHighRain = self.space.rainfallMax, self.space.rainfallMin
 		for sp, subPolygon in pairs(self.representativePolygon.subPolygons) do
 			local rain = self.space:GetRainfall(subPolygon.latitude)
-			if rain > self.rainfallMax then self.rainfallMax = rain end
-			if rain < self.rainfallMin then self.rainfallMin = rain end
+			if rain > realHighRain then realHighRain = rain end
+			if rain < realLowRain then realLowRain = rain end
 		end
-		local rainA = mRandom(mMax(self.rainfallMax - self.space.rainfallMaxDeviation, self.rainfallAvg), self.rainfallMax + self.space.rainfallMaxDeviation)
-		local rainB = mRandom(self.rainfallMin - self.space.rainfallMaxDeviation, mMin(self.rainfallMin + self.space.rainfallMaxDeviation, self.rainfallAvg))
-		self.rainfallMax = mMin(100, mMax(0, mMax(rainA, rainB)))
-		self.rainfallMin = mMin(100, mMax(0, mMin(rainA, rainB)))
+		local devLowRain = mMax(self.space.rainfallMin, self.rainfallAvg - self.space.rainfallMaxDeviation)
+		local devHighRain = mMin(self.space.rainfallMax, self.rainfallAvg + self.space.rainfallMaxDeviation)
+		local minLowRain = mMin(realLowRain, devLowRain)
+		local maxLowRain = mMax(realHighRain, devLowRain)
+		local minHighRain = mMin(realHighRain, devHighRain)
+		local maxHighRain = mMax(realHighRain, devHighRain)
+		self.rainfallMin = mRandom(minLowRain, maxLowRain)
+		self.rainfallMax = mRandom(minHighRain, maxHighRain)
 	end
 	self.rainfallMin, self.rainfallMax = IncreaseDeviationToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinDeviation)
 end
@@ -1728,11 +1732,16 @@ function Region:GiveTemperature()
 	end
 	self.temperatureAvg, self.temperatureMin, self.temperatureMax  = self.space:GetTemperature(self.latitude)
 	if self.space.useMapLatitudes then
-		local tempA, tempB = self.space:GetTemperature(self.maxLatitude), self.space:GetTemperature(self.minLatitude)
-		tempA = mRandom(tempA - self.space.temperatureMaxDeviation, mMin(tempA + self.space.temperatureMaxDeviation, self.temperatureAvg))
-		tempB = mRandom(mMax(tempB - self.space.temperatureMaxDeviation, self.temperatureAvg), tempB + self.space.temperatureMaxDeviation)
-		self.temperatureMax = mMin(self.space.temperatureMax, mMax(self.space.temperatureMin, mMax(tempA, tempB)))
-		self.temperatureMin = mMin(self.space.temperatureMax, mMax(self.space.temperatureMin, mMin(tempA, tempB)))
+		local realLowTemp = self.space:GetTemperature(self.maxLatitude)
+		local devLowTemp = mMax(self.space.temperatureMin, self.temperatureAvg - self.space.temperatureMaxDeviation)
+		local minLowTemp = mMin(realLowTemp, devLowTemp)
+		local maxLowTemp = mMax(realLowTemp, devLowTemp)
+		self.temperatureMin = mRandom(minLowTemp, maxLowTemp)
+		local realHighTemp = self.space:GetTemperature(self.minLatitude)
+		local devHighTemp = mMin(self.space.temperatureMax, self.temperatureAvg + self.space.temperatureMaxDeviation)
+		local minHighTemp = mMin(realHighTemp, devHighTemp)
+		local maxHighTemp = mMax(realHighTemp, devHighTemp)
+		self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
 	end
 	self.temperatureMin, self.temperatureMax = IncreaseDeviationToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinDeviation)
 end
@@ -2075,10 +2084,10 @@ Space = class(function(a)
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.15 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
-	a.collectionSizeMin = 3 -- of how many groups of kinds of tiles does a region consist, at minimum
-	a.collectionSizeMax = 9 -- of how many groups of kinds of tiles does a region consist, at maximum
+	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
+	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMax = 2 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.regionRelaxations = 8 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means more consistent non-realistic distribution of terrain types
@@ -2101,13 +2110,11 @@ Space = class(function(a)
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 99 -- highest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
-	a.temperatureMaxDeviation = 6 -- how much at maximum can a temperature deviate from its latitude
-	a.temperatureMinDeviation = 9 -- how much temperature range must a region have
+	a.temperatureMaxDeviation = 9 -- how much at maximum can a temperature deviate from its latitude
+	a.temperatureMinDeviation = 10 -- how much temperature range must a region have
 	a.rainfallDice = 1 -- just like temperature above
-	a.rainfallMaxDeviation = 7 -- just like temperature above
+	a.rainfallMaxDeviation = 15 -- just like temperature above
 	a.rainfallMinDeviation = 10 -- just like temperature above
-	a.temperatureAvgRatio = 0.0 -- how much to recede a region's min and max temperature to its average
-	a.rainfallAvgRatio = 0.0 -- how much to recede a region's min and max rainfall to its average
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
@@ -2378,7 +2385,7 @@ function Space:Compute()
     self.iA = self.iW * self.iH
     self.areaMod = mFloor(mSqrt(self.iA) / 30)
     self.coastalMod = self.areaMod
-    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod
+    self.subCollectionSizeMin = self.subCollectionSizeMin + mFloor(self.areaMod/2)
     self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
     self.nonOceanArea = self.iA
@@ -2389,8 +2396,6 @@ function Space:Compute()
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     self.xFakeLatitudeConversion = 180 / self.iW
     self.yFakeLatitudeConversion = 180 / self.iH
-    self.inverseTemperatureAvgRatio = 1 - self.temperatureAvgRatio
-    self.inverseRainfallAvgRatio = 1 - self.rainfallAvgRatio
     self:DoCentuariIfActivated()
     -- lake generation scales with global rainfall:
     local rainfallScale = self.rainfallMidpoint / 49.5
