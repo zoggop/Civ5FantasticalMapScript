@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 26
+-- version 27
 
 --------------------------------------------------------------
 if include == nil then
@@ -539,20 +539,14 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio", "ancientCitiesCount" }, default = 1,
+	{ name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio" }, default = 1,
 	values = {
-			[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15, 0} },
-			[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15, 0} },
-			[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15, 0} },
-			[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15, 0} },
-			[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0, 0} },
-			[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0, 0} },
-			[7] = { name = "Globe w/ Old Roads", values = {true, 2, false, 0.15, 4} },
-			[8] = { name = "Realm w/ Old Roads", values = {false, 1, false, 0.15, 4} },
-			[9] = { name = "Realistic Globe w/ Old Roads", values = {true, 2, true, 0.15, 4} },
-			[10] = { name = "Realistic Realm w/ Old Roads", values = {false, 1, true, 0.15, 4} },
-			[11] = { name = "Globe w/o Polar Land w/ Old Roads", values = {true, 2, false, 0.0, 4} },
-			[12] = { name = "Realistic Globe w/o Polar Land w/ Old Roads", values = {true, 2, true, 0.0, 4} },
+			[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15} },
+			[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15} },
+			[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15} },
+			[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15} },
+			[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0} },
+			[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0} },
 		}
 	},
 	{ name = "Oceans", keys = { "oceanNumber", }, default = 4,
@@ -618,14 +612,16 @@ local OptionDictionary = {
 			[8] = { name = "Random", values = "values", lowValues = {15}, highValues = {62} },
 		}
 	},
-	{ name = "Fallout", keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic" }, default = 1,
+	{ name = "Eschaton Age", keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic", "ancientCitiesCount" }, default = 1,
 	values = {
-			[1] = { name = "None", values = {false, false, false, false} },
-			[2] = { name = "Post-Apocalyptic", values = {false, false, false, true} },
-			[3] = { name = "A Bit", values = {true, false, false, false} },
-			[4] = { name = "Contaminated Soil", values = {true, false, true, false} },
-			[5] = { name = "Contaminated Water", values = {true, true, false, false} },
-			[6] = { name = "Contaminated Everything", values = {true, true, true, false} },
+			[1] = { name = "Not Yet", values = {false, false, false, false, 0} },
+			[2] = { name = "Legend", values = {false, false, false, false, 4} },
+			[2] = { name = "The Stories, They're True", values = {false, false, false, true, 4} },
+			[3] = { name = "Memory", values = {true, false, false, true, 4} },
+			[4] = { name = "A Long While", values = {true, false, true, true, 4} },
+			[5] = { name = "A While", values = {true, true, false, true, 4} },
+			[6] = { name = "Yesterday", values = {true, true, true, true, 4} },
+			[7] = { name = "Random", values = "keys" }
 		}
 	},
 }
