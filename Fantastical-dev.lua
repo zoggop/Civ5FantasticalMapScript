@@ -616,12 +616,12 @@ local OptionDictionary = {
 	values = {
 			[1] = { name = "Not Yet", values = {false, false, false, false, 0} },
 			[2] = { name = "Legend", values = {false, false, false, false, 4} },
-			[2] = { name = "The Stories, They're True", values = {false, false, false, true, 4} },
-			[3] = { name = "Memory", values = {true, false, false, true, 4} },
-			[4] = { name = "A Long While", values = {true, false, true, true, 4} },
-			[5] = { name = "A While", values = {true, true, false, true, 4} },
-			[6] = { name = "Yesterday", values = {true, true, true, true, 4} },
-			[7] = { name = "Random", values = "keys" }
+			[3] = { name = "The Stories, They're True", values = {false, false, false, true, 4} },
+			[4] = { name = "Memory", values = {true, false, false, true, 4} },
+			[5] = { name = "A Long While", values = {true, false, true, true, 4} },
+			[6] = { name = "A While", values = {true, true, false, true, 4} },
+			[7] = { name = "Yesterday", values = {true, true, true, true, 4} },
+			[8] = { name = "Random", values = "keys" }
 		}
 	},
 }
