@@ -13,7 +13,7 @@ include("MapGenerator")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = false
+local clockEnabled = true
 local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
@@ -1338,19 +1338,21 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 end
 
 function Polygon:FloodFillSea(sea)
-	if self.continent then
-		if sea then sea.continent = self.continent end
+	if sea and #sea.polygons >= sea.maxPolygons then return end
+	if self.sea or not self.continent then return end
+	self.space.inlandSeaPolygonMaxByContinent[self.continent] = self.space.inlandSeaPolygonMaxByContinent[self.continent] or mCeil(#self.continent * self.space.inlandSeaTotalContinentRatio)
+	if self.continent and (self.space.inlandSeaPolygonCountByContinent[self.continent] or 0) > self.space.inlandSeaPolygonMaxByContinent[self.continent] then
 		return
 	end
-	if self.sea then return end
-	if not sea then sea = { polygons = {}, inland = true, astronomyIndex = self.astronomyIndex } end
-	if self.oceanIndex then sea.inland = false end
-	if self.space.oceanNumber == 0 then
-		if not self.space.wrapY and (self.bottomY or self.topY) then sea.inland = false end
-		if not self.space.wrapX and (self.bottomX or self.topX) then sea.inland = false end
+	for i, neighbor in pairs(self.neighbors) do
+		if neighbor.continent ~= self.continent or (sea and neighbor.sea ~= nil and neighbor.sea ~= sea) then
+			return
+		end
 	end
+	sea = sea or { polygons = {}, inland = true, astronomyIndex = self.astronomyIndex, continent = self.continent, maxPolygons = mCeil(#self.continent * self.space.inlandSeaContinentRatio) }
 	self.sea = sea
 	tInsert(sea.polygons, self)
+	self.space.inlandSeaPolygonCountByContinent[self.continent] = (self.space.inlandSeaPolygonCountByContinent[self.continent] or 0) + 1
 	for i, neighbor in pairs(self.neighbors) do
 		neighbor:FloodFillSea(sea)
 	end
@@ -1699,7 +1701,7 @@ end
 
 function Region:GiveRainfall()
 	if self.rainfallAvg then
-		EchoDebug("already have rainfall")
+		-- EchoDebug("already have rainfall")
 		return end
 	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
 	if self.space.useMapLatitudes then
@@ -1723,7 +1725,7 @@ end
 
 function Region:GiveTemperature()
 	if self.temperatureAvg then
-		EchoDebug("already have temperature")
+		-- EchoDebug("already have temperature")
 		return
 	end
 	self.temperatureAvg, self.temperatureMin, self.temperatureMax  = self.space:GetTemperature(self.latitude)
@@ -2124,6 +2126,8 @@ Space = class(function(a)
 	a.marshynessMax = 50
 	a.marshMinHexRatio = 0.015
 	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
+	a.inlandSeaContinentRatio = 0.025 -- maximum size of each inland sea as a fraction of the polygons of continent they're inside
+	a.inlandSeaTotalContinentRatio = 0.04 -- maximum ratio of inland sea polygons inside a continent
 	a.ancientCitiesCount = 3
 	a.falloutEnabled = false -- place fallout on the map?
 	a.postApocalyptic = false -- place fallout around ancient cities
@@ -2158,6 +2162,8 @@ Space = class(function(a)
     a.deepHexes = {}
     a.lakeSubPolygons = {}
     a.inlandSeas = {}
+    a.inlandSeaPolygonCountByContinent = {}
+    a.inlandSeaPolygonMaxByContinent = {}
     a.rivers = {}
 end)
 
@@ -2498,8 +2504,10 @@ function Space:Compute()
     self:PickContinents()
     EchoDebug("flooding inland seas...")
     self:FindInlandSeas()
-    EchoDebug("filling excess inland seas...")
-    self:FillInlandSeas()
+    -- EchoDebug("filling excess inland seas...")
+    -- self:FillInlandSeas()
+    EchoDebug("tagging inland sea polygons...")
+    self:TagInlandSeas()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 	if not self.useMapLatitudes then
@@ -3873,12 +3881,14 @@ function Space:LabelSubPolygonsByPolygon()
 end
 
 function Space:FindInlandSeas()
-	for i, polygon in pairs(self.polygons) do
+	local polys = tDuplicate(self.polygons)
+	while #polys > 0 and #self.inlandSeas < self.inlandSeasMax do
+		local polygon = tRemoveRandom(polys)
 		local sea = polygon:FloodFillSea()
 		if sea then
 			sea.size = #sea.polygons
 			if sea.inland then
-				EchoDebug("found inland sea of " .. sea.size .. " polygons")
+				EchoDebug("found inland sea of " .. sea.size .. "/" .. sea.maxPolygons .. " polygons")
 				tInsert(self.inlandSeas, sea)
 			else
 				EchoDebug("found sea of " .. sea.size .. " polygons")
@@ -3889,18 +3899,34 @@ end
 
 function Space:FillInlandSeas()
 	EchoDebug(#self.inlandSeas .. " inland seas of " .. self.inlandSeasMax  .. " maximum")
+	local seasByPolys = {}
+	for i, sea in pairs(self.inlandSeas) do
+		seasByPolys[#sea.polygons] = sea
+	end
 	if #self.inlandSeas > self.inlandSeasMax then
 		local filled = 0
-		repeat
+		while #self.inlandSeas > self.inlandSeasMax do
 			local sea = tRemoveRandom(self.inlandSeas)
 			for i, polygon in pairs(sea.polygons) do
-				polygon.continent = sea.continent
-				tInsert(polygon.continent, polygon)
 				polygon.sea = nil
 			end
 			filled = filled + 1
-		until #self.inlandSeas == self.inlandSeasMax
+		end
 		EchoDebug(filled .. " inland seas filled")
+	end
+end
+
+function Space:TagInlandSeas()
+	for s, sea in pairs(self.inlandSeas) do
+		for p, polygon in pairs(sea.polygons) do
+			for c, poly in pairs(polygon.continent) do
+				if poly == polygon then
+					tRemove(polygon.continent, c)
+					break
+				end
+			end
+			polygon.continent = nil
+		end
 	end
 end
 
@@ -4843,7 +4869,7 @@ function Space:PickCoasts()
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
 				end
-			elseif polygon.oceanIndex or polygon.sea.inland then
+			elseif polygon.oceanIndex or polygon.sea then
 				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
 					polygon:PickTinyIslands()
 					tInsert(self.tinyIslandPolygons, polygon)
