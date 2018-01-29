@@ -13,3 +13,9 @@ landmass types
 - peninsula: 1 continent/ocean, 3 major oceans, some islands
 - fractured: 3 continents/ocean, no major oceans, some islands
 - inland empire: no ocean, increase lake & inland sea chance somehow
+
+
+new options
+
+- map complexity (polygon count)
+- climate realism

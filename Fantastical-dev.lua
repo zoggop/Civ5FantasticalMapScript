@@ -539,43 +539,81 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio" }, default = 1,
+	-- { name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio" }, default = 1,
+	-- values = {
+	-- 		[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15} },
+	-- 		[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15} },
+	-- 		[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15} },
+	-- 		[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15} },
+	-- 		[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0} },
+	-- 		[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0} },
+	-- 	}
+	-- },
+	-- { name = "Oceans", keys = { "oceanNumber", }, default = 4,
+	-- values = {
+	-- 		[1] = { name = "No Oceans", values = {-1} },
+	-- 		[2] = { name = "No Major Oceans", values = {0} },
+	-- 		[3] = { name = "One", values = {1} },
+	-- 		[4] = { name = "Two", values = {2} },
+	-- 		[5] = { name = "Three", values = {3} },
+	-- 		[6] = { name = "Four", values = {4} },
+	-- 		[7] = { name = "Random", values = "keys" },
+	-- 	}
+	-- },
+	-- { name = "Continents/Ocean", keys = { "majorContinentNumber", }, default = 1,
+	-- values = {
+	-- 		[1] = { name = "One", values = {1} },
+	-- 		[2] = { name = "Two", values = {2} },
+	-- 		[3] = { name = "Three", values = {3} },
+	-- 		[4] = { name = "Four", values = {4} },
+	-- 		[5] = { name = "Random", values = "keys" },
+	-- 	}
+	-- },
+	-- { name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
+	-- values = {
+	-- 		[1] = { name = "Few", values = {15, 1, 0.2} },
+	-- 		[2] = { name = "Some", values = {40, 2, 0.4} },
+	-- 		[3] = { name = "Many", values = {80, 3, 0.8} },
+	-- 		[4] = { name = "Random", values = "keys" },
+	-- 	}
+	-- },
+	{ name = "Landmass Arrangement", keys = { "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeaTotalContinentRatio", "lakeMinRatio", "lakeynessMin", "lakeynessMax" }, default = 1,
 	values = {
-			[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15} },
-			[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15} },
-			[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15} },
-			[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15} },
-			[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0} },
-			[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0} },
+			[1] = { name = "Two Continents", values = {0.15, 2, 1, 40, 2, 0.4, 0.02, 0.03, 0.0065, 5, 50} },
+			[2] = { name = "Earthish", values = {0.15, 2, 2, 40, 2, 0.4, 0.02, 0.03, 0.0065, 5, 50} },
+			[3] = { name = "Pangaea", values = {0.05, 1, 1, 50, 3, 0.5, 0.02, 0.03, 0.0065, 5, 50} },
+			[4] = { name = "Archipelago", values = {0, 0, 6, 80, 3, 0.8, 0.02, 0.03, 0.0065, 5, 50} },
+			[5] = { name = "Earthseaish", values = {0.1, 3, 5, 90, 2, 0.75, 0.02, 0.03, 0.0065, 5, 50} },
+			[6] = { name = "Lonely Ocean", values = {0.15, 5, 12, 100, 3, 0.8, 0.02, 0.03, 0.0065, 5, 50} },
+			[7] = { name = "Low Seas", values = {0.15, 0, 3, 30, 1, 0.3, 0.02, 0.03, 0.0065, 5, 50} },
+			[8] = { name = "Lakes", values = {0.15, -1, 1, 40, 2, 0.4, 0.05, 0.09, 0.02, 10, 60} },
+			[9] = { name = "Waterless", values = {0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0, 0} },
+			[10] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Oceans", keys = { "oceanNumber", }, default = 4,
+	{ name = "World Wrap", keys = { "wrapX" }, default = 1,
 	values = {
-			[1] = { name = "No Oceans", values = {-1} },
-			[2] = { name = "No Major Oceans", values = {0} },
-			[3] = { name = "One", values = {1} },
-			[4] = { name = "Two", values = {2} },
-			[5] = { name = "Three", values = {3} },
-			[6] = { name = "Four", values = {4} },
-			[7] = { name = "Random", values = "keys" },
+			[1] = { name = "Globe (East-West Wrap)", values = {true} },
+			[2] = { name = "Realm (No Wrap)", values = {false} },
+			[3] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Continents/Ocean", keys = { "majorContinentNumber", }, default = 1,
+	{ name = "Map Complexity", keys = { "polygonCount" }, default = 3,
 	values = {
-			[1] = { name = "One", values = {1} },
-			[2] = { name = "Two", values = {2} },
-			[3] = { name = "Three", values = {3} },
-			[4] = { name = "Four", values = {4} },
-			[5] = { name = "Random", values = "keys" },
+			[1] = { name = "Very Low", values = {100} },
+			[2] = { name = "Low", values = {140} },
+			[3] = { name = "Fair", values = {180} },
+			[4] = { name = "High", values = {230} },
+			[5] = { name = "Very High", values = {290} },
+			[6] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
+	{ name = "Climate Realism", keys = { "useMapLatitudes" }, default = 1,
 	values = {
-			[1] = { name = "Few", values = {15, 1, 0.2} },
-			[2] = { name = "Some", values = {40, 2, 0.4} },
-			[3] = { name = "Many", values = {80, 3, 0.8} },
-			[4] = { name = "Random", values = "keys" },
-		}
+			[1] = { name = "Off", values = {false} },
+			[2] = { name = "On", values = {true} },
+			[3] = { name = "Random", values = "keys" },
+ 		}
 	},
 	{ name = "World Age", keys = { "mountainRatio", "hillynessMax", "hillChance" }, default = 4,
 	values = {
