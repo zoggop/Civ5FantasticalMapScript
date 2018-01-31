@@ -1392,6 +1392,8 @@ function Polygon:FloodFillToOcean(searched)
 	searched[self] = true
 	if self.continent then return end
 	if self.oceanIndex then return self.oceanIndex end
+	if self.topY or self.bottomY then return -2 end
+	if not self.space.wrapX and (self.topX or self.bottomX) then return -3 end
 	for i, neighbor in pairs(self.neighbors) do
 		local oceanIndex = neighbor:FloodFillToOcean(searched)
 		if oceanIndex then return oceanIndex end
