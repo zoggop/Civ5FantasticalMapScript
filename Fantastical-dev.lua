@@ -3234,18 +3234,51 @@ function Space:PickOceansCylinder()
 					upNeighbors = downNeighbors
 				end
 			end
-			local highestY = 0
-			local highestNeigh
-			for ni, neighbor in pairs(upNeighbors) do
-				if neighbor.y > highestY then
-					highestY = neighbor.y
-					highestNeigh = neighbor
+			local highestNeighs
+			if #self.oceans == 0 or self.oceanNumber ~= 2 then
+				local highestY = 0
+				local neighsByY = {}
+				for ni, neighbor in pairs(upNeighbors) do
+					neighsByY[neighbor.y] = neighsByY[neighbor.y] or {}
+					tInsert(neighsByY[neighbor.y], neighbor)
+					if neighbor.y > highestY then
+						highestY = neighbor.y
+						highestNeigh = neighbor
+					end
+				end
+				if #neighsByY[highestY] > 1 then
+					highestNeigh = tRemoveRandom(neighsByY[highestY])
+				end
+			else
+				local highestDist = 0
+				local neighsByDist = {}
+				for ni, neighbor in pairs(upNeighbors) do
+					local lowestDist
+					for oi, ocea in pairs(self.oceans) do
+						for pi, poly in pairs(ocea) do
+							local dist = self:WrapDistance(neighbor.x, neighbor.y, poly.x, poly.y)
+							if not lowestDist or dist < lowestDist then
+								lowestDist = dist
+							end
+						end
+					end
+					neighsByDist[lowestDist] = neighsByDist[lowestDist] or {}
+					tInsert(neighsByDist[lowestDist], neighbor)
+					if lowestDist > highestDist then
+						highestDist = lowestDist
+						highestNeigh = neighbor
+					end
+				end
+				if #neighsByDist[highestDist] > 1 then
+					highestNeigh = tRemoveRandom(neighsByDist[highestDist])
 				end
 			end
 			polygon = highestNeigh or tGetRandom(upNeighbors)
 			iterations = iterations + 1
 		end
-		tInsert(self.oceans, ocean)
+		if #ocean > 0 then
+			tInsert(self.oceans, ocean)
+		end
 		x = mCeil(x + div) % self.w
 	end
 end
