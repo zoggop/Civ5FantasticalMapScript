@@ -3234,7 +3234,7 @@ function Space:PickOceansCylinder()
 					upNeighbors = downNeighbors
 				end
 			end
-			local highestNeighs
+			local highestNeigh
 			if #self.oceans == 0 or self.oceanNumber ~= 2 then
 				local highestY = 0
 				local neighsByY = {}
