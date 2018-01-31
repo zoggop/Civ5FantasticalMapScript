@@ -31,6 +31,14 @@ local function EchoDebug(...)
 	end
 end
 
+local function StartDebugTimer()
+	return os.clock()
+end
+
+local function EndDebugTimer(timer)
+	return math.ceil(1000 * (os.clock() - timer)) .. " ms"
+end
+
 ------------------------------------------------------------------------------
 
 local mCeil = math.ceil
@@ -3028,6 +3036,7 @@ end
 
 function Space:FillSubPolygons(relax)
 	local lastPercent = 0
+	local timer = StartDebugTimer()
 	for x = 0, self.w do
 		for y = 0, self.h do
 			local hex = Hex(self, x, y, self:GetIndex(x, y))
@@ -3039,6 +3048,7 @@ function Space:FillSubPolygons(relax)
 			EchoDebug(percent .. "%")
 		end
 	end
+	EchoDebug("filled subpolygons in " .. EndDebugTimer(timer))
 end
 
 function Space:FillPolygons()
@@ -3264,19 +3274,17 @@ function Space:PickOceansCylinder()
 				local highestDist = 0
 				local neighsByDist = {}
 				for ni, neighbor in pairs(upNeighbors) do
-					local lowestDist
+					local totalDist = 0
 					for oi, ocea in pairs(self.oceans) do
 						for pi, poly in pairs(ocea) do
 							local dist = self:HexDistance(neighbor.x, neighbor.y, poly.x, poly.y)
-							if not lowestDist or dist < lowestDist then
-								lowestDist = dist
-							end
+							totalDist = totalDist + dist
 						end
 					end
-					neighsByDist[lowestDist] = neighsByDist[lowestDist] or {}
-					tInsert(neighsByDist[lowestDist], neighbor)
-					if lowestDist > highestDist then
-						highestDist = lowestDist
+					neighsByDist[totalDist] = neighsByDist[totalDist] or {}
+					tInsert(neighsByDist[totalDist], neighbor)
+					if totalDist > highestDist then
+						highestDist = totalDist
 						highestNeigh = neighbor
 					end
 				end
@@ -5174,18 +5182,16 @@ function Space:GetCollectionSize()
 end
 
 function Space:ClosestThing(this, things)
-	local dists = {}
-	local closestDist = self.w
+	local closestDist
 	local closestThing
 	-- find the closest point to this point
 	for i, thing in pairs(things) do
-		local predistx, predisty = self:WrapDistance(thing.x, thing.y, this.x, this.y)
-		if predistx < closestDist or predisty < closestDist then
-			dists[i] = self:SquaredDistance(thing.x, thing.y, this.x, this.y, predistx, predisty)
-			if i == 1 or dists[i] < closestDist then
-				closestDist = dists[i]
-				closestThing = thing
-			end
+		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
+		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
+		local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
+		if not closestDist or dist < closestDist then
+			closestDist = dist
+			closestThing = thing
 		end
 	end
 	return closestThing
@@ -5239,6 +5245,27 @@ function Space:SquaredDistance(x1, y1, x2, y2)
 	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
 	return (xdist * xdist) + (ydist * ydist)
 end
+
+function Space:ManhattanDistance(x1, y1, x2, y2)
+	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+	return xdist + ydist
+end
+
+function Space:MinkowskiDistance(x1, y1, x2, y2, p)
+	local xdist, ydist = self:WrapDistance(x1, y1, x2, y2)
+	return ((xdist ^ p) + (ydist ^ p)) ^ (1 / p)
+end
+
+-- def nth_root(value, n_root):
+ 
+--     root_value = 1/float(n_root)
+--     return round (Decimal(value) ** Decimal(root_value),3)
+ 
+-- def minkowski_distance(x,y,p_value):
+ 
+--     return nth_root(sum(pow(abs(a-b),p_value) for a,b in zip(x, y)),p_value)
+
+
 function Space:EucDistance(x1, y1, x2, y2)
 	return mSqrt(self:SquaredDistance(x1, y1, x2, y2))
 end
