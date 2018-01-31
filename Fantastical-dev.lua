@@ -3191,6 +3191,17 @@ end
 
 function Space:PickOceansCylinder()
 	local div = self.w / self.oceanNumber
+	-- local xs = { {x=0, algo=1} }
+	-- if self.oceanNumber % 2 = 0 then
+	-- 	tInsert(xs, {x=50, algo=2})
+	-- 	if self.oceanNumber > 2 then
+	-- 		for o = 3, self.oceanNumber do
+
+	-- 		end
+	-- 	end
+	-- else
+
+	-- end
 	local x = 0
 	-- if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
 	for oceanIndex = 1, self.oceanNumber do
@@ -3256,7 +3267,7 @@ function Space:PickOceansCylinder()
 					local lowestDist
 					for oi, ocea in pairs(self.oceans) do
 						for pi, poly in pairs(ocea) do
-							local dist = self:WrapDistance(neighbor.x, neighbor.y, poly.x, poly.y)
+							local dist = self:HexDistance(neighbor.x, neighbor.y, poly.x, poly.y)
 							if not lowestDist or dist < lowestDist then
 								lowestDist = dist
 							end
