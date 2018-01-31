@@ -13,7 +13,7 @@ include("MapGenerator")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = true
+local clockEnabled = false
 local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
@@ -577,17 +577,17 @@ local OptionDictionary = {
 	-- 		[4] = { name = "Random", values = "keys" },
 	-- 	}
 	-- },
-	{ name = "Landmass Arrangement", keys = { "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeaTotalContinentRatio", "lakeMinRatio", "lakeynessMin", "lakeynessMax" }, default = 1,
+	{ name = "Landmass Arrangement", keys = { "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeasMax", "inlandSeaContinentRatio", "inlandSeaTotalContinentRatio", "lakeMinRatio" }, default = 1,
 	values = {
-			[1] = { name = "Two Continents", values = {0.15, 2, 1, 40, 2, 0.4, 0.02, 0.03, 0.0065, 5, 50} },
-			[2] = { name = "Earthish", values = {0.15, 2, 2, 40, 2, 0.4, 0.02, 0.03, 0.0065, 5, 50} },
-			[3] = { name = "Pangaea", values = {0.05, 1, 1, 50, 3, 0.5, 0.02, 0.03, 0.0065, 5, 50} },
-			[4] = { name = "Archipelago", values = {0, 0, 6, 80, 3, 0.8, 0.02, 0.03, 0.0065, 5, 50} },
-			[5] = { name = "Earthseaish", values = {0.1, 3, 5, 90, 2, 0.75, 0.02, 0.03, 0.0065, 5, 50} },
-			[6] = { name = "Lonely Ocean", values = {0.15, 5, 12, 100, 3, 0.8, 0.02, 0.03, 0.0065, 5, 50} },
-			[7] = { name = "Low Seas", values = {0.15, 0, 3, 30, 1, 0.3, 0.02, 0.03, 0.0065, 5, 50} },
-			[8] = { name = "Lakes", values = {0.15, -1, 1, 40, 2, 0.4, 0.05, 0.09, 0.02, 10, 60} },
-			[9] = { name = "Waterless", values = {0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0, 0} },
+			[1] = { name = "Two Continents", values = {0.15, 2, 1, 40, 2, 0.4, 2, 0.02, 0.03, 0.0065} },
+			[2] = { name = "Earthish", values = {0.15, 2, 2, 40, 2, 0.4, 1, 0.02, 0.03, 0.0065} },
+			[3] = { name = "Pangaea", values = {0.00, 1, 1, 67, 3, 0.3, 2, 0.02, 0.03, 0.0065} },
+			[4] = { name = "Archipelago", values = {0, 0, 6, 80, 3, 0.8, 1, 0.02, 0.03, 0.0065} },
+			[5] = { name = "Earthseaish", values = {0.1, 3, 5, 90, 2, 0.75, 1, 0.02, 0.03, 0.0065} },
+			[6] = { name = "Lonely Ocean", values = {0.15, 5, 12, 100, 3, 0.8, 1, 0.02, 0.03, 0.0065} },
+			[7] = { name = "Low Seas", values = {0.15, 0, 3, 30, 1, 0.3, 1, 0.02, 0.03, 0.0065} },
+			[8] = { name = "Lakes", values = {0.15, -1, 1, 40, 2, 0.4, 3, 0.05, 0.09, 0.02} },
+			[9] = { name = "Waterless", values = {0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
 			[10] = { name = "Random", values = "keys" },
 		}
 	},
@@ -1373,6 +1373,29 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 		neighbor:FloodFillAstronomy(astronomyIndex)
 	end
 	return true
+end
+
+function Polygon:PatchContinent()
+	if self.continent then return end
+	local continent
+	for i, neighbor in pairs(self.neighbors) do
+		continent = neighbor.continent
+		if continent then break end
+	end
+	self.continent = continent
+	tInsert(continent, self)
+end
+
+function Polygon:FloodFillToOcean(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.continent then return end
+	if self.oceanIndex then return self.oceanIndex end
+	for i, neighbor in pairs(self.neighbors) do
+		local oceanIndex = neighbor:FloodFillToOcean(searched)
+		if oceanIndex then return oceanIndex end
+	end
 end
 
 function Polygon:FloodFillSea(sea)
@@ -2540,10 +2563,10 @@ function Space:Compute()
     self:FindAstronomyBasins()
     EchoDebug("picking continents...")
     self:PickContinents()
+    EchoDebug("filling in continent gaps...")
+    self:PatchContinents()
     EchoDebug("flooding inland seas...")
     self:FindInlandSeas()
-    -- EchoDebug("filling excess inland seas...")
-    -- self:FillInlandSeas()
     EchoDebug("tagging inland sea polygons...")
     self:TagInlandSeas()
     EchoDebug("picking coasts...")
@@ -3227,14 +3250,30 @@ end
 
 function Space:PickOceansRectangle()
 	local sides = {
-		{ {0,0}, {0,1} },
-		{ {0,1}, {1,1} },
-		{ {1,0}, {1,1} },
-		{ {0,0}, {1,0} },
+		{ {0,0}, {0,1} }, -- west
+		{ {0,1}, {1,1} }, -- north
+		{ {1,0}, {1,1} }, -- east
+		{ {0,0}, {1,0} }, -- south
 	}
 	self.oceanSides = {}
-	for oceanIndex = 1, self.oceanNumber do
-		local side = tRemoveRandom(sides)
+	for oceanIndex = 1, mMin(self.oceanNumber, 4) do
+		local sideIndex = mRandom(1, #sides)
+		local removeAlsoSide
+		if oceanIndex == 1 and self.oceanNumber == 2 then
+			local removeAlsoSideIndex = (sideIndex + 2) % 4
+			removeAlsoSide = sides[removeAlsoSideIndex]
+			EchoDebug("prevent parallel oceans", sideIndex, removeAlsoSideIndex, removeAlsoSide)
+		end
+		local side = tRemove(sides, sideIndex)
+		if removeAlsoSide then
+			for si, s in pairs(sides) do
+				EchoDebug(s)
+				if s == removeAlsoSide then
+					EchoDebug("removing parallel ocean side")
+					tRemove(sides, si)
+				end
+			end
+		end
 		EchoDebug("side: ", side[1][1], side[1][2], side[2][1], side[2][2])
 		local x, y = side[1][1] * self.w, side[1][2] * self.h
 		local xUp = side[2][1] - x == 1
@@ -3916,6 +3955,19 @@ function Space:LabelSubPolygonsByPolygon()
 		until #subPolygonBuffer == 0
 	until #polygonBuffer == 0 -- or (self.subPolygonLabelsMax and labelled >= self.subPolygonLabelsMax)
 	EchoDebug(#polygonBuffer)
+end
+
+function Space:PatchContinents()
+	local patchedPolygonCount = 0
+	for i, polygon in pairs(self.polygons) do
+		if not polygon.continent and not polygon.oceanIndex then
+			if not polygon:FloodFillToOcean() then
+				patchedPolygonCount = patchedPolygonCount + 1
+				polygon:PatchContinent()
+			end
+		end
+	end
+	EchoDebug(patchedPolygonCount .. " non-continent polygons with no route to ocean patched")
 end
 
 function Space:FindInlandSeas()
