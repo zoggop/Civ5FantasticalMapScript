@@ -585,27 +585,29 @@ local OptionDictionary = {
 	-- 		[4] = { name = "Random", values = "keys" },
 	-- 	}
 	-- },
-	{ name = "Landmass Arrangement", keys = { "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeasMax", "inlandSeaContinentRatio", "inlandSeaTotalContinentRatio", "lakeMinRatio" }, default = 1,
+	{ name = "Landmass Arrangement", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 1,
 	values = {
-			[1] = { name = "Two Continents", values = {0.15, 2, 1, 40, 2, 0.4, 2, 0.02, 0.03, 0.0065} },
-			[2] = { name = "Earthish", values = {0.15, 2, 2, 40, 2, 0.4, 1, 0.02, 0.03, 0.0065} },
-			[3] = { name = "Pangaea", values = {0.00, 1, 1, 67, 3, 0.3, 2, 0.02, 0.03, 0.0065} },
-			[4] = { name = "Archipelago", values = {0, 0, 6, 80, 3, 0.8, 1, 0.02, 0.03, 0.0065} },
-			[5] = { name = "Earthseaish", values = {0.1, 3, 5, 90, 2, 0.75, 1, 0.02, 0.03, 0.0065} },
-			[6] = { name = "Lonely Ocean", values = {0.15, 5, 12, 100, 3, 0.8, 1, 0.02, 0.03, 0.0065} },
-			[7] = { name = "Low Seas", values = {0.15, 0, 3, 30, 1, 0.3, 1, 0.02, 0.03, 0.0065} },
-			[8] = { name = "Lakes", values = {0.15, -1, 1, 40, 2, 0.4, 3, 0.05, 0.09, 0.02} },
-			[9] = { name = "Waterless", values = {0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
-			[10] = { name = "Random", values = "keys" },
+			[1] = { name = "Two Continents", values = {true, 0.15, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
+			[2] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
+			[3] = { name = "Pangaea", values = {true, 0.00, 1, 1, 67, 3, 0.3, 0.02, 1, 0.0065} },
+			[4] = { name = "Archipelago", values = {true, 0, 0, 6, 80, 3, 0.8, 0.02, 1, 0.0065} },
+			[5] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 90, 2, 0.75, 0.02, 1, 0.0065} },
+			[6] = { name = "Lonely Ocean", values = {true, 0.15, 5, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
+			[7] = { name = "Low Seas", values = {true, 0.15, 0, 3, 30, 1, 0.3, 0.02, 0, 0.0065} },
+			[8] = { name = "Lakes", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0.05, 2, 0.02} },
+			[9] = { name = "Waterless", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
+			[10] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9} },
+			[11] = { name = "Inland Empire", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0.04, 1, 0.01} },
+			[12] = { name = "Inland Sea", values = {false, 0.15, -1, 1, 25, 1, 0.1, 0.25, 1, 0.0065} },
 		}
 	},
-	{ name = "World Wrap", keys = { "wrapX" }, default = 1,
-	values = {
-			[1] = { name = "Globe (East-West Wrap)", values = {true} },
-			[2] = { name = "Realm (No Wrap)", values = {false} },
-			[3] = { name = "Random", values = "keys" },
-		}
-	},
+	-- { name = "World Wrap", keys = { "wrapX" }, default = 1,
+	-- values = {
+	-- 		[1] = { name = "Globe (East-West Wrap)", values = {true} },
+	-- 		[2] = { name = "Realm (No Wrap)", values = {false} },
+	-- 		[3] = { name = "Random", values = "keys" },
+	-- 	}
+	-- },
 	{ name = "Map Complexity", keys = { "polygonCount" }, default = 3,
 	values = {
 			[1] = { name = "Very Low", values = {100} },
@@ -1411,10 +1413,7 @@ end
 function Polygon:FloodFillSea(sea)
 	if sea and #sea.polygons >= sea.maxPolygons then return end
 	if self.sea or not self.continent then return end
-	self.space.inlandSeaPolygonMaxByContinent[self.continent] = self.space.inlandSeaPolygonMaxByContinent[self.continent] or mCeil(#self.continent * self.space.inlandSeaTotalContinentRatio)
-	if self.continent and (self.space.inlandSeaPolygonCountByContinent[self.continent] or 0) > self.space.inlandSeaPolygonMaxByContinent[self.continent] then
-		return
-	end
+	if (not self.space.wrapY and (self.topY or self.bottomY)) or (not self.space.wrapX and (self.topX or self.bottomX)) then return end
 	for i, neighbor in pairs(self.neighbors) do
 		if neighbor.continent ~= self.continent or (sea and neighbor.sea ~= nil and neighbor.sea ~= sea) then
 			return
@@ -1423,7 +1422,6 @@ function Polygon:FloodFillSea(sea)
 	sea = sea or { polygons = {}, inland = true, astronomyIndex = self.astronomyIndex, continent = self.continent, maxPolygons = mCeil(#self.continent * self.space.inlandSeaContinentRatio) }
 	self.sea = sea
 	tInsert(sea.polygons, self)
-	self.space.inlandSeaPolygonCountByContinent[self.continent] = (self.space.inlandSeaPolygonCountByContinent[self.continent] or 0) + 1
 	for i, neighbor in pairs(self.neighbors) do
 		neighbor:FloodFillSea(sea)
 	end
@@ -2189,16 +2187,14 @@ Space = class(function(a)
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
 	a.mountainousnessMax = 66 -- in those mountainous regions, what's the maximum percentage of mountains in their collection
 	-- all lake variables scale with global rainfall in Compute()
-	a.lakeMinRatio = 0.0065
-	a.minLakes = 2 -- below this number of lakes will cause a region to become lakey
+	a.lakeMinRatio = 0.0065 -- below this fraction of filled subpolygos that are lakes will cause a region to become lakey
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.marshynessMin = 5
 	a.marshynessMax = 50
 	a.marshMinHexRatio = 0.015
-	a.inlandSeasMax = 2 -- maximum number of inland seas per major continent
-	a.inlandSeaContinentRatio = 0.025 -- maximum size of each inland sea as a fraction of the polygons of continent they're inside
-	a.inlandSeaTotalContinentRatio = 0.04 -- maximum ratio of inland sea polygons inside a continent
+	a.inlandSeaContinentRatio = 0.025 -- maximum size of each inland sea as a fraction of the polygons of the continent they're inside
+	a.inlandSeasMax = 1 -- maximum number of inland seas
 	a.ancientCitiesCount = 3
 	a.falloutEnabled = false -- place fallout on the map?
 	a.postApocalyptic = false -- place fallout around ancient cities
@@ -2233,8 +2229,6 @@ Space = class(function(a)
     a.deepHexes = {}
     a.lakeSubPolygons = {}
     a.inlandSeas = {}
-    a.inlandSeaPolygonCountByContinent = {}
-    a.inlandSeaPolygonMaxByContinent = {}
     a.rivers = {}
 end)
 
@@ -2472,7 +2466,6 @@ function Space:Compute()
     self:DoCentuariIfActivated()
     -- lake generation scales with global rainfall:
     local rainfallScale = self.rainfallMidpoint / 49.5
-    -- self.minLakes = mFloor( self.minLakes * rainfallScale )
     self.lakeMinRatio = self.lakeMinRatio * rainfallScale
 	self.lakeynessMax = mFloor( self.lakeynessMax * rainfallScale )
 	EchoDebug(self.lakeMinRatio .. " minimum lake ratio", self.lakeynessMax .. " maximum region lakeyness")
@@ -5341,7 +5334,8 @@ end
 
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
-	if Map.GetCustomOption(1) == 2 then
+	-- if Map.GetCustomOption(1) == 2 then
+	if Map.GetCustomOption(1) > 10 then
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
@@ -5355,8 +5349,8 @@ function GetMapInitData(worldSize)
 		local grid_area = areas[worldSize]
 		local grid_width = mCeil( mSqrt(grid_area) * ((mRandom() * 0.67) + 0.67) )
 		local grid_height = mCeil( grid_area / grid_width )
+		EchoDebug(grid_width .. "x" .. grid_height .. " realm map")
 		local world = GameInfo.Worlds[worldSize]
-		local wrap = Map.GetCustomOption(1) == 3
 		if world ~= nil then
 			return {
 				Width = grid_width,

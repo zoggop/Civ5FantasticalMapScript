@@ -19,3 +19,9 @@ new options
 
 - map complexity (polygon count)
 - climate realism
+
+
+----
+
+
+give snow one less latitude and tundra one more (on realistic maps, tundra is lacking, and snow already has one latitude, 90, as a given)
