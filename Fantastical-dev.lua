@@ -35,7 +35,7 @@ local function StartDebugTimer()
 	return os.clock()
 end
 
-local function EndDebugTimer(timer)
+local function StopDebugTimer(timer)
 	return math.ceil(1000 * (os.clock() - timer)) .. " ms"
 end
 
@@ -585,20 +585,29 @@ local OptionDictionary = {
 	-- 		[4] = { name = "Random", values = "keys" },
 	-- 	}
 	-- },
-	{ name = "Landmass Arrangement", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 1,
+	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 8,
 	values = {
-			[1] = { name = "Two Continents", values = {true, 0.15, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
-			[2] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
-			[3] = { name = "Pangaea", values = {true, 0.00, 1, 1, 67, 3, 0.3, 0.02, 1, 0.0065} },
-			[4] = { name = "Archipelago", values = {true, 0, 0, 6, 80, 3, 0.8, 0.02, 1, 0.0065} },
-			[5] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 90, 2, 0.75, 0.02, 1, 0.0065} },
-			[6] = { name = "Lonely Ocean", values = {true, 0.15, 5, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
-			[7] = { name = "Low Seas", values = {true, 0.15, 0, 3, 30, 1, 0.3, 0.02, 0, 0.0065} },
-			[8] = { name = "Lakes", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0.05, 2, 0.02} },
-			[9] = { name = "Waterless", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
-			[10] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9} },
-			[11] = { name = "Inland Empire", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0.04, 1, 0.01} },
-			[12] = { name = "Inland Sea", values = {false, 0.15, -1, 1, 25, 1, 0.1, 0.25, 1, 0.0065} },
+			[1] = { name = "No Bodies of Water", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
+			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0.025, 1, 0.02} },
+			[3] = { name = "Inland Seas", values = {true, 0.15, -1, 1, 40, 2, 0.4, 0.05, 2, 0.015} },
+			[4] = { name = "Big Inland Sea", values = {true, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
+			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
+			[6] = { name = "Archipelago", values = {true, 0, 0, 6, 80, 3, 0.8, 0.02, 1, 0.0065} },
+			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 67, 3, 0.3, 0.02, 1, 0.0065} },
+			[8] = { name = "Two Continents", values = {true, 0.15, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
+			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
+			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 100, 3, 0.75, 0.02, 1, 0.0065} },
+			[11] = { name = "Lonely Oceans", values = {true, 0.15, 5, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
+			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
+			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
+			[14] = { name = "Inland Empire", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0.04, 1, 0.01} },
+			[15] = { name = "Inland Sea", values = {false, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
+			[16] = { name = "Estuary", values = {false, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
+			[17] = { name = "Coast", values = {false, 0.15, 2, 1, 30, 2, 0.3, 0.0, 0, 0.0065} },
+			[18] = { name = "Peninsula", values = {false, 0.15, 3, 1, 30, 2, 0.3, 0, 0, 0.0065} },
+			[19] = { name = "Continent", values = {false, 0.15, 4, 1, 100, 3, 0.2, 0.02, 1, 0.0065} },
+			[20] = { name = "Island Chain", values = {false, 0.15, 4, 7, 75, 3, 0.8, 0.02, 1, 0.0065} },
+			[21] = { name = "Random Realm", values = "keys", randomKeys = {13, 14, 15, 16, 17, 18, 19, 20} },
 		}
 	},
 	-- { name = "World Wrap", keys = { "wrapX" }, default = 1,
@@ -1396,6 +1405,31 @@ function Polygon:PatchContinent()
 	tInsert(continent, self)
 end
 
+function Polygon:RemoveFromContinent()
+	if not self.continent then return end
+	for i, poly in pairs(self.continent) do
+		if poly == self then
+			tRemove(self.continent, i)
+			break
+		end
+	end
+	self.continent = nil
+end
+
+function Polygon:FloodFillToWholeContinent(searched, floodFound, sea)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if not self.continent then return end
+	floodFound = floodFound or {}
+	tInsert(floodFound, self)
+	for i, neighbor in pairs(self.neighbors) do
+		sea = sea or neighbor.sea
+		neighbor:FloodFillToWholeContinent(searched, floodFound, sea)
+	end
+	return floodFound, sea
+end
+
 function Polygon:FloodFillToOcean(searched)
 	searched = searched or {}
 	if searched[self] then return end
@@ -1413,7 +1447,7 @@ end
 function Polygon:FloodFillSea(sea)
 	if sea and #sea.polygons >= sea.maxPolygons then return end
 	if self.sea or not self.continent then return end
-	if (not self.space.wrapY and (self.topY or self.bottomY)) or (not self.space.wrapX and (self.topX or self.bottomX)) then return end
+	if (not self.space.wrapY and (self.topY or self.bottomY)) or ((not self.space.wrapX or (self.space.oceanNumber == -1 and self.space.inlandSeasMax == 1)) and (self.topX or self.bottomX)) then return end
 	for i, neighbor in pairs(self.neighbors) do
 		if neighbor.continent ~= self.continent or (sea and neighbor.sea ~= nil and neighbor.sea ~= sea) then
 			return
@@ -1567,8 +1601,10 @@ function Polygon:PickTinyIslands()
 			end
 		end
 		local chance = self.space.tinyIslandChance
-		if self.oceanIndex then chance = chance * 1.5 end
-		if not tooCloseForIsland and (Map.Rand(100, "tiny island chance") <= chance or ((self.loneCoastal or self.oceanIndex) and not self.hasTinyIslands)) then
+		if self.oceanIndex or self.loneCoastal then chance = chance * 2 end
+		-- or ((self.loneCoastal or self.oceanIndex) and not self.hasTinyIslands)) )
+		if not tooCloseForIsland and Map.Rand(100, "tiny island chance") < chance then
+			-- EchoDebug("tiny island", "chance: " .. chance, "lone coastal: " .. tostring(self.loneCoastal), "is ocean: " .. tostring(self.oceanIndex), "has tiny islands: " .. tostring(self.hasTinyIslands))
 			subPolygon.tinyIsland = true
 			tInsert(self.space.tinyIslandSubPolygons, subPolygon)
 			self.hasTinyIslands = true
@@ -2570,8 +2606,8 @@ function Space:Compute()
     self:PatchContinents()
     EchoDebug("flooding inland seas...")
     self:FindInlandSeas()
-    EchoDebug("tagging inland sea polygons...")
-    self:TagInlandSeas()
+    EchoDebug("filling inland seas...")
+    self:FillInlandSeas()
     EchoDebug("picking coasts...")
 	self:PickCoasts()
 	if not self.useMapLatitudes then
@@ -3041,7 +3077,7 @@ function Space:FillSubPolygons(relax)
 			EchoDebug(percent .. "%")
 		end
 	end
-	EchoDebug("filled subpolygons in " .. EndDebugTimer(timer))
+	EchoDebug("filled subpolygons in " .. StopDebugTimer(timer))
 end
 
 function Space:FillPolygons()
@@ -4035,36 +4071,33 @@ function Space:FindInlandSeas()
 end
 
 function Space:FillInlandSeas()
-	EchoDebug(#self.inlandSeas .. " inland seas of " .. self.inlandSeasMax  .. " maximum")
-	local seasByPolys = {}
-	for i, sea in pairs(self.inlandSeas) do
-		seasByPolys[#sea.polygons] = sea
-	end
-	if #self.inlandSeas > self.inlandSeasMax then
-		local filled = 0
-		while #self.inlandSeas > self.inlandSeasMax do
-			local sea = tRemoveRandom(self.inlandSeas)
-			for i, polygon in pairs(sea.polygons) do
-				polygon.sea = nil
-			end
-			filled = filled + 1
+	for si, sea in pairs(self.inlandSeas) do
+		for pi, polygon in pairs(sea.polygons) do
+			polygon:RemoveFromContinent()
 		end
-		EchoDebug(filled .. " inland seas filled")
 	end
-end
-
-function Space:TagInlandSeas()
-	for s, sea in pairs(self.inlandSeas) do
-		for p, polygon in pairs(sea.polygons) do
-			for c, poly in pairs(polygon.continent) do
-				if poly == polygon then
-					tRemove(polygon.continent, c)
-					break
+	local patchCount = 0
+	local timer = StartDebugTimer()
+	for i, polygon in pairs(self.polygons) do
+		if polygon.continent then
+			local found, sea = polygon:FloodFillToWholeContinent()
+			if found and sea then
+				if #found < #polygon.continent then
+					-- EchoDebug(#found .. " stranded polygons from " .. #polygon.continent .. "-polygon continent")
+					if #found < #polygon.continent * 0.33 then
+						EchoDebug("moving " .. #found .. " stranded polygons from " .. #polygon.continent .. "-polygon continent to " .. sea.size .. "-polygon inland sea")
+						for ii, strandedPolygon in pairs(found) do
+							strandedPolygon:RemoveFromContinent()
+							strandedPolygon.sea = sea
+							tInsert(sea.polygons, strandedPolygon)
+							sea.size = sea.size + 1
+						end
+					end
 				end
 			end
-			polygon.continent = nil
 		end
 	end
+	EchoDebug("patched inland seas in " .. StopDebugTimer(timer))
 end
 
 function Space:LabelMap()
@@ -5335,7 +5368,7 @@ end
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
 	-- if Map.GetCustomOption(1) == 2 then
-	if Map.GetCustomOption(1) > 10 then
+	if Map.GetCustomOption(1) > 11 then
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
