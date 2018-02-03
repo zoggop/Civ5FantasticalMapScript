@@ -587,10 +587,10 @@ local OptionDictionary = {
 	-- },
 	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 8,
 	values = {
-			[1] = { name = "No Bodies of Water", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0} },
+			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0} },
 			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
 			[3] = { name = "Inland Seas", values = {true, 0.15, -1, 1, 5, 1, 0, 0.05, 2, 0.015} },
-			[4] = { name = "Big Inland Sea", values = {true, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
+			[4] = { name = "Inland Sea", values = {true, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
 			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
 			[6] = { name = "Archipelago", values = {true, 0, 0, 6, 80, 3, 0.8, 0.02, 1, 0.0065} },
 			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 67, 3, 0.3, 0.02, 1, 0.0065} },
@@ -600,27 +600,28 @@ local OptionDictionary = {
 			[11] = { name = "Lonely Oceans", values = {true, 0.15, 5, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
 			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
 			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
-			[14] = { name = "Inland Empire", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0.04, 1, 0.01} },
-			[15] = { name = "Inland Sea", values = {false, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
-			[16] = { name = "Estuary", values = {false, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
-			[17] = { name = "Coast", values = {false, 0.15, 2, 1, 30, 2, 0.3, 0.0, 0, 0.0065} },
-			[18] = { name = "Peninsula", values = {false, 0.15, 3, 1, 30, 2, 0.3, 0, 0, 0.0065} },
-			[19] = { name = "Continent", values = {false, 0.15, 4, 1, 100, 3, 0.2, 0.02, 1, 0.0065} },
-			[20] = { name = "Island Chain", values = {false, 0.15, 4, 7, 75, 3, 0.8, 0.02, 1, 0.0065} },
-			[21] = { name = "Random Realm", values = "keys", randomKeys = {13, 14, 15, 16, 17, 18, 19, 20} },
+			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
+			[15] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 5, 1, 0, 0.05, 2, 0.015} },
+			[16] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
+			[17] = { name = "Estuary", values = {false, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
+			[18] = { name = "Coast", values = {false, 0.15, 2, 1, 30, 2, 0.3, 0.0, 0, 0.0065} },
+			[19] = { name = "Peninsula", values = {false, 0.15, 3, 1, 30, 2, 0.3, 0, 0, 0.0065} },
+			[20] = { name = "Continent", values = {false, 0.15, 4, 1, 100, 3, 0.2, 0.02, 1, 0.0065} },
+			[21] = { name = "Island Chain", values = {false, 0.15, 4, 7, 75, 3, 0.8, 0.02, 1, 0.0065} },
+			[22] = { name = "Random Realm", values = "keys", randomKeys = {13, 14, 15, 16, 17, 18, 19, 20, 21} },
 		}
 	},
-	{ name = "Inland Water Bodies", keys = { "inlandSeasMax", "inlandSeaContinentRatio", "lakeMinRatio" }, default = 2,
-	values = {
-			[1] = { name = "None", values = {0, 0, 0} },
-			[2] = { name = "Some Lakes", values = {1, 0.015, 0.0065} },
-			[3] = { name = "Many Lakes", values = {1, 0.025, 0.02} },
-			[4] = { name = "Seas", values = {3, 0.04, 0.01} },
-			[5] = { name = "One Big Sea", values = {1, 0.4, 0.0065} },
-			[6] = { name = "Random", values = "keys" },
-		}
-	},
-	{ name = "Map Granularity", keys = { "polygonCount" }, default = 3,
+	-- { name = "Inland Water Bodies", keys = { "inlandSeasMax", "inlandSeaContinentRatio", "lakeMinRatio" }, default = 2,
+	-- values = {
+	-- 		[1] = { name = "None", values = {0, 0, 0} },
+	-- 		[2] = { name = "Some Lakes", values = {1, 0.015, 0.0065} },
+	-- 		[3] = { name = "Many Lakes", values = {1, 0.025, 0.02} },
+	-- 		[4] = { name = "Seas", values = {3, 0.04, 0.01} },
+	-- 		[5] = { name = "One Big Sea", values = {1, 0.4, 0.0065} },
+	-- 		[6] = { name = "Random", values = "keys" },
+	-- 	}
+	-- },
+	{ name = "Granularity", keys = { "polygonCount" }, default = 3,
 	values = {
 			[1] = { name = "Very Low", values = {100} },
 			[2] = { name = "Low", values = {140} },
@@ -657,7 +658,7 @@ local OptionDictionary = {
 			[5] = { name = "Hot", values = {1.1, 4, 99} },
 			[6] = { name = "Jurassic", values = {0.9, 13, 99} },
 			[7] = { name = "Global Tropics", values = {0.7, 24, 99} },
-			[8] = { name = "Random", values = "keys", randomKeys = {2, 3, 4, 5, 6} },
+			[8] = { name = "Random", values = "keys" },
 		}
 	},
 	{ name = "Rainfall", keys = { "rainfallMidpoint" }, default = 4,
@@ -681,7 +682,7 @@ local OptionDictionary = {
 			[5] = { name = "A Long While", values = {true, false, true, true, 4} },
 			[6] = { name = "A While", values = {true, true, false, true, 4} },
 			[7] = { name = "Yesterday", values = {true, true, true, true, 4} },
-			[8] = { name = "Random", values = "keys" }
+			[8] = { name = "Random", values = "keys" },
 		}
 	},
 }
@@ -2049,15 +2050,23 @@ function Region:Fill()
 			-- 	subCollection = self.collection[#self.collection]
 			-- end
 			if subCollection.lake then
-				for ni, neighbor in pairs(subPolygon.neighbors) do
-					if not neighbor.superPolygon.continent or neighbor.lake then
-						-- can't have a lake that's actually a part of the ocean
-						local subCollectionBuffer = tDuplicate(self.collection)
-						repeat
-							subCollection = tRemoveRandom(subCollectionBuffer)
-						until not subCollection.lake
-						break
+				local doNotLake = subPolygon.topY or subPolygon.bottomY or ((subPolygon.topX or subPolygon.bottomX) and not self.space.wrapX)
+				if not doNotLake then
+					for ni, neighbor in pairs(subPolygon.neighbors) do
+						if not neighbor.superPolygon.continent or neighbor.lake then
+							-- can't have a lake that's actually a part of the ocean
+							doNotLake = true
+							-- EchoDebug("can't have a lake next to a lake or the ocean")
+							break
+						end
 					end
+				end
+				if doNotLake then
+					-- EchoDebug("cannot lake here")
+					local subCollectionBuffer = tDuplicate(self.collection)
+					repeat
+						subCollection = tRemoveRandom(subCollectionBuffer)
+					until not subCollection.lake
 				end
 			end
 			if subCollection.lake then
@@ -5360,7 +5369,7 @@ end
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
 	-- if Map.GetCustomOption(1) == 2 then
-	if Map.GetCustomOption(1) > 11 then
+	if Map.GetCustomOption(1) > 12 then
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
