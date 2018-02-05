@@ -1929,21 +1929,21 @@ end
 function Region:CreateCollection()
 	self:GiveParameters()
 	-- create the collection
-	self.size, self.subSize = self.space:GetCollectionSize()
+	self.size = self.space:GetCollectionSize()
 	local subPolys = 0
 	for i, polygon in pairs(self.polygons) do
 		if polygon.polar then self.polar = true end
 		subPolys = subPolys + #polygon.subPolygons
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
-	self.totalSize = self.size * self.subSize
 	local allSize = 0
 	local subSizes = {}
 	for i = 1, self.size do
-		local subSize = mRandom(self.space.subCollectionSizeMin, self.space.subCollectionSizeMax)
+		local subSize = self.space:GetSubCollectionSize()
 		allSize = allSize + subSize
 		tInsert(subSizes, subSize)
 	end
+	self.totalSize = allSize
 	local allTemps = {}
 	local allRains = {}
 	local ti = (self.temperatureMax - self.temperatureMin) / (allSize - 1)
@@ -1971,7 +1971,6 @@ function Region:CreateCollection()
 		local subCollection = { elements = {}, lake = lake }
 		local tempTotal, rainTotal = 0, 0
 		for si = 1, subSize do
-			-- EchoDebug("sublists", si, #temps, #rains, self.subSize)
 			if #temps == 0 or #rains == 0 then EchoDebug(#temps, #rains) end
 			local temperature = tRemoveRandom(temps)
 			local rainfall = tRemoveRandom(rains)
@@ -1985,7 +1984,6 @@ function Region:CreateCollection()
 		end
 		subCollection.temperature = mFloor(tempTotal / subSize)
 		subCollection.rainfall = mFloor(rainTotal / subSize)
-		-- if self.polar and i == self.size then subCollection.polar = true end
 		tInsert(self.collection, subCollection)
 	end
 end
@@ -2000,10 +1998,6 @@ function Region:CreateElement(temperature, rainfall, lake)
 		mountain = false
 		hill = false
 	end
-	-- if hill then
-	-- 	temperature = mMax(temperature * 0.9, 0)
-	-- 	rainfall = mMin(rainfall * 1.1, 100)
-	-- end
 	temperature = mFloor(temperature)
 	rainfall = mFloor(rainfall)
 	local bestTerrain = self.space:NearestTempRainThing(temperature, rainfall, TerrainDictionary)
@@ -2053,12 +2047,12 @@ function Region:Fill()
 	for i, polygon in pairs(self.polygons) do
 		for spi, subPolygon in pairs(polygon.subPolygons) do
 			local subCollection = tGetRandom(self.collection)
-			if subPolygon.polar and not subCollection.polar then
+			if subPolygon.polar ~= subCollection.polar then
 				local subCollectionBuffer = tDuplicate(self.collection)
 				repeat
 					-- EchoDebug(i, spi, "looking for polar subcoll")
 					subCollection = tRemoveRandom(subCollectionBuffer)
-				until subCollection.polar
+				until subPolygon.polar == subCollection.polar
 			end
 			if subCollection.lake then
 				local doNotLake = subPolygon.topY or subPolygon.bottomY or ((subPolygon.topX or subPolygon.bottomX) and not self.space.wrapX)
@@ -5212,7 +5206,11 @@ function Space:GetHillyness()
 end
 
 function Space:GetCollectionSize()
-	return mRandom(self.collectionSizeMin, self.collectionSizeMax), mRandom(self.subCollectionSizeMin, self.subCollectionSizeMax)
+	return mRandom(self.collectionSizeMin, self.collectionSizeMax)
+end
+
+function Space:GetSubCollectionSize()
+	return mRandom(self.subCollectionSizeMin, self.subCollectionSizeMax)
 end
 
 function Space:ClosestThing(this, things)
