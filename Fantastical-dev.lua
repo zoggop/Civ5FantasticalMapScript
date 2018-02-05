@@ -14,18 +14,32 @@ include("MapGenerator")
 
 local debugEnabled = true
 local clockEnabled = false
-local lastClock = os.clock()
 local function EchoDebug(...)
 	if debugEnabled then
 		local printResult = ""
 		if clockEnabled then
 			local clock = math.floor(os.clock() / 0.1) * 0.1
-			local since = clock - lastClock
-			lastClock = clock
 			printResult = printResult .. "(" .. clock .. "): \t"
 		end
 		for i,v in ipairs(arg) do
-			printResult = printResult .. tostring(v) .. "\t"
+			local vString
+			if type(v) == "number" and math.floor(v) ~= v then
+				vString = string.format("%.2f", v)
+			elseif type(v) == "table" and v[1] then
+				vString = ""
+				for ii, vv in ipairs(v) do
+					if type(vv) == "number" and math.floor(vv) ~= vv then
+						vvStr = string.format("%.2f", vv)
+					else
+						vvStr = tostring(vv)
+					end
+					vString = vString .. vvStr
+					if ii < #v then vString = vString .. ", " end
+				end
+			else
+				vString = tostring(v)
+			end
+			printResult = printResult .. vString .. "\t"
 		end
 		print(printResult)
 	end
@@ -1806,6 +1820,14 @@ function Region:GiveLatitude()
 	self.representativePolygon = tGetRandom(self.polygons)
 	self.latitude = self.representativePolygon.latitude
 	self.minLatitude, self.maxLatitude = self.representativePolygon.minLatitude, self.representativePolygon.maxLatitude
+	for i, polygon in pairs(self.polygons) do
+		if polygon.minLatitude < self.minLatitude then
+			self.minLatitude = polygon.minLatitude
+		end
+		if polygon.maxLatitude > self.maxLatitude then
+			self.maxLatitude = polygon.maxLatitude
+		end
+	end
 end
 
 function Region:GiveRainfall()
@@ -1859,9 +1881,6 @@ function Region:GiveTemperature()
 		local minHighTemp = mMin(realHighTemp, devHighTemp)
 		local maxHighTemp = mMax(realHighTemp, devHighTemp)
 		self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
-		if realLowTemp == 0 then
-			EchoDebug(self.temperatureMin, self.temperatureAvg, self.temperatureMax, doNotIncrease)
-		end
 		-- EchoDebug(realLowTemp .. "-" .. realHighTemp, devLowTemp .. "-" .. devHighTemp, self.minLatitude .. "-" .. self.maxLatitude)
 	end
 	if not doNotIncrease then
@@ -1918,67 +1937,54 @@ function Region:CreateCollection()
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
 	self.totalSize = self.size * self.subSize
-	-- EchoDebug(self.size, self.subSize, self.totalSize, subPolys)
-	-- create lists of possible temperature and rainfall
-	local tempList = {}
-	local rainList = {}
-	local tInc = (self.temperatureMax - self.temperatureMin) / self.size
-	local rInc = (self.rainfallMax - self.rainfallMin) / self.size
-	local tSubInc = tInc / (self.subSize - 1)
-	local rSubInc = rInc / (self.subSize - 1)
+	local allSize = 0
+	local subSizes = {}
 	for i = 1, self.size do
-		local temperature = self.temperatureMin + (tInc * (i-1))
-		local rainfall = self.rainfallMin + (rInc * (i-1))
-		local temps = {}
-		local rains = {}
-		if self.subSize == 1 then
-			if self.size > 1 and i == 1 then
-				temps = { temperature }
-				rains = { rainfall }
-			elseif self.size > 1 and i == self.size then
-				temps = { temperature + tInc }
-				rains = { rainfall + rInc }
-			else
-				temps = { temperature + (tInc / 2) }
-				rains = { rainfall + (rInc / 2) }
-			end
-		else
-			for si = 1, self.subSize do
-				local temp = temperature + (tSubInc * (si-1))
-				local rain = rainfall + (rSubInc * (si-1))
-				tInsert(temps, temp)
-				tInsert(rains, rain)
-			end
-		end
-		tInsert(tempList, temps)
-		tInsert(rainList, rains)
+		local subSize = mRandom(self.space.subCollectionSizeMin, self.space.subCollectionSizeMax)
+		allSize = allSize + subSize
+		tInsert(subSizes, subSize)
 	end
-	-- EchoDebug(self.size, self.subSize, self.temperatureMin .. "-" .. self.temperatureAvg .. "-" .. self.temperatureMax, self.rainfallMin .. "-" .. self.rainfallAvg .. "-" .. self.rainfallMax)
+	local allTemps = {}
+	local allRains = {}
+	local ti = (self.temperatureMax - self.temperatureMin) / (allSize - 1)
+	local ri = (self.rainfallMax - self.rainfallMin) / (allSize - 1)
+	for i = 1, allSize do
+		local temperature = self.temperatureMin + (ti * (i-1))
+		local rainfall = self.rainfallMin + (ri * (i-1))
+		tInsert(allTemps, temperature)
+		tInsert(allRains, rainfall)
+	end
+	-- EchoDebug(self.temperatureMin, self.temperatureMax, "temps", allTemps)
+	-- EchoDebug(self.rainfallMin, self.rainfallMax, "rains", allRains)
+
 	for i = 1, self.size do
 		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
-		local temps, rains
-		-- if self.polar and i == self.size then
-		-- 	temps = self.polarTemps
-		-- 	rains = self.polarRains
-		-- 	lake = nil
-		-- else
-			temps = tRemoveRandom(tempList)
-			rains = tRemoveRandom(rainList)
-		-- end
+		local tempIndex = mRandom(1, #allTemps)
+		local rainIndex = mRandom(1, #allRains)
+		local subSize = subSizes[i]
+		local temps = {}
+		local rains = {}
+		for ii = 1, subSize do
+			tInsert(temps, tRemove(allTemps, mMin(tempIndex, #allTemps)))
+			tInsert(rains, tRemove(allRains, mMin(rainIndex, #allRains)))
+		end
 		local subCollection = { elements = {}, lake = lake }
 		local tempTotal, rainTotal = 0, 0
-		for si = 1, self.subSize do
+		for si = 1, subSize do
 			-- EchoDebug("sublists", si, #temps, #rains, self.subSize)
 			if #temps == 0 or #rains == 0 then EchoDebug(#temps, #rains) end
 			local temperature = tRemoveRandom(temps)
 			local rainfall = tRemoveRandom(rains)
+			if temperature == 0 then
+				subCollection.polar = true
+			end
 			-- EchoDebug(i, si, temperature, rainfall)
 			tempTotal = tempTotal + temperature
 			rainTotal = rainTotal + rainfall
 			tInsert(subCollection.elements, self:CreateElement(temperature, rainfall, lake))
 		end
-		subCollection.temperature = mFloor(tempTotal / self.subSize)
-		subCollection.rainfall = mFloor(rainTotal / self.subSize)
+		subCollection.temperature = mFloor(tempTotal / subSize)
+		subCollection.rainfall = mFloor(rainTotal / subSize)
 		-- if self.polar and i == self.size then subCollection.polar = true end
 		tInsert(self.collection, subCollection)
 	end
@@ -2047,9 +2053,13 @@ function Region:Fill()
 	for i, polygon in pairs(self.polygons) do
 		for spi, subPolygon in pairs(polygon.subPolygons) do
 			local subCollection = tGetRandom(self.collection)
-			-- if self.polar and subPolygon.polar then
-			-- 	subCollection = self.collection[#self.collection]
-			-- end
+			if subPolygon.polar and not subCollection.polar then
+				local subCollectionBuffer = tDuplicate(self.collection)
+				repeat
+					-- EchoDebug(i, spi, "looking for polar subcoll")
+					subCollection = tRemoveRandom(subCollectionBuffer)
+				until subCollection.polar
+			end
 			if subCollection.lake then
 				local doNotLake = subPolygon.topY or subPolygon.bottomY or ((subPolygon.topX or subPolygon.bottomX) and not self.space.wrapX)
 				if not doNotLake then
@@ -2191,8 +2201,8 @@ Space = class(function(a)
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
-	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 2 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
+	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.regionRelaxations = 8 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means more consistent non-realistic distribution of terrain types
