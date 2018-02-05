@@ -15,10 +15,6 @@ landmass types
 - inland empire: no ocean, increase lake & inland sea chance somehow
 
 
-new options
-
-- map complexity (polygon count)
-- climate realism
-
-
 ---
+
+add the ability to pick individual landmasses isolated by ocean, because currently the lonely seas option is so bad

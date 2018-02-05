@@ -573,7 +573,7 @@ local OptionDictionary = {
 			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
 			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
 			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 100, 3, 0.75, 0.02, 1, 0.0065} },
-			[11] = { name = "Lonely Oceans", values = {true, 0.15, 5, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
+			[11] = { name = "Lonely Oceans", values = {true, 0.15, 6, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
 			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
 			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
 			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
@@ -1262,6 +1262,7 @@ function Hex:SetTerrain()
 end
 
 function Hex:SetFeature()
+	-- if self.polygon.oceanIndex then self.featureType = featureAtoll end -- uncomment to debug ocean rifts
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	if self.plotType == plotMountain then
@@ -3210,7 +3211,7 @@ function Space:PickOceans()
 end
 
 function Space:PickOceansCylinder()
-	local div = self.w / self.oceanNumber
+	local xDiv = self.w / mMin(3, self.oceanNumber)
 	-- local xs = { {x=0, algo=1} }
 	-- if self.oceanNumber % 2 = 0 then
 	-- 	tInsert(xs, {x=50, algo=2})
@@ -3223,93 +3224,212 @@ function Space:PickOceansCylinder()
 
 	-- end
 	local x = 0
+	local horizOceans = self.oceanNumber - 3
+	local rows = mCeil(horizOceans / 3)
+	local yDiv = self.h / (rows + 1)
+	local y = yDiv
+	local firstOcean = mRandom(1, 3)
+	local secondOcean = (firstOcean + 1) % 4
+	local horizOceanCount = 0
+	if secondOcean == 0 then secondOcean = 1 end
 	-- if self.oceanNumber == 1 then x = 0 else x = mRandom(0, self.w) end
 	for oceanIndex = 1, self.oceanNumber do
-		local hex = self.hexes[self:GetIndex(x, 0)]
-		local polygon = hex.polygon
-		local ocean = {}
-		local iterations = 0
-		local chosen = {}
-		while self.nonOceanPolygons > self.minNonOceanPolygons do
-			chosen[polygon] = true
+		local ocean
+		if oceanIndex < 4 then
+			ocean = self:PickOceanBottomToTop(x, oceanIndex)
+			x = mCeil(x + xDiv) % self.w
+		else
+			if not self.oceans[firstOcean] or not self.oceans[secondOcean] then
+				EchoDebug("can't pick oceans from #" .. firstOcean .. " to #" .. secondOcean)
+				break
+			end
+			EchoDebug("picking ocean #" .. oceanIndex .. " from #" .. firstOcean .. " to #" .. secondOcean .. "...")
+			ocean = self:PickOceanToOcean(self.oceans[firstOcean], self.oceans[secondOcean], y, oceanIndex)
+			firstOcean = (firstOcean + 1) % 4
+			if firstOcean == 0 then firstOcean = 1 end
+			secondOcean = (secondOcean + 1) % 4
+			if secondOcean == 0 then secondOcean = 1 end
+			horizOceanCount = horizOceanCount + 1
+			if horizOceanCount > 3 then
+				y = mCeil(y + yDiv) % self.h
+				horizOceanCount = 0
+			end
+		end
+		if ocean and #ocean > 0 then
+			tInsert(self.oceans, ocean)
+		end
+	end
+end
+
+function Space:PickOceanToOcean(firstOcean, secondOcean, y, oceanIndex)
+	local startPoly
+	local bPoly, bDist
+	for i, polygon in pairs(firstOcean) do
+		if y >= polygon.minY and y <= polygon.maxY then
+			startPoly = polygon
+			break
+		else
+			local dist = mAbs(polygon.y - y)
+			if not bDist or dist < bDist then
+				bPoly = polygon
+				bDist = dist
+			end
+		end
+	end
+	startPoly = startPoly or bPoly
+	if not startPoly then
+		EchoDebug("no starting polygon found")
+		return
+	end
+	local targetPoly
+	bPoly, bDist = nil, nil
+	for i, polygon in pairs(secondOcean) do
+		if y >= polygon.minY and y <= polygon.maxY then
+			targetPoly = polygon
+			break
+		else
+			local dist = mAbs(polygon.y - y)
+			if not bDist or dist < bDist then
+				bPoly = polygon
+				bDist = dist
+			end
+		end
+	end
+	targetPoly = targetPoly or bPoly
+	if not targetPoly then
+		EchoDebug("no target polygon found")
+		return
+	end
+	local polygon = startPoly
+	local ocean = {}
+	local chosen = {}
+	local iterations = 0
+	EchoDebug(self.nonOceanPolygons, self.minNonOceanPolygons)
+	while self.nonOceanPolygons > self.minNonOceanPolygons and iterations < 100 do
+		chosen[polygon] = true
+		if not polygon.oceanIndex then
 			polygon.oceanIndex = oceanIndex
 			tInsert(ocean, polygon)
 			self.nonOceanArea = self.nonOceanArea - #polygon.hexes
 			self.nonOceanPolygons = self.nonOceanPolygons - 1
-			if polygon.topY then
-					EchoDebug("topY found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
-					break
-			end
-			local upNeighbors = {}
-			local downNeighbors = {}
-			for ni, neighbor in pairs(polygon.neighbors) do
-				if not neighbor:NearOther(oceanIndex, "oceanIndex") then
-					if not chosen[neighbor] then
-						if neighbor.maxY > polygon.maxY then
-							tInsert(upNeighbors, neighbor)
-						else
-							tInsert(downNeighbors, neighbor)
-						end
-					end
+		end
+		if polygon == targetPoly then
+			EchoDebug("target polygon found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+			break
+		end
+		local bestNeigh
+		local bestDist
+		local neighsByDist = {}
+		local betterNeighs = {}
+		local myDist = self:WrapDistance(polygon.x, polygon.y, targetPoly.x, targetPoly.y)
+		for ni, neighbor in pairs(polygon.neighbors) do
+			if not chosen[neighbor] then
+				local dist = self:WrapDistance(neighbor.x, neighbor.y, targetPoly.x, targetPoly.y)
+				neighsByDist[dist] = neighsByDist[dist] or {}
+				tInsert(neighsByDist[dist], neighbor)
+				if not bestDist or dist < bestDist then
+					bestDist = dist
+					bestNeigh = neighbor
+				end
+				if dist < myDist then
+					tInsert(betterNeighs, neighbor)
 				end
 			end
-			if #upNeighbors == 0 then
-				if #downNeighbors == 0 then
-					if #polygon.neighbors == 0 then
-						EchoDebug("no neighbors!, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
-						break
+		end
+		if #betterNeighs == 0 then
+			EchoDebug("no neighbors closer to target, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+			break
+		end
+		if #neighsByDist[bestDist] > 1 then
+			bestNeigh = tGetRandom(neighsByDist[bestDist])
+		end
+		polygon = bestNeigh or tGetRandom(betterNeighs)
+		iterations = iterations + 1
+	end
+	return ocean
+end
+
+function Space:PickOceanBottomToTop(x, oceanIndex)
+	local polygon = self:GetPolygonByXY(x, 0)
+	local ocean = {}
+	local iterations = 0
+	local chosen = {}
+	while self.nonOceanPolygons > self.minNonOceanPolygons do
+		chosen[polygon] = true
+		polygon.oceanIndex = oceanIndex
+		tInsert(ocean, polygon)
+		self.nonOceanArea = self.nonOceanArea - #polygon.hexes
+		self.nonOceanPolygons = self.nonOceanPolygons - 1
+		if polygon.topY then
+				EchoDebug("topY found, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+				break
+		end
+		local upNeighbors = {}
+		local downNeighbors = {}
+		for ni, neighbor in pairs(polygon.neighbors) do
+			if not neighbor:NearOther(oceanIndex, "oceanIndex") then
+				if not chosen[neighbor] then
+					if neighbor.maxY > polygon.maxY then
+						tInsert(upNeighbors, neighbor)
 					else
-						upNeighbors = polygon.neighbors
+						tInsert(downNeighbors, neighbor)
 					end
-				else
-					upNeighbors = downNeighbors
 				end
 			end
-			local highestNeigh
-			if #self.oceans == 0 or self.oceanNumber ~= 2 then
-				local highestY = 0
-				local neighsByY = {}
-				for ni, neighbor in pairs(upNeighbors) do
-					neighsByY[neighbor.y] = neighsByY[neighbor.y] or {}
-					tInsert(neighsByY[neighbor.y], neighbor)
-					if neighbor.y > highestY then
-						highestY = neighbor.y
-						highestNeigh = neighbor
-					end
-				end
-				if #neighsByY[highestY] > 1 then
-					highestNeigh = tRemoveRandom(neighsByY[highestY])
+		end
+		if #upNeighbors == 0 then
+			if #downNeighbors == 0 then
+				if #polygon.neighbors == 0 then
+					EchoDebug("no neighbors!, stopping ocean #" .. oceanIndex .. " at " .. iterations .. " iterations")
+					break
+				else
+					upNeighbors = polygon.neighbors
 				end
 			else
-				local highestDist = 0
-				local neighsByDist = {}
-				for ni, neighbor in pairs(upNeighbors) do
-					local totalDist = 0
-					for oi, ocea in pairs(self.oceans) do
-						for pi, poly in pairs(ocea) do
-							local dist = self:HexDistance(neighbor.x, neighbor.y, poly.x, poly.y)
-							totalDist = totalDist + dist
-						end
-					end
-					neighsByDist[totalDist] = neighsByDist[totalDist] or {}
-					tInsert(neighsByDist[totalDist], neighbor)
-					if totalDist > highestDist then
-						highestDist = totalDist
-						highestNeigh = neighbor
-					end
-				end
-				if #neighsByDist[highestDist] > 1 then
-					highestNeigh = tRemoveRandom(neighsByDist[highestDist])
+				upNeighbors = downNeighbors
+			end
+		end
+		local highestNeigh
+		if #self.oceans == 0 or self.oceanNumber ~= 2 then
+			local highestY = 0
+			local neighsByY = {}
+			for ni, neighbor in pairs(upNeighbors) do
+				neighsByY[neighbor.y] = neighsByY[neighbor.y] or {}
+				tInsert(neighsByY[neighbor.y], neighbor)
+				if neighbor.y > highestY then
+					highestY = neighbor.y
+					highestNeigh = neighbor
 				end
 			end
-			polygon = highestNeigh or tGetRandom(upNeighbors)
-			iterations = iterations + 1
+			if #neighsByY[highestY] > 1 then
+				highestNeigh = tRemoveRandom(neighsByY[highestY])
+			end
+		else
+			local highestDist = 0
+			local neighsByDist = {}
+			for ni, neighbor in pairs(upNeighbors) do
+				local totalDist = 0
+				for oi, ocea in pairs(self.oceans) do
+					for pi, poly in pairs(ocea) do
+						local dist = self:HexDistance(neighbor.x, neighbor.y, poly.x, poly.y)
+						totalDist = totalDist + dist
+					end
+				end
+				neighsByDist[totalDist] = neighsByDist[totalDist] or {}
+				tInsert(neighsByDist[totalDist], neighbor)
+				if totalDist > highestDist then
+					highestDist = totalDist
+					highestNeigh = neighbor
+				end
+			end
+			if #neighsByDist[highestDist] > 1 then
+				highestNeigh = tGetRandom(neighsByDist[highestDist])
+			end
 		end
-		if #ocean > 0 then
-			tInsert(self.oceans, ocean)
-		end
-		x = mCeil(x + div) % self.w
+		polygon = highestNeigh or tGetRandom(upNeighbors)
+		iterations = iterations + 1
 	end
+	return ocean
 end
 
 function Space:PickOceansRectangle()
@@ -5296,6 +5416,16 @@ function Space:HexDistance(x1, y1, x2, y2)
 		end
 	end
 	return (xdist + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
+end
+
+function Space:GetPolygonByXY(x, y)
+	local hex = self:GetHexByXY(x, y)
+	return hex.polygon
+end
+
+function Space:GetSubPolygonByXY(x, y)
+	local hex = self:GetHexByXY()
+	return hex.subPolygon
 end
 
 function Space:GetHexByXY(x, y)
