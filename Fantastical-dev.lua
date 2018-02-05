@@ -561,44 +561,6 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	-- { name = "World Type", keys = { "wrapX", "inlandSeasMax", "useMapLatitudes", "polarMaxLandRatio" }, default = 1,
-	-- values = {
-	-- 		[1] = { name = "Globe (Wraps East-West)", values = {true, 2, false, 0.15} },
-	-- 		[2] = { name = "Realm (Does Not Wrap)", values = {false, 1, false, 0.15} },
-	-- 		[3] = { name = "Realistic Globe", values = {true, 2, true, 0.15} },
-	-- 		[4] = { name = "Realistic Realm", values = {false, 1, true, 0.15} },
-	-- 		[5] = { name = "Globe w/o Polar Land", values = {true, 2, false, 0.0} },
-	-- 		[6] = { name = "Realistic Globe w/o Polar Land", values = {true, 2, true, 0.0} },
-	-- 	}
-	-- },
-	-- { name = "Oceans", keys = { "oceanNumber", }, default = 4,
-	-- values = {
-	-- 		[1] = { name = "No Oceans", values = {-1} },
-	-- 		[2] = { name = "No Major Oceans", values = {0} },
-	-- 		[3] = { name = "One", values = {1} },
-	-- 		[4] = { name = "Two", values = {2} },
-	-- 		[5] = { name = "Three", values = {3} },
-	-- 		[6] = { name = "Four", values = {4} },
-	-- 		[7] = { name = "Random", values = "keys" },
-	-- 	}
-	-- },
-	-- { name = "Continents/Ocean", keys = { "majorContinentNumber", }, default = 1,
-	-- values = {
-	-- 		[1] = { name = "One", values = {1} },
-	-- 		[2] = { name = "Two", values = {2} },
-	-- 		[3] = { name = "Three", values = {3} },
-	-- 		[4] = { name = "Four", values = {4} },
-	-- 		[5] = { name = "Random", values = "keys" },
-	-- 	}
-	-- },
-	-- { name = "Islands", keys = { "tinyIslandChance", "coastalPolygonChance", "islandRatio", }, default = 2,
-	-- values = {
-	-- 		[1] = { name = "Few", values = {15, 1, 0.2} },
-	-- 		[2] = { name = "Some", values = {40, 2, 0.4} },
-	-- 		[3] = { name = "Many", values = {80, 3, 0.8} },
-	-- 		[4] = { name = "Random", values = "keys" },
-	-- 	}
-	-- },
 	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 8,
 	values = {
 			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0} },
@@ -635,6 +597,13 @@ local OptionDictionary = {
 	-- 		[6] = { name = "Random", values = "keys" },
 	-- 	}
 	-- },
+	{ name = "Land at Poles", keys = { "polarMaxLandRatio" }, default = 1,
+	values = {
+			[1] = { name = "Yes", values = {0.15} },
+			[2] = { name = "No", values = {0} },
+			[3] = { name = "Random", values = "keys" },
+ 		}
+	},
 	{ name = "Granularity", keys = { "polygonCount" }, default = 3,
 	values = {
 			[1] = { name = "Very Low", values = {100} },
@@ -687,15 +656,15 @@ local OptionDictionary = {
 			[8] = { name = "Random", values = "values", lowValues = {15}, highValues = {62} },
 		}
 	},
-	{ name = "Eschaton Age", keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic", "ancientCitiesCount" }, default = 1,
+	{ name = "Doomsday Age", keys = { "falloutEnabled", "contaminatedWater", "contaminatedSoil", "postApocalyptic", "ancientCitiesCount" }, default = 1,
 	values = {
-			[1] = { name = "Not Yet", values = {false, false, false, false, 0} },
-			[2] = { name = "Legend", values = {false, false, false, false, 4} },
-			[3] = { name = "The Stories, They're True", values = {false, false, false, true, 4} },
-			[4] = { name = "Memory", values = {true, false, false, true, 4} },
-			[5] = { name = "A Long While", values = {true, false, true, true, 4} },
-			[6] = { name = "A While", values = {true, true, false, true, 4} },
-			[7] = { name = "Yesterday", values = {true, true, true, true, 4} },
+			[1] = { name = "Not Yet (No Ruins or Roads)", values = {false, false, false, false, 0} },
+			[2] = { name = "Legend (Ruins & Roads)", values = {false, false, false, false, 4} },
+			[3] = { name = "History (Fallout around Ruins)", values = {false, false, false, true, 4} },
+			[4] = { name = "Memory (More Fallout)", values = {true, false, false, true, 4} },
+			[5] = { name = "A Long While (Fallout in Mountains)", values = {true, false, true, true, 4} },
+			[6] = { name = "A While (Fallout in Rivers)", values = {true, true, false, true, 4} },
+			[7] = { name = "Yesterday (Fallout Everywhere)", values = {true, true, true, true, 4} },
 			[8] = { name = "Random", values = "keys" },
 		}
 	},
@@ -1554,6 +1523,12 @@ function Polygon:CheckBottomTop(hex)
 		self.topX = true
 		if not self.superPolygon then tInsert(space.topXPolygons, self) end
 	end
+	if y == 1 and self.y < space.halfHeight then
+		self.betaBottomY = true
+	end
+	if y == space.h-1 and self.y >= space.halfHeight then
+		self.betaTopY = true
+	end
 	if self.space.useMapLatitudes and self.space.polarExponent >= 1.0 and hex.latitude > 89 then
 		self.polar = true
 	end
@@ -2052,7 +2027,7 @@ function Region:Fill()
 				repeat
 					-- EchoDebug(i, spi, "looking for polar subcoll")
 					subCollection = tRemoveRandom(subCollectionBuffer)
-				until subPolygon.polar == subCollection.polar
+				until #subCollectionBuffer == 0 or subPolygon.polar == subCollection.polar
 			end
 			if subCollection.lake then
 				local doNotLake = subPolygon.topY or subPolygon.bottomY or ((subPolygon.topX or subPolygon.bottomX) and not self.space.wrapX)
@@ -2182,7 +2157,7 @@ end
 Space = class(function(a)
 	-- CONFIGURATION: --
 	a.wrapX = true -- globe wraps horizontally?
-	a.wrapY = false -- globe wraps vertically?
+	a.wrapY = false -- globe wraps vertically? (not possible, but this remains hopeful)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
@@ -2555,7 +2530,7 @@ function Space:Compute()
 			FeatureDictionary[featureFallout].points = {{t=self:GetTemperature(l),r=self:GetRainfall(l)}}
 	    end
 	end
-    -- if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
+    if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     -- self:PrintClimate()
     self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
@@ -3622,7 +3597,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			local polarCandidates = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 100 then
-					local nearPole = neighbor:NearOther(nil, "topY") or neighbor:NearOther(nil, "bottomY")
+					local nearPole = neighbor.betaBottomY or neighbor.betaTopY
 					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY or (self.noContinentsNearPoles and nearPole)) then
 						tInsert(polarCandidates, neighbor)
 					else
