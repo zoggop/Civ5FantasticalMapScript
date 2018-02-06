@@ -561,7 +561,7 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 8,
+	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber" }, default = 8,
 	values = {
 			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0} },
 			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02} },
@@ -573,7 +573,7 @@ local OptionDictionary = {
 			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065} },
 			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065} },
 			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065} },
-			[11] = { name = "Lonely Oceans", values = {true, 0.15, 6, 12, 100, 2, 0.8, 0.02, 0, 0.0065} },
+			[11] = { name = "Lonely Oceans", values = {true, 0.15, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
 			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
 			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
 			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02} },
@@ -1266,6 +1266,8 @@ end
 
 function Hex:SetFeature()
 	-- if self.polygon.oceanIndex then self.featureType = featureAtoll end -- uncomment to debug ocean rifts
+	-- if self.polygon.astronomyBlob then self.featureType = featureFallout end -- uncomment to debug astronomy blobs
+	-- if self.polygon.astronomyIndex < 100 then self.featureType = featureReef end -- uncomment to debug astronomy basins
 	if self.featureType == nil then return end
 	if self.plot == nil then return end
 	if self.plotType == plotMountain then
@@ -2276,6 +2278,9 @@ Space = class(function(a)
 	a.subPolygonFlopPercent = 25 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
+	a.astronomyBlobNumber = 0
+	a.astronomyBlobMinPolygons = 10
+	a.astronomyBlobMaxPolygons = 20
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.15 -- how much of the land in each astronomy basin can be at the poles
@@ -2386,7 +2391,13 @@ function Space:SetOptions(optDict)
 		end
  		for valueNumber, key in ipairs(option.keys) do
 			EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
-			self[key] = option.values[optionChoice].values[valueNumber]
+			local val = option.values[optionChoice].values[valueNumber]
+			if val == nil then
+				if type(self[key]) == "number" then
+					val = 0
+				end
+			end
+			self[key] = val
 		end
 	end
 end
@@ -3370,22 +3381,14 @@ function Space:PickOceans()
 	elseif self.wrapY and not self.wrapX then
 		print("why have a vertically wrapped map?")
 	end
+	if self.astronomyBlobNumber > 0 then
+		self:PickOceansAstronomyBlobs()
+	end
 	EchoDebug(#self.oceans .. " oceans")
 end
 
 function Space:PickOceansCylinder()
 	local xDiv = self.w / mMin(3, self.oceanNumber)
-	-- local xs = { {x=0, algo=1} }
-	-- if self.oceanNumber % 2 == 0 then
-	-- 	tInsert(xs, {x=50, algo=2})
-	-- 	if self.oceanNumber > 2 then
-	-- 		for o = 3, self.oceanNumber do
-
-	-- 		end
-	-- 	end
-	-- else
-
-	-- end
 	local x = 0
 	local horizOceans = self.oceanNumber - 3
 	local rows = mCeil(horizOceans / 3)
@@ -3763,6 +3766,60 @@ end
 
 function Space:InterpretPosition(position)
 	return { x = mFloor(position[1] * self.w), y = mFloor(position[2] * self.h) }
+end
+
+function Space:PickOceansAstronomyBlobs()
+	local polygonBuffer = tDuplicate(self.polygons)
+	local astronomyBlobCount = 0
+	while #polygonBuffer > 0 and astronomyBlobCount < self.astronomyBlobNumber do
+		local size = mRandom(self.astronomyBlobMinPolygons, self.astronomyBlobMaxPolygons)
+		local polygon
+		repeat
+			polygon = tRemoveRandom(polygonBuffer)
+		until not polygon.oceanIndex or #polygonBuffer == 0
+		local blob = { polygon }
+		polygon.astronomyBlob = blob
+		while #blob < size do
+			local candidateCount = 0
+			local candidatesByFriendlyCount = {}
+			local bestFriendlyCount = 0
+			for i, neighbor in pairs(polygon.neighbors) do
+				if not neighbor.oceanIndex and not neighbor.astronomyBlob then
+					local friendlyCount = 0
+					for ii, neighNeigh in pairs(neighbor.neighbors) do
+						if neighNeigh.astronomyBlob == blob then
+							friendlyCount = friendlyCount + 1
+						end
+					end
+					if friendlyCount > bestFriendlyCount then
+						bestFriendlyCount = friendlyCount
+					end
+					candidatesByFriendlyCount[friendlyCount] = candidatesByFriendlyCount[friendlyCount] or {}
+					tInsert(candidatesByFriendlyCount[friendlyCount], neighbor)
+					candidateCount = candidateCount + 1
+				end
+			end
+			if candidateCount == 0 then break end
+			polygon = tGetRandom(candidatesByFriendlyCount[bestFriendlyCount])
+			tInsert(blob, polygon)
+			polygon.astronomyBlob = blob
+		end
+		local oceanIndex = #self.oceans + 1
+		local ocean = {}
+		for i, poly in pairs(blob) do
+			for ii, neighbor in pairs(poly.neighbors) do
+				if not neighbor.astronomyBlob and not neighbor.oceanIndex then
+					neighbor.oceanIndex = oceanIndex
+					tInsert(ocean, neighbor)
+				end
+			end
+		end
+		if #ocean > 0 then
+			tInsert(self.oceans, ocean)
+		end
+		astronomyBlobCount = astronomyBlobCount + 1
+		EchoDebug("astronomy blob of " .. #blob .. " polygons with ocean #" .. oceanIndex .. " of " .. #ocean .. " polygons")
+	end
 end
 
 function Space:FindAstronomyBasins()
