@@ -1343,6 +1343,114 @@ function Hex:Locate()
 	return self.x .. ", " .. self.y
 end
 
+function Hex:CanBeReef()
+	if self.polygon.continent then return end
+	if self.polygon.oceanIndex then return end
+	if self.y == 0 or self.y == self.space.h then return end
+	if not self.space.wrapX and (self.x == 0 or self.x == self.space.w) then return end
+	if self.terrainType ~= terrainCoast and self.terrainType ~= terrainOcean then
+		return
+	end
+	if self.featureType == featureIce then return end
+	if self.polygon.oceanTemperature and self.polygon.oceanTemperature < self.space.avgOceanTemp * 0.8 then return end
+	local coastCount = 0
+	for i, neighHex in pairs(self:Neighbors()) do
+		if neighHex.polygon.continent then return end
+		if neighHex.polygon.oceanIndex then return end
+		if neighHex.plot:GetFeatureType() >= 7 then return end -- next to a wonder 
+		if neighHex.terrainType ~= terrainCoast and neighHex.terrainType ~= terrainOcean then
+			return
+		end
+		if neighHex.featureType == featureIce then return end
+		if neighHex.terrainType == terrainCoast then
+			coastCount = coastCount + 1
+		end
+	end
+	if coastCount < 3 then return end
+	local secondReefHexes = {}
+	local landCount = 0
+	for i, neighHex in pairs(self:Neighbors()) do
+		local okay = true
+		for ii, nnHex in pairs(neighHex:Neighbors()) do
+			if nnHex ~= self then
+				if nnHex.terrainType ~= terrainOcean and nnHex.terrainType ~= terrainCoast then
+					landCount = landCount + 1
+				end
+				if nnHex.polygon.continent or (nnHex.terrainType ~= terrainCoast and nnHex.terrainType ~= terrainOcean) or nnHex.featureType == featureIce then
+					okay = false
+				end
+			end
+		end
+		if okay then
+			tInsert(secondReefHexes, neighHex)
+		end
+	end
+	if landCount == 0 then return end
+	if #secondReefHexes == 0 then return end
+	EchoDebug("found place for reef", self:Locate())
+	return tGetRandom(secondReefHexes)
+end
+
+function Hex:CanBeVolcano()
+	if self.polygon.continent then return end
+	if self.polygon.oceanIndex then return end
+	if self.y == 0 or self.y == self.space.h then return end
+	if not self.space.wrapX and (self.x == 0 or self.x == self.space.w) then return end
+	if self.terrainType ~= terrainCoast and self.terrainType ~= terrainGrass and self.terrainType ~= terrainOcean then
+		return
+	end
+	if self.featureType == featureIce then return end
+	if self.polygon.oceanTemperature and self.polygon.oceanTemperature < self.space.avgOceanTemp * 0.8 then return end
+	for i, neighHex in pairs(self:Neighbors()) do
+		if neighHex.polygon.continent then return end
+		if neighHex.polygon.oceanIndex then return end
+		if neighHex.plot:GetFeatureType() >= 7 then return end -- next to a wonder 
+		if neighHex.terrainType ~= terrainCoast and neighHex.terrainType ~= terrainOcean then
+			return
+		end
+		if neighHex.featureType == featureIce then return end
+	end
+	EchoDebug("found place for krakatoa", self:Locate())
+	return true
+end
+
+function Hex:PlaceNaturalWonder(featureType, pairedHex)
+	if featureType == featureVolcano then
+		self.terrainType = terrainGrass
+		self.plot:SetTerrainType(terrainGrass)
+		for i, neighHex in pairs(self:Neighbors()) do
+			neighHex.terrainType = terrainCoast
+			neighHex.plot:SetTerrainType(terrainCoast)
+		end
+	elseif featureType == featureReef then
+		self.terrainType = terrainCoast
+		self.plot:SetTerrainType(terrainCoast)
+		pairedHex.terrainType = terrainCoast
+		pairedHex.plot:SetTerrainType(terrainCoast)
+		pairedHex.featureType = featureType
+		pairedHex.plot:SetFeatureType(featureType)
+	end
+	self.featureType = featureType
+	self.plot:SetFeatureType(featureType)
+end
+
+function Hex:PlaceNaturalWonderPossibly(featureType)
+	if self.y == 0 or self.y == self.space.h then return end
+	if not self.space.wrapX and (self.x == 0 or self.x == self.space.w) then return end
+	if self.plot:GetFeatureType() >= 7 then return end -- it's already a natural wonder
+	if self.plot:GetResourceType(-1) ~= -1 then return end -- it has resources on it
+	local placeIt = false
+	if featureType == featureReef then
+		placeIt = self:CanBeReef()
+	elseif featureType == featureVolcano then
+		placeIt = self:CanBeVolcano()
+	end
+	if placeIt then
+		self:PlaceNaturalWonder(featureType, placeIt)
+		return true
+	end
+end
+
 ------------------------------------------------------------------------------
 
 Polygon = class(function(a, space, x, y)
@@ -2992,26 +3100,53 @@ function Space:RemoveBadNaturalWonders()
 end
 
 function Space:RemoveBadlyPlacedNaturalWonders()
+	local removedWonders = {}
 	for i, hex in pairs(self.hexes) do
 		local featureType = hex.plot:GetFeatureType()
 		local removeWonder = false
+		local removeFromHereAlso
 		if featureType == featureVolcano or featureType == featureReef then
-			EchoDebug("found volcano or reef")
-			-- krakatoa and reefs sometime form an astronomy basins leak
+			-- krakatoa and reefs sometime form an astronomy basin leak
 			if hex.polygon.oceanIndex then
 				removeWonder = true
-				hex:SetTerrain()
 			end
 			for ii, neighHex in pairs(hex:Neighbors()) do
 				if neighHex.polygon.oceanIndex then
 					removeWonder = true
-					neighHex:SetTerrain()
+				end
+				if featureType == featureReef and neighHex.plot:GetFeatureType() == featureReef then
+					removeFromHereAlso = neighHex
 				end
 			end
 		end
 		if removeWonder then
-			EchoDebug("removing volcano or reef")
+			EchoDebug("removing volcano or reef", featureType)
+			tInsert(removedWonders, featureType)
 			hex.plot:SetFeatureType(featureNone)
+			hex:SetTerrain()
+			if removeFromHereAlso then
+				removeFromHereAlso.plot:SetFeatureType(featureNone)
+				removeFromHereAlso:SetTerrain()
+				for ii, neighHex in pairs(removeFromHereAlso:Neighbors()) do
+					neighHex:SetTerrain()
+				end
+			end
+			for ii, neighHex in pairs(hex:Neighbors()) do
+				neighHex:SetTerrain()
+			end
+		end
+	end
+	-- tInsert(removedWonders, featureVolcano); tInsert(removedWonders, featureReef) -- uncomment to test removed wonder replacer
+	if #removedWonders == 0 then return end
+	-- find new places for removed wonders
+	local hexBuffer = tDuplicate(self.hexes)
+	while #hexBuffer > 0 do
+		local hex = tRemoveRandom(hexBuffer)
+		for wi = #removedWonders, 1, -1 do
+			local featureType = removedWonders[wi]
+			if hex:PlaceNaturalWonderPossibly(featureType) then
+				tRemove(removedWonders, wi)
+			end
 		end
 	end
 end
