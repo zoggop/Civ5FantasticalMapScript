@@ -573,7 +573,7 @@ local OptionDictionary = {
 			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
 			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
 			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 100, 3, 0.75, 0.02, 1, 0.0065} },
-			[11] = { name = "Lonely Oceans", values = {true, 0.15, 6, 12, 100, 3, 0.8, 0.02, 0, 0.0065} },
+			[11] = { name = "Lonely Oceans", values = {true, 0.15, 6, 12, 100, 2, 0.8, 0.02, 0, 0.0065} },
 			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
 			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
 			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
@@ -859,6 +859,9 @@ local function SetConstants()
 	featureOasis = FeatureTypes.FEATURE_OASIS
 	featureFloodPlains = FeatureTypes.FEATURE_FLOOD_PLAINS
 	featureFallout = FeatureTypes.FEATURE_FALLOUT
+
+	featureVolcano = 11 -- FeatureTypes.FEATURE_VOLCANO
+	featureReef = 10 -- FeatureTypes.FEATURE_REEF
 
 	for thisFeature in GameInfo.Features() do
 		if thisFeature.Type == "FEATURE_ATOLL" then
@@ -1577,16 +1580,18 @@ end
 function Polygon:PickTinyIslands()
 	if (self.bottomX or self.topX) and self.oceanIndex and not self.space.wrapX then return end
 	if (self.bottomY or self.topY) and self.oceanIndex and not self.space.wrapX then return end
-	for i, subPolygon in pairs(self.subPolygons) do
-		local tooCloseForIsland = false
+	local subPolyBuffer = tDuplicate(self.subPolygons)
+	while #subPolyBuffer > 0 do
+		local subPolygon = tRemoveRandom(subPolyBuffer)
+		local tooCloseForIsland = self.space.wrapX and (subPolygon.bottomY or subPolygon.topY) and mRandom(0, 100) > self.space.polarMaxLandPercent
 		if not tooCloseForIsland then
 			for i, neighbor in pairs(subPolygon.neighbors) do
-				if neighbor.superPolygon.continent or self.oceanIndex ~= neighbor.superPolygon.oceanIndex or neighbor.tinyIsland then
+				if neighbor.superPolygon.oceanIndex ~= self.oceanIndex or neighbor.tinyIsland or neighbor.superPolygon.continent then
 					tooCloseForIsland = true
 					break
 				end
 				for nn, neighneigh in pairs(neighbor.neighbors) do
-					if self.oceanIndex ~= neighneigh.superPolygon.oceanIndex then
+					if neighneigh.superPolygon.oceanIndex ~= self.oceanIndex then
 						tooCloseForIsland = true
 						break
 					end
@@ -1596,9 +1601,7 @@ function Polygon:PickTinyIslands()
 		end
 		local chance = self.space.tinyIslandChance
 		if self.oceanIndex or self.loneCoastal then chance = chance * 2 end
-		-- or ((self.loneCoastal or self.oceanIndex) and not self.hasTinyIslands)) )
 		if not tooCloseForIsland and Map.Rand(100, "tiny island chance") < chance then
-			-- EchoDebug("tiny island", "chance: " .. chance, "lone coastal: " .. tostring(self.loneCoastal), "is ocean: " .. tostring(self.oceanIndex), "has tiny islands: " .. tostring(self.hasTinyIslands))
 			subPolygon.tinyIsland = true
 			tInsert(self.space.tinyIslandSubPolygons, subPolygon)
 			self.hasTinyIslands = true
@@ -2162,7 +2165,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 33 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
@@ -2988,6 +2991,31 @@ function Space:RemoveBadNaturalWonders()
 	end
 end
 
+function Space:RemoveBadlyPlacedNaturalWonders()
+	for i, hex in pairs(self.hexes) do
+		local featureType = hex.plot:GetFeatureType()
+		local removeWonder = false
+		if featureType == featureVolcano or featureType == featureReef then
+			EchoDebug("found volcano or reef")
+			-- krakatoa and reefs sometime form an astronomy basins leak
+			if hex.polygon.oceanIndex then
+				removeWonder = true
+				hex:SetTerrain()
+			end
+			for ii, neighHex in pairs(hex:Neighbors()) do
+				if neighHex.polygon.oceanIndex then
+					removeWonder = true
+					neighHex:SetTerrain()
+				end
+			end
+		end
+		if removeWonder then
+			EchoDebug("removing volcano or reef")
+			hex.plot:SetFeatureType(featureNone)
+		end
+	end
+end
+
 function Space:SetPlots()
 	for i, hex in pairs(self.hexes) do
 		hex:SetPlot()
@@ -3213,7 +3241,7 @@ end
 function Space:PickOceansCylinder()
 	local xDiv = self.w / mMin(3, self.oceanNumber)
 	-- local xs = { {x=0, algo=1} }
-	-- if self.oceanNumber % 2 = 0 then
+	-- if self.oceanNumber % 2 == 0 then
 	-- 	tInsert(xs, {x=50, algo=2})
 	-- 	if self.oceanNumber > 2 then
 	-- 		for o = 3, self.oceanNumber do
@@ -5132,15 +5160,10 @@ function Space:PickCoasts()
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
-				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
-					polygon:PickTinyIslands()
-					tInsert(self.tinyIslandPolygons, polygon)
-				end
-			elseif polygon.oceanIndex or polygon.sea then
-				if not self.wrapX or (not polygon.bottomY and not polygon.topY) or mRandom(0, 100) < self.polarMaxLandPercent then
-					polygon:PickTinyIslands()
-					tInsert(self.tinyIslandPolygons, polygon)
-				end
+			end
+			polygon:PickTinyIslands()
+			if polygon.hasTinyIslands then
+				tInsert(self.tinyIslandPolygons, polygon)
 			end
 		end
 	end
@@ -5563,6 +5586,8 @@ function DetermineContinents()
 	else
 		EchoDebug("using default continent stamper...")
 		Map.DefaultContinentStamper()
+		EchoDebug("removing badly placed natural wonders...")
+		mySpace:RemoveBadlyPlacedNaturalWonders()
 	end
 end
 
@@ -5613,93 +5638,4 @@ function AddGoodies()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-end
-
--------------------------------------------------------------------------------
-
--- THE STUFF BELOW NEVER GETS CALLED, FOR REASONS I DON'T UNDERSTAND
-
-function AssignStartingPlots:CanBeReef(x, y)
-	-- Checks a candidate plot for eligibility to be the Great Barrier Reef.
-	local iW, iH = Map.GetGridSize();
-	local plotIndex = y * iW + x + 1;
-	-- We don't care about the center plot for this wonder. It can be forced. It's the surrounding plots that matter.
-	-- This is also the only natural wonder type with a footprint larger than seven tiles.
-	-- So first we'll check the extra tiles, make sure they are there, are ocean water, and have no Ice.
-	local iNumCoast = 0;
-	local extra_direction_types = {
-		DirectionTypes.DIRECTION_EAST,
-		DirectionTypes.DIRECTION_SOUTHEAST,
-		DirectionTypes.DIRECTION_SOUTHWEST};
-	local SEPlot = Map.PlotDirection(x, y, DirectionTypes.DIRECTION_SOUTHEAST)
-	local southeastX = SEPlot:GetX();
-	local southeastY = SEPlot:GetY();
-	for loop, direction in ipairs(extra_direction_types) do -- The three plots extending another plot past the SE plot.
-		local adjPlot = Map.PlotDirection(southeastX, southeastY, direction)
-		if adjPlot == nil then
-			return
-		end
-		if adjPlot:IsWater() == false or adjPlot:IsLake() == true then
-			return
-		end
-		local featureType = adjPlot:GetFeatureType()
-		if featureType == featureIce then
-			return
-		end
-		local hex = Space.hexes[plotIndex+1]
-		if hex.oceanIndex then
-			return
-		end
-		local terrainType = adjPlot:GetTerrainType()
-		if terrainType == terrainCoast then
-			iNumCoast = iNumCoast + 1;
-		end
-	end
-	-- Now check the rest of the adjacent plots.
-	local direction_types = { -- Not checking to southeast.
-		DirectionTypes.DIRECTION_NORTHEAST,
-		DirectionTypes.DIRECTION_EAST,
-		DirectionTypes.DIRECTION_SOUTHWEST,
-		DirectionTypes.DIRECTION_WEST,
-		DirectionTypes.DIRECTION_NORTHWEST
-		};
-	for loop, direction in ipairs(direction_types) do
-		local adjPlot = Map.PlotDirection(x, y, direction)
-		if adjPlot:IsWater() == false then
-			return
-		end
-		local hex = Space.hexes[plotIndex+1]
-		if hex.oceanIndex then
-			return
-		end
-		local terrainType = adjPlot:GetTerrainType()
-		if terrainType == terrainCoast then
-			iNumCoast = iNumCoast + 1;
-		end
-	end
-	-- If not enough coasts, reject this site.
-	if iNumCoast < 6 then
-		return
-	end
-	-- This site is in the water, with at least some of the water plots being coast, so it's good.
-	table.insert(self.reef_list, plotIndex);
-end
-
-function AssignStartingPlots:CanBeKrakatoa(x, y)
-	-- Checks a candidate plot for eligibility to be Krakatoa the volcano.
-	local plot = Map.GetPlot(x, y)
-	-- Check the center plot, which must be land surrounded on all sides by coast. (edited for fantastical)
-	if plot:IsWater() then return end
-
-	for loop, direction in ipairs(self.direction_types) do
-		local adjPlot = Map.PlotDirection(x, y, direction)
-		if not adjPlot:IsWater() or adjPlot:GetTerrainType() ~= terrainCoast or adjPlot:GetFeatureType() == featureIce then
-			return
-		end
-	end
-	
-	-- Surrounding tiles are all ocean water, not lake, and free of Feature Ice, so it's good.
-	local iW, iH = Map.GetGridSize();
-	local plotIndex = y * iW + x + 1;
-	table.insert(self.krakatoa_list, plotIndex);
 end
