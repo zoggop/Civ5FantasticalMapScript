@@ -564,26 +564,26 @@ local OptionDictionary = {
 	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio" }, default = 8,
 	values = {
 			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0} },
-			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
-			[3] = { name = "Inland Seas", values = {true, 0.15, -1, 1, 5, 1, 0, 0.05, 2, 0.015} },
-			[4] = { name = "Inland Sea", values = {true, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
-			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
-			[6] = { name = "Archipelago", values = {true, 0, 0, 6, 80, 3, 0.8, 0.02, 1, 0.0065} },
-			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 67, 3, 0.3, 0.02, 1, 0.0065} },
-			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 40, 2, 0.4, 0.02, 1, 0.0065} },
-			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 40, 2, 0.4, 0.02, 1, 0.0065} },
-			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 100, 3, 0.75, 0.02, 1, 0.0065} },
+			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02} },
+			[3] = { name = "Inland Seas", values = {true, 0.15, -1, 1, 8, 1, 0, 0.04, 3, 0.015} },
+			[4] = { name = "Inland Sea", values = {true, 0.15, -1, 1, 3, 1, 0, 0.4, 1, 0.0065} },
+			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065} },
+			[6] = { name = "Archipelago", values = {true, 0, 0, 7, 30, 3, 0.8, 0.02, 1, 0.0065} },
+			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 20, 3, 0.3, 0.02, 1, 0.0065} },
+			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065} },
+			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065} },
+			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065} },
 			[11] = { name = "Lonely Oceans", values = {true, 0.15, 6, 12, 100, 2, 0.8, 0.02, 0, 0.0065} },
 			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
 			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0} },
-			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 5, 1, 0, 0.025, 1, 0.02} },
-			[15] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 5, 1, 0, 0.05, 2, 0.015} },
-			[16] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 5, 1, 0, 0.4, 1, 0.0065} },
-			[17] = { name = "Estuary", values = {false, 0.15, 0, 3, 30, 1, 0.3, 0, 0, 0.0065} },
-			[18] = { name = "Coast", values = {false, 0.15, 2, 1, 30, 2, 0.3, 0.0, 0, 0.0065} },
-			[19] = { name = "Peninsula", values = {false, 0.15, 3, 1, 30, 2, 0.3, 0, 0, 0.0065} },
-			[20] = { name = "Continent", values = {false, 0.15, 4, 1, 100, 3, 0.2, 0.02, 1, 0.0065} },
-			[21] = { name = "Island Chain", values = {false, 0.15, 4, 7, 75, 3, 0.8, 0.02, 1, 0.0065} },
+			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02} },
+			[15] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 10, 1, 0, 0.04, 3, 0.015} },
+			[16] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 2, 1, 0, 0.4, 1, 0.0065} },
+			[17] = { name = "Estuary", values = {false, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065} },
+			[18] = { name = "Coast", values = {false, 0.15, 2, 1, 20, 2, 0.25, 0.0, 0, 0.0065} },
+			[19] = { name = "Peninsula", values = {false, 0.15, 3, 1, 25, 2, 0.25, 0, 0, 0.0065} },
+			[20] = { name = "Continent", values = {false, 0.15, 4, 1, 30, 3, 0.2, 0.02, 1, 0.0065} },
+			[21] = { name = "Island Chain", values = {false, 0.15, 4, 7, 30, 3, 0.8, 0.02, 1, 0.0065} },
 			[22] = { name = "Random Realm", values = "keys", randomKeys = {13, 14, 15, 16, 17, 18, 19, 20, 21} },
 		}
 	},
@@ -1694,12 +1694,12 @@ function Polygon:PickTinyIslands()
 		local tooCloseForIsland = self.space.wrapX and (subPolygon.bottomY or subPolygon.topY) and mRandom(0, 100) > self.space.polarMaxLandPercent
 		if not tooCloseForIsland then
 			for i, neighbor in pairs(subPolygon.neighbors) do
-				if neighbor.superPolygon.oceanIndex ~= self.oceanIndex or neighbor.tinyIsland or neighbor.superPolygon.continent then
+				if (neighbor.superPolygon.oceanIndex and not self.oceanIndex) or (not neighbor.superPolygon.oceanIndex and self.oceanIndex) or neighbor.tinyIsland or neighbor.superPolygon.continent then
 					tooCloseForIsland = true
 					break
 				end
 				for nn, neighneigh in pairs(neighbor.neighbors) do
-					if neighneigh.superPolygon.oceanIndex ~= self.oceanIndex then
+					if (neighneigh.superPolygon.oceanIndex and not self.oceanIndex) or (not neighneigh.superPolygon.oceanIndex and self.oceanIndex) then
 						tooCloseForIsland = true
 						break
 					end
@@ -2273,7 +2273,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 33 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 25 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
