@@ -561,7 +561,7 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons" }, default = 8,
+	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons" }, default = 9,
 	values = {
 			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
 			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
@@ -570,21 +570,22 @@ local OptionDictionary = {
 			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 1, 1, 1} },
 			[6] = { name = "Archipelago", values = {true, 0, 0, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 2, 1, 5} },
 			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 20, 3, 0.3, 0.02, 1, 0.0065, 1, 1, 1} },
-			[8] = { name = "Two Continents", values = {true, 0.1, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
-			[9] = { name = "Earthish", values = {true, 0.15, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
-			[10] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
-			[11] = { name = "Lonely Oceans", values = {true, 0.15, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
-			[12] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} },
-			[13] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
-			[14] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
-			[15] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 10, 1, 0, 0.04, 3, 0.015, 0} },
-			[16] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 2, 1, 0, 0.4, 1, 0.0065, 0} },
-			[17] = { name = "Estuary", values = {false, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 0} },
-			[18] = { name = "Coast", values = {false, 0.15, 2, 1, 20, 2, 0.25, 0.0, 0, 0.0065, 0} },
-			[19] = { name = "Peninsula", values = {false, 0.15, 3, 1, 25, 2, 0.25, 0, 0, 0.0065, 0} },
-			[20] = { name = "Continent", values = {false, 0.15, 4, 1, 30, 3, 0.2, 0.02, 1, 0.0065, 1, 1, 1} },
-			[21] = { name = "Island Chain", values = {false, 0.15, 4, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 3} },
-			[22] = { name = "Random Realm", values = "keys", randomKeys = {13, 14, 15, 16, 17, 18, 19, 20, 21} },
+			[8] = { name = "Centauri-like", values = {true, 0.00, 1, 3, 15, 2, 0.2, 0.03, 1, 0.0065, 0} },
+			[9] = { name = "Two Continents", values = {true, 0.1, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
+			[10] = { name = "Earthish", values = {true, 0.15, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
+			[11] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
+			[12] = { name = "Lonely Oceans", values = {true, 0.15, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
+			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
+			[14] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
+			[15] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
+			[16] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 10, 1, 0, 0.04, 3, 0.015, 0} },
+			[17] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 2, 1, 0, 0.4, 1, 0.0065, 0} },
+			[18] = { name = "Estuary", values = {false, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 0} },
+			[19] = { name = "Coast", values = {false, 0.15, 2, 1, 20, 2, 0.25, 0.0, 0, 0.0065, 0} },
+			[20] = { name = "Peninsula", values = {false, 0.15, 3, 1, 25, 2, 0.25, 0, 0, 0.0065, 0} },
+			[21] = { name = "Continent", values = {false, 0.15, 4, 1, 30, 3, 0.2, 0.02, 1, 0.0065, 1, 1, 1} },
+			[22] = { name = "Island Chain", values = {false, 0.15, 4, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 3} },
+			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
 		}
 	},
 	-- { name = "Inland Water Bodies", keys = { "inlandSeasMax", "inlandSeaContinentRatio", "lakeMinRatio" }, default = 2,
@@ -5667,10 +5668,9 @@ function GetMapScriptInfo()
 			local title = Modding.GetModProperty(v.ID, v.Version, "Name")
 			if title == "Alpha Centauri Maps" then
 				EchoDebug("Alpha Centauri Maps enabled, changing default map options...")
-				OptionDictionary[2].default = 3 -- one ocean
-				OptionDictionary[3].default = 3 -- three continents
-				OptionDictionary[7].default = 2 -- climate realism on
-				OptionDictionary[11].default = 1 -- ancient roads none
+				OptionDictionary[1].default = 8 -- centauri-like
+				OptionDictionary[2].default = 2 -- no land at poles
+				OptionDictionary[4].default = 2 -- climate realism on
 				break
 			end
 		end
