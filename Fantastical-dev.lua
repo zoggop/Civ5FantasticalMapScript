@@ -561,30 +561,30 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "polarMaxLandRatio", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons" }, default = 9,
+	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons" }, default = 9,
 	values = {
-			[1] = { name = "Land All Around", values = {true, 0.15, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
-			[2] = { name = "Lakes", values = {true, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
-			[3] = { name = "Inland Seas", values = {true, 0.15, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
-			[4] = { name = "Inland Sea", values = {true, 0.15, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
-			[5] = { name = "Low Seas", values = {true, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 1, 1, 1} },
-			[6] = { name = "Archipelago", values = {true, 0, 0, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 2, 1, 5} },
-			[7] = { name = "Pangaea", values = {true, 0.00, 1, 1, 20, 3, 0.3, 0.02, 1, 0.0065, 1, 1, 1} },
-			[8] = { name = "Centauri-like", values = {true, 0.00, 1, 3, 15, 2, 0.2, 0.03, 1, 0.0065, 0} },
-			[9] = { name = "Two Continents", values = {true, 0.1, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
-			[10] = { name = "Earthish", values = {true, 0.15, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
-			[11] = { name = "Earthseaish", values = {true, 0.1, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
-			[12] = { name = "Lonely Oceans", values = {true, 0.15, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
+			[1] = { name = "Land All Around", values = {true, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
+			[2] = { name = "Lakes", values = {true, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
+			[3] = { name = "Inland Seas", values = {true, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
+			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
+			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.2, 0, 0, 0.0065, 1, 1, 1} },
+			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 2, 1, 5} },
+			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 3, 0.3, 0.02, 1, 0.0065, 1, 1, 1} },
+			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 2, 0.25, 0.03, 1, 0.0065, 0} },
+			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
+			[10] = { name = "Earthish", values = {true, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
+			[11] = { name = "Earthseaish", values = {true, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
+			[12] = { name = "Lonely Oceans", values = {true, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
-			[14] = { name = "Dry Land", values = {false, 0.15, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
-			[15] = { name = "Landlocked Lakes", values = {false, 0.15, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
-			[16] = { name = "Landlocked Seas", values = {false, 0.15, -1, 1, 10, 1, 0, 0.04, 3, 0.015, 0} },
-			[17] = { name = "Landlocked Sea", values = {false, 0.15, -1, 1, 2, 1, 0, 0.4, 1, 0.0065, 0} },
-			[18] = { name = "Estuary", values = {false, 0.15, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 0} },
-			[19] = { name = "Coast", values = {false, 0.15, 2, 1, 20, 2, 0.25, 0.0, 0, 0.0065, 0} },
-			[20] = { name = "Peninsula", values = {false, 0.15, 3, 1, 25, 2, 0.25, 0, 0, 0.0065, 0} },
-			[21] = { name = "Continent", values = {false, 0.15, 4, 1, 30, 3, 0.2, 0.02, 1, 0.0065, 1, 1, 1} },
-			[22] = { name = "Island Chain", values = {false, 0.15, 4, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 3} },
+			[14] = { name = "Dry Land", values = {false, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
+			[15] = { name = "Landlocked Lakes", values = {false, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
+			[16] = { name = "Landlocked Seas", values = {false, -1, 1, 10, 1, 0, 0.04, 3, 0.015, 0} },
+			[17] = { name = "Landlocked Sea", values = {false, -1, 1, 2, 1, 0, 0.4, 1, 0.0065, 0} },
+			[18] = { name = "Estuary", values = {false, 0, 3, 15, 1, 0.3, 0, 0, 0.0065, 0} },
+			[19] = { name = "Coast", values = {false, 2, 1, 20, 2, 0.25, 0.0, 0, 0.0065, 0} },
+			[20] = { name = "Peninsula", values = {false, 3, 1, 25, 2, 0.25, 0, 0, 0.0065, 0} },
+			[21] = { name = "Continent", values = {false, 4, 1, 30, 3, 0.2, 0.02, 1, 0.0065, 1, 1, 1} },
+			[22] = { name = "Island Chain", values = {false, 4, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 3} },
 			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
 		}
 	},
@@ -600,7 +600,7 @@ local OptionDictionary = {
 	-- },
 	{ name = "Land at Poles", keys = { "polarMaxLandRatio" }, default = 1,
 	values = {
-			[1] = { name = "Yes", values = {0.15} },
+			[1] = { name = "Yes", values = {0.5} },
 			[2] = { name = "No", values = {0} },
 			[3] = { name = "Random", values = "keys" },
  		}
@@ -1647,6 +1647,8 @@ function Polygon:CheckBottomTop(hex)
 	if self.space.useMapLatitudes and self.space.polarExponent >= 1.0 and hex.latitude > 89 then
 		self.polar = true
 	end
+	self.edgeY = self.bottomY or self.topY
+	self.edgeX = self.bottomX or self.topX
 end
 
 function Polygon:NearOther(value, key)
@@ -3877,11 +3879,19 @@ end
 
 function Space:PickContinentsInBasin(astronomyIndex)
 	local polygonBuffer = {}
+	local polarPolygonsHere = 0
 	for i, polygon in pairs(self.astronomyBasins[astronomyIndex]) do
 		tInsert(polygonBuffer, polygon)
+		if self.wrapX and polygon.edgeY then
+			polarPolygonsHere = polarPolygonsHere + 1
+		end
 	end
-	local maxPolarPolygons = #polygonBuffer * self.polarMaxLandRatio
-	EchoDebug(maxPolarPolygons .. " maximum polar polygons of " .. #polygonBuffer .. " in astronomy basin")
+	local maxPolarPolygons = mFloor(polarPolygonsHere * self.polarMaxLandRatio)
+	local sizeMultSubtract = (polarPolygonsHere - maxPolarPolygons) / #polygonBuffer
+	sizeMultSubtract = sizeMultSubtract / 2
+	local sizeMult = (1 - (self.majorContinentNumber * 0.1)) - sizeMultSubtract
+	EchoDebug(maxPolarPolygons .. " maximum polar polygons of " .. polarPolygonsHere .. " polar polygons in astronomy basin of " .. #polygonBuffer .. " polygons")
+	EchoDebug("theoretical size multiplier: " .. sizeMult, "polar size multiplier subtraction: " .. sizeMultSubtract)
 	local polarPolygonCount = 0
 	local islandPolygons = mCeil(#polygonBuffer * self.islandRatio)
 	local nonIslandPolygons = mMax(1, #polygonBuffer - islandPolygons)
@@ -3896,8 +3906,8 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	end
 	while #polygonBuffer > 0 do
 		-- determine theoretical continent size
-		local size = mCeil(nonIslandPolygons / self.majorContinentNumber)
-		if filledPolygons >= nonIslandPolygons then size = mRandom(1, 3) end
+		local size = mCeil((nonIslandPolygons / self.majorContinentNumber) * sizeMult) -- because of the space left between continents
+		if filledPolygons >= nonIslandPolygons * sizeMult then size = mRandom(1, 3) end
 		-- pick a polygon to start the continent
 		local polygon
 		repeat
@@ -3986,7 +3996,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			tInsert(continent, candidate)
 			polygon = candidate
 		until #backlog == 0 or #continent >= size
-		EchoDebug(size, #continent, filledContinentArea)
+		EchoDebug("continent of " .. #continent .. " polygons (" .. filledContinentArea .. " hexes) of " .. size .. " theoretical polygons")
 		tInsert(self.continents, continent)
 		continentIndex = continentIndex + 1
 	end
