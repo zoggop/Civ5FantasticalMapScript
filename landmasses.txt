@@ -17,4 +17,4 @@ landmass types
 
 ---
 
-add the ability to pick individual landmasses isolated by ocean, because currently the lonely seas option is so bad
+when using astronomy blobs for continent shape flavor, pin them near existing oceans, to avoid doughnut continents

@@ -566,12 +566,12 @@ local OptionDictionary = {
 			[1] = { name = "Land All Around", values = {true, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
 			[2] = { name = "Lakes", values = {true, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
 			[3] = { name = "Inland Seas", values = {true, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
-			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
-			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.2, 0, 0, 0.0065, 1, 1, 1} },
-			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 3, 0.8, 0.02, 1, 0.0065, 2, 1, 5} },
-			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 3, 0.3, 0.02, 1, 0.0065, 1, 1, 1} },
-			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 2, 0.25, 0.03, 1, 0.0065, 0} },
-			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
+			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.25, 1, 0.0065, 0} },
+			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.15, 0, 0, 0.0065, 1, 1, 1} },
+			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 3, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
+			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 1, 1} },
+			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 2, 0.2, 0.03, 1, 0.0065, 0} },
+			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 2, 0.25, 0.02, 1, 0.0065, 0} },
 			[10] = { name = "Earthish", values = {true, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
 			[11] = { name = "Earthseaish", values = {true, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
 			[12] = { name = "Lonely Oceans", values = {true, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
@@ -1649,6 +1649,12 @@ function Polygon:CheckBottomTop(hex)
 	end
 	self.edgeY = self.bottomY or self.topY
 	self.edgeX = self.bottomX or self.topX
+	if self.edgeY then
+		tInsert(space.edgeYPolygons, self)
+	end
+	if self.edgeX then
+		tInsert(space.edgeXPolygons, self)
+	end
 end
 
 function Polygon:NearOther(value, key)
@@ -2358,6 +2364,8 @@ Space = class(function(a)
 	a.bottomXPolygons = {}
 	a.topYPolygons = {}
 	a.topXPolygons = {}
+	a.edgeYPolygons = {}
+	a.edgeXPolygons = {}
 	a.hexes = {}
     a.mountainHexes = {}
     a.mountainCoreHexes = {}
@@ -2603,6 +2611,11 @@ function Space:Compute()
     self.h = self.iH - 1
     self.halfWidth = self.w / 2
     self.halfHeight = self.h / 2
+    self.smallestHalfDimesionSq = mMin(self.halfWidth, self.halfHeight) ^ 2
+    self.diagonalWidthSq = (self.w * self.w) + (self.h * self.h)
+    self.diagonalWidth = mSqrt(self.diagonalWidthSq)
+    self.halfDiagonalWidth = self.diagonalWidth / 2
+    self.halfDiagonalWidthSq = (self.halfWidth * self.halfWidth) + (self.halfHeight * self.halfHeight)
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     self.xFakeLatitudeConversion = 180 / self.iW
     self.yFakeLatitudeConversion = 180 / self.iH
@@ -3490,10 +3503,10 @@ function Space:PickOceanToOcean(firstOcean, secondOcean, y, oceanIndex)
 		local bestDist
 		local neighsByDist = {}
 		local betterNeighs = {}
-		local myDist = self:WrapDistance(polygon.x, polygon.y, targetPoly.x, targetPoly.y)
+		local myDist = self:SquaredDistance(polygon.x, polygon.y, targetPoly.x, targetPoly.y)
 		for ni, neighbor in pairs(polygon.neighbors) do
 			if not chosen[neighbor] then
-				local dist = self:WrapDistance(neighbor.x, neighbor.y, targetPoly.x, targetPoly.y)
+				local dist = self:SquaredDistance(neighbor.x, neighbor.y, targetPoly.x, targetPoly.y)
 				neighsByDist[dist] = neighsByDist[dist] or {}
 				tInsert(neighsByDist[dist], neighbor)
 				if not bestDist or dist < bestDist then
@@ -3774,12 +3787,42 @@ end
 function Space:PickOceansAstronomyBlobs()
 	local polygonBuffer = tDuplicate(self.polygons)
 	local astronomyBlobCount = 0
+	local maxDistRatioFromOceans = 0
+	if self.oceanNumber > 0 then 
+		maxDistRatioFromOceans =  0.38
+	end
 	while #polygonBuffer > 0 and astronomyBlobCount < self.astronomyBlobNumber do
 		local size = mRandom(self.astronomyBlobMinPolygons, self.astronomyBlobMaxPolygons)
 		local polygon
+		local minOceanDistRatio
+		local iterations = 0
 		repeat
+			-- polygon = self:GetPolygonByXY(self.halfWidth, self.halfHeight)
 			polygon = tRemoveRandom(polygonBuffer)
-		until not polygon.oceanIndex or #polygonBuffer == 0
+			if self.oceanNumber > 0 then
+				local minOceanDist
+				for i, ocean in pairs(self.oceans) do
+					for ii, poly in pairs(ocean) do
+						local dist = self:SquaredDistance(polygon.x, polygon.y, poly.x, poly.y)
+						if not minOceanDist or dist < minOceanDist then
+							minOceanDist = dist
+						end
+					end
+				end
+				if self.wrapX then
+					for i, poly in pairs(self.edgeYPolygons) do
+						local dist = self:SquaredDistance(polygon.x, polygon.y, poly.x, poly.y)
+						if not minOceanDist or dist < minOceanDist then
+							minOceanDist = dist
+						end
+					end
+				end
+				minOceanDistRatio = minOceanDist / self.smallestHalfDimesionSq
+			end
+			iterations = iterations + 1
+		until (not polygon.oceanIndex and minOceanDistRatio <= maxDistRatioFromOceans) or #polygonBuffer == 0
+		EchoDebug("minOceanDistRatio: " .. minOceanDistRatio, "iterations: " .. iterations, "at: " .. polygon.x .. ", " .. polygon.y)
+		if #polygonBuffer == 0 then break end
 		local blob = { polygon }
 		polygon.astronomyBlob = blob
 		while #blob < size do
@@ -3887,14 +3930,15 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		end
 	end
 	local maxPolarPolygons = mFloor(polarPolygonsHere * self.polarMaxLandRatio)
-	local sizeMultSubtract = (polarPolygonsHere - maxPolarPolygons) / #polygonBuffer
-	sizeMultSubtract = sizeMultSubtract / 2
-	local sizeMult = (1 - (self.majorContinentNumber * 0.1)) - sizeMultSubtract
+	-- local sizeMult = 1 - (self.majorContinentNumber * 0.1)
+	local sizeMult = ((1 / self.majorContinentNumber) ^ 0.3) * 0.92
 	EchoDebug(maxPolarPolygons .. " maximum polar polygons of " .. polarPolygonsHere .. " polar polygons in astronomy basin of " .. #polygonBuffer .. " polygons")
-	EchoDebug("theoretical size multiplier: " .. sizeMult, "polar size multiplier subtraction: " .. sizeMultSubtract)
+	EchoDebug("theoretical size multiplier: " .. sizeMult)
 	local polarPolygonCount = 0
-	local islandPolygons = mCeil(#polygonBuffer * self.islandRatio)
-	local nonIslandPolygons = mMax(1, #polygonBuffer - islandPolygons)
+	local maxTotalPolygons = (#polygonBuffer - polarPolygonsHere) + maxPolarPolygons
+	local islandPolygons = mCeil(maxTotalPolygons * self.islandRatio)
+	local nonIslandPolygons = mMax(1, maxTotalPolygons - islandPolygons)
+	EchoDebug(maxTotalPolygons .. " total polygons possible for land", islandPolygons .. " polygons reserved for islands", nonIslandPolygons .. " polygons reserved for continents")
 	local filledPolygons = 0
 	local continentIndex = 1
 	if self.oceanSides then
@@ -5609,16 +5653,6 @@ function Space:MinkowskiDistance(x1, y1, x2, y2, p)
 	return ((xdist ^ p) + (ydist ^ p)) ^ (1 / p)
 end
 
--- def nth_root(value, n_root):
- 
---     root_value = 1/float(n_root)
---     return round (Decimal(value) ** Decimal(root_value),3)
- 
--- def minkowski_distance(x,y,p_value):
- 
---     return nth_root(sum(pow(abs(a-b),p_value) for a,b in zip(x, y)),p_value)
-
-
 function Space:EucDistance(x1, y1, x2, y2)
 	return mSqrt(self:SquaredDistance(x1, y1, x2, y2))
 end
@@ -5655,6 +5689,8 @@ function Space:GetSubPolygonByXY(x, y)
 end
 
 function Space:GetHexByXY(x, y)
+	x = mFloor(x)
+	y = mFloor(y)
 	return self.hexes[self:GetIndex(x, y)]
 end
 
