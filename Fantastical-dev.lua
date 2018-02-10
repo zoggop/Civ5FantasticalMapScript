@@ -568,13 +568,13 @@ local OptionDictionary = {
 			[3] = { name = "Inland Seas", values = {true, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
 			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.25, 1, 0.0065, 0} },
 			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.15, 0, 0, 0.0065, 1, 1, 1} },
-			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 3, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
+			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 2, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
 			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 1, 1} },
-			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 2, 0.2, 0.03, 1, 0.0065, 0} },
-			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 2, 0.25, 0.02, 1, 0.0065, 0} },
-			[10] = { name = "Earthish", values = {true, 2, 2, 15, 2, 0.4, 0.02, 1, 0.0065, 0} },
-			[11] = { name = "Earthseaish", values = {true, 3, 5, 25, 3, 0.75, 0.02, 1, 0.0065, 0} },
-			[12] = { name = "Lonely Oceans", values = {true, 0, 12, 100, 2, 0.8, 0.02, 0, 0.0065, 5} },
+			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 1, 0.2, 0.03, 1, 0.0065, 0} },
+			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 1, 0.25, 0.02, 1, 0.0065, 0} },
+			[10] = { name = "Earthish", values = {true, 2, 2, 15, 1, 0.4, 0.02, 1, 0.0065, 0} },
+			[11] = { name = "Earthseaish", values = {true, 3, 5, 25, 2, 0.75, 0.02, 1, 0.0065, 0} },
+			[12] = { name = "Lonely Oceans", values = {true, 0, 12, 100, 1, 0.8, 0.02, 0, 0.0065, 5} },
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
 			[14] = { name = "Dry Land", values = {false, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
 			[15] = { name = "Landlocked Lakes", values = {false, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
@@ -2284,7 +2284,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 25 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2616,6 +2616,12 @@ function Space:Compute()
     self.diagonalWidth = mSqrt(self.diagonalWidthSq)
     self.halfDiagonalWidth = self.diagonalWidth / 2
     self.halfDiagonalWidthSq = (self.halfWidth * self.halfWidth) + (self.halfHeight * self.halfHeight)
+
+    -- EchoDebug(self:HexDistance(self.halfWidth+5, self.halfHeight, 1, self.h), self.halfWidth+5, self.halfHeight, 1, self.h)
+    -- EchoDebug(self:HexDistance(1, self.halfHeight, self.halfWidth-5, self.h), 1, self.halfHeight, self.halfWidth-5, self.h)
+    -- EchoDebug(self:HexDistance(self.w, 0, 0, self.h), self.w, 0, 0, self.h)
+    -- EchoDebug(self:HexDistance(self.w, 0, 1, self.h), self.w, 0, 1, self.h)
+
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     self.xFakeLatitudeConversion = 180 / self.iW
     self.yFakeLatitudeConversion = 180 / self.iH
@@ -3178,6 +3184,12 @@ function Space:RemoveBadlyPlacedNaturalWonders()
 	end
 end
 
+function Space:StripResources()
+	for i, hex in pairs(self.hexes) do
+		hex.plot:SetResourceType(-1)
+	end
+end
+
 function Space:SetPlots()
 	for i, hex in pairs(self.hexes) do
 		hex:SetPlot()
@@ -3419,7 +3431,7 @@ function Space:PickOceansCylinder()
 		local ocean
 		if oceanIndex < 4 then
 			ocean = self:PickOceanBottomToTop(x, oceanIndex)
-			x = mCeil(x + xDiv) % self.w
+			x = mCeil(x + xDiv) % self.iW
 		else
 			if not self.oceans[firstOcean] or not self.oceans[secondOcean] then
 				EchoDebug("can't pick oceans from #" .. firstOcean .. " to #" .. secondOcean)
@@ -3433,7 +3445,7 @@ function Space:PickOceansCylinder()
 			if secondOcean == 0 then secondOcean = 1 end
 			horizOceanCount = horizOceanCount + 1
 			if horizOceanCount > 3 then
-				y = mCeil(y + yDiv) % self.h
+				y = mCeil(y + yDiv) % self.iH
 				horizOceanCount = 0
 			end
 		end
@@ -3503,10 +3515,10 @@ function Space:PickOceanToOcean(firstOcean, secondOcean, y, oceanIndex)
 		local bestDist
 		local neighsByDist = {}
 		local betterNeighs = {}
-		local myDist = self:SquaredDistance(polygon.x, polygon.y, targetPoly.x, targetPoly.y)
+		local myDist = self:HexDistance(polygon.x, polygon.y, targetPoly.x, targetPoly.y)
 		for ni, neighbor in pairs(polygon.neighbors) do
 			if not chosen[neighbor] then
-				local dist = self:SquaredDistance(neighbor.x, neighbor.y, targetPoly.x, targetPoly.y)
+				local dist = self:HexDistance(neighbor.x, neighbor.y, targetPoly.x, targetPoly.y)
 				neighsByDist[dist] = neighsByDist[dist] or {}
 				tInsert(neighsByDist[dist], neighbor)
 				if not bestDist or dist < bestDist then
@@ -3549,13 +3561,11 @@ function Space:PickOceanBottomToTop(x, oceanIndex)
 		local upNeighbors = {}
 		local downNeighbors = {}
 		for ni, neighbor in pairs(polygon.neighbors) do
-			if not neighbor:NearOther(oceanIndex, "oceanIndex") then
-				if not chosen[neighbor] then
-					if neighbor.maxY > polygon.maxY then
-						tInsert(upNeighbors, neighbor)
-					else
-						tInsert(downNeighbors, neighbor)
-					end
+			if not neighbor:NearOther(oceanIndex, "oceanIndex") and not chosen[neighbor] then
+				if neighbor.maxY > polygon.maxY then
+					tInsert(upNeighbors, neighbor)
+				else
+					tInsert(downNeighbors, neighbor)
 				end
 			end
 		end
@@ -3573,19 +3583,20 @@ function Space:PickOceanBottomToTop(x, oceanIndex)
 		end
 		local highestNeigh
 		if #self.oceans == 0 or self.oceanNumber ~= 2 then
-			local highestY = 0
-			local neighsByY = {}
-			for ni, neighbor in pairs(upNeighbors) do
-				neighsByY[neighbor.y] = neighsByY[neighbor.y] or {}
-				tInsert(neighsByY[neighbor.y], neighbor)
-				if neighbor.y > highestY then
-					highestY = neighbor.y
-					highestNeigh = neighbor
-				end
-			end
-			if #neighsByY[highestY] > 1 then
-				highestNeigh = tRemoveRandom(neighsByY[highestY])
-			end
+			-- local highestY = 0
+			-- local neighsByY = {}
+			-- for ni, neighbor in pairs(upNeighbors) do
+			-- 	neighsByY[neighbor.y] = neighsByY[neighbor.y] or {}
+			-- 	tInsert(neighsByY[neighbor.y], neighbor)
+			-- 	if neighbor.y > highestY then
+			-- 		highestY = neighbor.y
+			-- 		highestNeigh = neighbor
+			-- 	end
+			-- end
+			-- if #neighsByY[highestY] > 1 then
+			-- 	highestNeigh = tRemoveRandom(neighsByY[highestY])
+			-- end
+			highestNeigh = tGetRandom(upNeighbors)
 		else
 			local highestDist = 0
 			local neighsByDist = {}
@@ -3593,8 +3604,8 @@ function Space:PickOceanBottomToTop(x, oceanIndex)
 				local totalDist = 0
 				for oi, ocea in pairs(self.oceans) do
 					for pi, poly in pairs(ocea) do
-						local dist = self:HexDistance(neighbor.x, neighbor.y, poly.x, poly.y)
-						totalDist = totalDist + dist
+						local dx, dy = self:WrapDistance(neighbor.x, neighbor.y, poly.x, poly.y)
+						totalDist = totalDist + dx
 					end
 				end
 				neighsByDist[totalDist] = neighsByDist[totalDist] or {}
@@ -3803,7 +3814,7 @@ function Space:PickOceansAstronomyBlobs()
 				local minOceanDist
 				for i, ocean in pairs(self.oceans) do
 					for ii, poly in pairs(ocean) do
-						local dist = self:SquaredDistance(polygon.x, polygon.y, poly.x, poly.y)
+						local dist = self:HexDistance(polygon.x, polygon.y, poly.x, poly.y)
 						if not minOceanDist or dist < minOceanDist then
 							minOceanDist = dist
 						end
@@ -3811,7 +3822,7 @@ function Space:PickOceansAstronomyBlobs()
 				end
 				if self.wrapX then
 					for i, poly in pairs(self.edgeYPolygons) do
-						local dist = self:SquaredDistance(polygon.x, polygon.y, poly.x, poly.y)
+						local dist = self:HexDistance(polygon.x, polygon.y, poly.x, poly.y)
 						if not minOceanDist or dist < minOceanDist then
 							minOceanDist = dist
 						end
@@ -5586,6 +5597,7 @@ function Space:ClosestThing(this, things)
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
 		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
 		local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
+		-- local dist = self:HexDistance(thing.x, thing.y, this.x, this.y)
 		if not closestDist or dist < closestDist then
 			closestDist = dist
 			closestThing = thing
@@ -5620,18 +5632,18 @@ function Space:WrapDistance(x1, y1, x2, y2)
 	if self.wrapX then
 		if xdist > self.halfWidth then
 			if x1 < x2 then
-				xdist = x1 + (self.w - x2)
+				xdist = x1 + (self.iW - x2)
 			else
-				xdist = x2 + (self.w - x1)
+				xdist = x2 + (self.iW - x1)
 			end
 		end
 	end
 	if self.wrapY then
 		if ydist > self.halfHeight then
 			if y1 < y2 then
-				ydist = y1 + (self.h - y2)
+				ydist = y1 + (self.iH - y2)
 			else
-				ydist = y2 + (self.h - y1)
+				ydist = y2 + (self.iH - y1)
 			end
 		end
 	end
@@ -5658,6 +5670,10 @@ function Space:EucDistance(x1, y1, x2, y2)
 end
 
 function Space:HexDistance(x1, y1, x2, y2)
+	x1 = mFloor(x1)
+	y1 = mFloor(y1)
+	x2 = mFloor(x2)
+	y2 = mFloor(y2)
 	local xx1 = x1
 	local zz1 = y1 - (x1 + x1%2) / 2
 	local yy1 = -xx1-zz1
@@ -5669,13 +5685,16 @@ function Space:HexDistance(x1, y1, x2, y2)
 	if self.wrapX then
 		if xdist > self.halfWidth then
 			if x1 < x2 then
-				xdist = x1 + (self.w - x2)
+				xdist = x1 + (self.iW - x2)
 			else
-				xdist = x2 + (self.w - x1)
+				xdist = x2 + (self.iW - x1)
 			end
 		end
 	end
-	return (xdist + mAbs(yy1 - yy2) + mAbs(zz1 - zz2)) / 2
+	local ydist = mAbs(yy1 - yy2)
+	local zdist = mAbs(zz1 - zz2)
+	-- EchoDebug(xdist, ydist, zdist)
+	return mFloor( (xdist + ydist + zdist) / 2 )
 end
 
 function Space:GetPolygonByXY(x, y)
@@ -5827,6 +5846,7 @@ function DetermineContinents()
 		EchoDebug("removing badly placed natural wonders...")
 		mySpace:RemoveBadlyPlacedNaturalWonders()
 	end
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 end
 
 ------------------------------------------------------------------------------
