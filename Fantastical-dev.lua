@@ -5843,57 +5843,11 @@ function DetermineContinents()
 	else
 		EchoDebug("using default continent stamper...")
 		Map.DefaultContinentStamper()
-		EchoDebug("removing badly placed natural wonders...")
-		mySpace:RemoveBadlyPlacedNaturalWonders()
 	end
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-end
-
-------------------------------------------------------------------------------
--- below is civ's default AddGoodies() from MapGenerator.lua, but with a very small change to add roads and city ruins
-function AddGoodies()
-
-	print("-------------------------------");
-	print("Map Generation - Adding Goodies");
-	
-	-- If an era setting wants no goodies, don't place any.
-	local startEra = Game.GetStartEra();
-	if(GameInfo.Eras[startEra].NoGoodies) then
-		print("** The Era specified NO GOODY HUTS");
-		return;
-	end
-
-	if (Game.IsOption(GameOptionTypes.GAMEOPTION_NO_GOODY_HUTS)) then
-		print("** The game specified NO GOODY HUTS");
-		return false;
-	end
-
-	-- Check XML for any and all Improvements flagged as "Goody" and distribute them.
-	for improvement in GameInfo.Improvements() do
-		local tilesPerGoody = improvement.TilesPerGoody;
-		
-		if(improvement.Goody and tilesPerGoody > 0) then
-		
-			local improvementID = improvement.ID;
-			for index, plot in Plots(Shuffle) do
-				if ( not plot:IsWater() ) then
-					
-					-- Prevents too many goodies from clustering on any one landmass.
-					local area = plot:Area();
-					local improvementCount = area:GetNumImprovements(improvementID);
-					local scaler = (area:GetNumTiles() + (tilesPerGoody/2))/tilesPerGoody;	
-					if (improvementCount < scaler) then
-						
-						if (CanPlaceGoodyAt(improvement, plot)) then
-							plot:SetImprovementType(improvementID);
-						end
-					end
-				end
-			end
-		end
-	end
-	print("-------------------------------");
+	EchoDebug("removing badly placed natural wonders...")
+	mySpace:RemoveBadlyPlacedNaturalWonders()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 end
