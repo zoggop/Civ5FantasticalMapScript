@@ -1750,8 +1750,8 @@ function Polygon:EmptyCoastHex()
 end
 
 function Polygon:GiveTemperatureRainfall()
-	self.temperature = self.space:GetRainfall()
-	self.rainfall = self.space:GetTemperature()
+	self.temperature = self.space:GetTemperature()
+	self.rainfall = self.space:GetRainfall()
 end
 
 function Polygon:GiveFakeLatitude(latitude)
@@ -2339,10 +2339,8 @@ Space = class(function(a)
 	a.rainfallMidpoint = 49.5 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 99 -- highest temperature possible (plus or minus temperatureMaxDeviation)
-	a.temperatureDice = 1 -- temperature probability distribution: 1 is flat, 2 is linearly weighted to the center like /\, 3 is a bell curve _/-\_, 4 is a skinnier bell curve
 	a.temperatureMaxDeviation = 12 -- how much at maximum can a temperature deviate from its latitude (+ and -)
 	a.temperatureMinSpan = 9 -- how much temperature range must a region have
-	a.rainfallDice = 1 -- just like temperature above
 	a.rainfallMaxDeviation = 15 -- just like temperature above
 	a.rainfallMinSpan = 13 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
@@ -5563,12 +5561,12 @@ function Space:GetTemperature(latitude, noFloor)
 	if self.pseudoLatitudes and self.pseudoLatitudes[latitude] then
 		temp = self.pseudoLatitudes[latitude].temperature
 	else
-		local rise = self.temperatureMax - self.temperatureMin
 		if latitude and not self.crazyClimate then
+			local rise = self.temperatureMax - self.temperatureMin
 			local distFromPole = (90 - latitude) ^ self.polarExponent
 			temp = (rise / self.polarExponentMultiplier) * distFromPole + self.temperatureMin
 		else
-			temp = diceRoll(self.temperatureDice, rise) + self.temperatureMin
+			temp = mRandom(self.temperatureMin, self.temperatureMax)
 		end
 	end
 	local diff = mRandom(1, self.temperatureMaxDeviation)
@@ -5586,8 +5584,7 @@ function Space:GetRainfall(latitude, noFloor)
 		if latitude and not self.crazyClimate then
 			rain = self.rainfallMidpoint + (self.rainfallPlusMinus * mCos(latitude * (mPi/29)))
 		else
-			local rise = self.rainfallMax - self.rainfallMin
-			rain = diceRoll(self.rainfallDice, rise) + self.rainfallMin
+			rain = mRandom(self.rainfallMin, self.rainfallMax)
 		end
 	end
 	local diff = mRandom(1, self.rainfallMaxDeviation)
