@@ -1915,6 +1915,7 @@ end)
 
 
 function Region:GiveLatitude()
+	if self.latitude then return end
 	self.representativePolygon = tGetRandom(self.polygons)
 	self.latitude = self.representativePolygon.latitude
 	self.minLatitude, self.maxLatitude = self.representativePolygon.minLatitude, self.representativePolygon.maxLatitude
@@ -1933,24 +1934,24 @@ function Region:GiveRainfall()
 		-- EchoDebug("already have rainfall")
 		return
 	end
-	self.rainfallAvg, self.rainfallMin, self.rainfallMax = self.space:GetRainfall(self.latitude)
-	if self.space.useMapLatitudes then
-		local realLowRain, realHighRain
-		for sp, subPolygon in pairs(self.representativePolygon.subPolygons) do
-			local rain = self.space:GetRainfall(subPolygon.latitude)
-			if not realHighRain or rain > realHighRain then realHighRain = rain end
-			if not realLowRain or rain < realLowRain then realLowRain = rain end
-		end
-		local devLowRain = mMax(self.space.rainfallMin, self.rainfallAvg - self.space.rainfallMaxDeviation)
-		local devHighRain = mMin(self.space.rainfallMax, self.rainfallAvg + self.space.rainfallMaxDeviation)
-		local minLowRain = mMin(realLowRain, devLowRain)
-		local maxLowRain = mMax(realLowRain, devLowRain)
-		local minHighRain = mMin(realHighRain, devHighRain)
-		local maxHighRain = mMax(realHighRain, devHighRain)
-		self.rainfallMin = mRandom(minLowRain, maxLowRain)
-		self.rainfallMax = mRandom(minHighRain, maxHighRain)
-	end
-	self.rainfallMin, self.rainfallMax = IncreaseSpanToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinSpan)
+	self.rainfallAvg = self.space:GetRainfall(self.latitude)
+	-- if self.space.useMapLatitudes then
+	-- 	local realLowRain, realHighRain
+	-- 	for sp, subPolygon in pairs(self.representativePolygon.subPolygons) do
+	-- 		local rain = self.space:GetRainfall(subPolygon.latitude)
+	-- 		if not realHighRain or rain > realHighRain then realHighRain = rain end
+	-- 		if not realLowRain or rain < realLowRain then realLowRain = rain end
+	-- 	end
+	-- 	local devLowRain = mMax(self.space.rainfallMin, self.rainfallAvg - self.space.rainfallMaxDeviation)
+	-- 	local devHighRain = mMin(self.space.rainfallMax, self.rainfallAvg + self.space.rainfallMaxDeviation)
+	-- 	local minLowRain = mMin(realLowRain, devLowRain)
+	-- 	local maxLowRain = mMax(realLowRain, devLowRain)
+	-- 	local minHighRain = mMin(realHighRain, devHighRain)
+	-- 	local maxHighRain = mMax(realHighRain, devHighRain)
+	-- 	self.rainfallMin = mRandom(minLowRain, maxLowRain)
+	-- 	self.rainfallMax = mRandom(minHighRain, maxHighRain)
+	-- end
+	-- self.rainfallMin, self.rainfallMax = IncreaseSpanToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinSpan)
 end
 
 function Region:GiveTemperature()
@@ -1958,32 +1959,31 @@ function Region:GiveTemperature()
 		-- EchoDebug("already have temperature")
 		return
 	end
-	self.temperatureAvg, self.temperatureMin, self.temperatureMax  = self.space:GetTemperature(self.latitude)
+	self.temperatureAvg = self.space:GetTemperature(self.latitude)
 	local doNotIncrease
-	if self.space.useMapLatitudes then
-		local tempMaxDev = self.space.temperatureMaxDeviation
-		local realLowTemp = self.space:GetTemperature(self.maxLatitude)
-		local devLowTemp = mMax(self.space.temperatureMin, self.temperatureAvg - tempMaxDev)
-		local minLowTemp = mMin(realLowTemp, devLowTemp)
-		local maxLowTemp = mMax(realLowTemp, devLowTemp)
-		self.temperatureMin = mRandom(minLowTemp, maxLowTemp)
-		if realLowTemp == 0 then
-			self.temperatureMin = 0
-		end
-		if self.temperatureAvg < tempMaxDev then
-			doNotIncrease = true
-			tempMaxDev = tempMaxDev * (self.temperatureAvg / tempMaxDev)
-		end
-		local realHighTemp = self.space:GetTemperature(self.minLatitude)
-		local devHighTemp = mMin(self.space.temperatureMax, self.temperatureAvg + tempMaxDev)
-		local minHighTemp = mMin(realHighTemp, devHighTemp)
-		local maxHighTemp = mMax(realHighTemp, devHighTemp)
-		self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
-		-- EchoDebug(realLowTemp .. "-" .. realHighTemp, devLowTemp .. "-" .. devHighTemp, self.minLatitude .. "-" .. self.maxLatitude)
-	end
-	if not doNotIncrease then
-		self.temperatureMin, self.temperatureMax = IncreaseSpanToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinSpan)
-	end
+	-- if self.space.useMapLatitudes then
+	-- 	local tempMaxDev = self.space.temperatureMaxDeviation
+	-- 	local realLowTemp = self.space:GetTemperature(self.maxLatitude)
+	-- 	local devLowTemp = mMax(self.space.temperatureMin, self.temperatureAvg - tempMaxDev)
+	-- 	local minLowTemp = mMin(realLowTemp, devLowTemp)
+	-- 	local maxLowTemp = mMax(realLowTemp, devLowTemp)
+	-- 	self.temperatureMin = mRandom(minLowTemp, maxLowTemp)
+	-- 	if realLowTemp == 0 then
+	-- 		self.temperatureMin = 0
+	-- 	end
+	-- 	if self.temperatureAvg < tempMaxDev then
+	-- 		doNotIncrease = true
+	-- 		tempMaxDev = tempMaxDev * (self.temperatureAvg / tempMaxDev)
+	-- 	end
+	-- 	local realHighTemp = self.space:GetTemperature(self.minLatitude)
+	-- 	local devHighTemp = mMin(self.space.temperatureMax, self.temperatureAvg + tempMaxDev)
+	-- 	local minHighTemp = mMin(realHighTemp, devHighTemp)
+	-- 	local maxHighTemp = mMax(realHighTemp, devHighTemp)
+	-- 	self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
+	-- end
+	-- if not doNotIncrease then
+	-- 	self.temperatureMin, self.temperatureMax = IncreaseSpanToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinSpan)
+	-- end
 end
 
 function Region:Relax(integerize)
@@ -2764,7 +2764,7 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
-	if not self.useMapLatitudes then
+	-- if not self.useMapLatitudes then
 		EchoDebug("relaxing regions temperature/rainfall...")
 		local regionclimatetime = StartDebugTimer()
 		for i = 1, self.regionRelaxations do
@@ -2774,6 +2774,9 @@ function Space:Compute()
 		EchoDebug("giving regions temperature & rainfall minimums & maximums...")
 		self:FillRegionTempRainVoronois(true)
 		EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
+	-- end
+	if self.useMapLatitudes then
+		self:RearrangeRegionsForLatitudes()
 	end
 	EchoDebug("filling regions...")
 	self:FillRegions()
@@ -4342,6 +4345,45 @@ function Space:RelaxRegions(integerize)
 	end
 end
 
+function Space:RearrangeRegionsForLatitudes()
+	local TRcoords = {}
+	local keysToCopy = { "temperatureMin", "temperatureAvg", "temperatureMax", "rainfallMin", "rainfallAvg", "rainfallMax" }
+	for i, region in pairs(self.regions) do
+		local coord = {}
+		for ii, key in pairs(keysToCopy) do
+			coord[key] = region[key] + 0 -- superstition
+		end
+		tInsert(TRcoords, coord)
+	end
+	local regionBuffer = tDuplicate(self.regions)
+	while #regionBuffer > 0 do
+		local region = tRemoveRandom(regionBuffer)
+		region:GiveLatitude()
+		-- local temp = self:GetTemperature(region.latitude)
+		local rain = self:GetRainfall(region.latitude)
+		local tempMin = self:GetTemperature(region.maxLatitude)
+		local tempMax = self:GetTemperature(region.minLatitude)
+		local bestDist, bestCoord, bestCoordIndex
+		for i, coord in pairs(TRcoords) do
+			-- local dt1 = mAbs(temp - coord.temperatureAvg)
+			local dt2 = mAbs(tempMin - coord.temperatureMin)
+			local dt3 = mAbs(tempMax - coord.temperatureMax)
+			local dr = mAbs(rain - coord.rainfallAvg)
+			local dist = dt2 + dt3 + (dr * 0.5)
+			if not bestDist or dist < bestDist then
+				bestDist = dist
+				bestCoord = coord
+				bestCoordIndex = i
+			end
+		end
+		for k, v in pairs(bestCoord) do
+			region[k] = v
+		end
+		-- tRemove(TRcoords, bestCoordIndex)
+		EchoDebug(bestCoordIndex, bestDist)
+	end
+end
+
 function Space:TempRainDist(t1, r1, t2, r2)
 	local tdist = mAbs(t2 - t1)
 	local rdist = mAbs(r2 - r1)
@@ -5569,11 +5611,8 @@ function Space:GetTemperature(latitude, noFloor)
 			temp = mRandom(self.temperatureMin, self.temperatureMax)
 		end
 	end
-	local diff = mRandom(1, self.temperatureMaxDeviation)
-	local temp1 = mMax(temp - diff, self.temperatureMin)
-	local temp2 = mMin(temp + diff, self.temperatureMax)
-	if noFloor then return temp, temp1, temp2 end
-	return mFloor(temp), mFloor(temp1), mFloor(temp2)
+	if noFloor then return temp end
+	return mFloor(temp)
 end
 
 function Space:GetRainfall(latitude, noFloor)
@@ -5587,11 +5626,8 @@ function Space:GetRainfall(latitude, noFloor)
 			rain = mRandom(self.rainfallMin, self.rainfallMax)
 		end
 	end
-	local diff = mRandom(1, self.rainfallMaxDeviation)
-	local rain1 = mMax(rain - diff, self.rainfallMin)
-	local rain2 = mMin(rain + diff, self.rainfallMax)
-	if noFloor then return rain, rain1, rain2 end
-	return mFloor(rain), mFloor(rain1), mFloor(rain2)
+	if noFloor then return rain end
+	return mFloor(rain)
 end
 
 function Space:GetHillyness()
