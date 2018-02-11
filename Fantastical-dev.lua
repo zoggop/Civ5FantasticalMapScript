@@ -1986,6 +1986,26 @@ function Region:GiveTemperature()
 	end
 end
 
+function Region:Relax(integerize)
+	if not self.temprains then return end
+	local totalTemp = 0
+	local totalRain = 0
+	for i, cell in pairs(self.temprains) do
+		totalTemp = totalTemp + cell.temp
+		totalRain = totalRain + cell.rain
+	end
+	local avgTemp = totalTemp / #self.temprains
+	local avgRain = totalRain / #self.temprains
+	if integerize then
+		avgTemp = mCeil(avgTemp)
+		avgRain = mCeil(avgRain)
+	end
+	-- EchoDebug(i, region.temperatureAvg .. "/" .. region.rainfallAvg, avgTemp .. "/" .. avgRain)
+	self.temperatureAvg = avgTemp
+	self.rainfallAvg = avgRain
+	self.temprains = nil
+end
+
 function Region:DoSpanCalcs()
 	local temperatureSpan = self.temperatureMax - self.temperatureMin
 	local rainfallSpan = self.rainfallMax - self.rainfallMin
@@ -2300,7 +2320,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.regionRelaxations = 8 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means more consistent non-realistic distribution of terrain types
+	a.regionRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverForkRatio = 0.33 -- how much of the river area should be reserved for forks
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -2748,10 +2768,14 @@ function Space:Compute()
 	self:PickRegions()
 	if not self.useMapLatitudes then
 		EchoDebug("relaxing regions temperature/rainfall...")
+		local regionclimatetime = StartDebugTimer()
 		for i = 1, self.regionRelaxations do
 			local integerize = i == self.regionRelaxations
 			self:RelaxRegions(integerize)
 		end
+		EchoDebug("giving regions temperature & rainfall minimums & maximums...")
+		self:FillRegionTempRainVoronois(true)
+		EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
 	end
 	EchoDebug("filling regions...")
 	self:FillRegions()
@@ -3805,7 +3829,7 @@ function Space:PickOceansAstronomyBlobs()
 	while #polygonBuffer > 0 and astronomyBlobCount < self.astronomyBlobNumber do
 		local size = mRandom(self.astronomyBlobMinPolygons, self.astronomyBlobMaxPolygons)
 		local polygon
-		local minOceanDistRatio
+		local minOceanDistRatio = 0
 		local iterations = 0
 		repeat
 			-- polygon = self:GetPolygonByXY(self.halfWidth, self.halfHeight)
@@ -4267,14 +4291,17 @@ function Space:PickRegions()
 	end
 end
 
-function Space:RelaxRegions(integerize)
+function Space:FillRegionTempRainVoronois(setTempRainLimits)
 	-- map each region's temp/rain cells
-	local tempDiff = self.temperatureMax - self.temperatureMin
-	local rainDiff = self.rainfallMax - self.rainfallMin
-	local maxDistSq = (tempDiff * tempDiff) + (rainDiff * rainDiff)
+	if setTempRainLimits then
+		for i, region in pairs(self.regions) do
+			region.temperatureMin, region.temperatureMax = nil, nil
+			region.rainfallMin, region.rainfallMax = nil, nil
+		end
+	end
 	for t = self.temperatureMin, self.temperatureMax do
 		for r = self.rainfallMin, self.rainfallMax do
-			local leastDist = maxDistSq
+			local leastDist
 			local nearestRegion
 			for i, region in pairs(self.regions) do
 				if not region.temperatureAvg then
@@ -4284,43 +4311,36 @@ function Space:RelaxRegions(integerize)
 				local dt = t - region.temperatureAvg
 				local dr = r - region.rainfallAvg
 				local dist = (dt * dt) + (dr * dr)
-				if dist < leastDist then
+				if not leastDist or dist < leastDist then
 					leastDist = dist
 					nearestRegion = region
 				end
 			end
 			nearestRegion.temprains = nearestRegion.temprains or {}
 			tInsert(nearestRegion.temprains, {temp=t, rain=r})
+			if setTempRainLimits then
+				if not nearestRegion.temperatureMin or t < nearestRegion.temperatureMin then
+					nearestRegion.temperatureMin = t
+				end
+				if not nearestRegion.temperatureMax or t > nearestRegion.temperatureMax then
+					nearestRegion.temperatureMax = t
+				end
+				if not nearestRegion.rainfallMin or r < nearestRegion.rainfallMin then
+					nearestRegion.rainfallMin = r
+				end
+				if not nearestRegion.rainfallMax or r > nearestRegion.rainfallMax then
+					nearestRegion.rainfallMax = r
+				end
+			end
 		end
 	end
+end
+
+function Space:RelaxRegions(integerize)
+	self:FillRegionTempRainVoronois()
 	-- determine each region's centroid and relax to it
 	for i, region in pairs(self.regions) do
-		if region.temprains then
-			local totalTemp = 0
-			local totalRain = 0
-			for ii, cell in pairs(region.temprains) do
-				totalTemp = totalTemp + cell.temp
-				totalRain = totalRain + cell.rain
-			end
-			local avgTemp = totalTemp / #region.temprains
-			local avgRain =totalRain / #region.temprains
-			if integerize then
-				avgTemp = mCeil(avgTemp)
-				avgRain = mCeil(avgRain)
-			end
-			-- EchoDebug(i, region.temperatureAvg .. "/" .. region.rainfallAvg, avgTemp .. "/" .. avgRain)
-			local tempUp = region.temperatureMax - region.temperatureAvg
-			local tempDown = region.temperatureAvg - region.temperatureMin
-			local rainUp = region.rainfallMax - region.rainfallAvg
-			local rainDown = region.rainfallAvg - region.rainfallMin
-			region.temperatureAvg = avgTemp
-			region.rainfallAvg = avgRain
-			region.temperatureMin = mMax(avgTemp - tempDown, self.temperatureMin)
-			region.temperatureMax = mMin(avgTemp + tempUp, self.temperatureMax)
-			region.rainfallMin = mMax(avgRain - rainDown, self.rainfallMin)
-			region.rainfallMax = mMin(avgRain + rainUp, self.rainfallMax)
-			region.temprains = nil
-		end
+		region:Relax(integerize)
 	end
 end
 

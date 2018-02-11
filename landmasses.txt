@@ -17,4 +17,4 @@ landmass types
 
 ---
 
-when using astronomy blobs for continent shape flavor, pin them near existing oceans, to avoid doughnut continents
+- in non-realistic maps use region temp/rain voronoi to set region temperature and rainfall minimum and maximums. this way every temp/rain coordinate is filled no matter what
