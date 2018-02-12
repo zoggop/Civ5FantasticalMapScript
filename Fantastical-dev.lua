@@ -1929,92 +1929,6 @@ function Region:GiveLatitude()
 	end
 end
 
-function Region:GiveRainfall()
-	if self.rainfallAvg then
-		-- EchoDebug("already have rainfall")
-		return
-	end
-	self.rainfallAvg = self.space:GetRainfall(self.latitude)
-	-- if self.space.useMapLatitudes then
-	-- 	local realLowRain, realHighRain
-	-- 	for sp, subPolygon in pairs(self.representativePolygon.subPolygons) do
-	-- 		local rain = self.space:GetRainfall(subPolygon.latitude)
-	-- 		if not realHighRain or rain > realHighRain then realHighRain = rain end
-	-- 		if not realLowRain or rain < realLowRain then realLowRain = rain end
-	-- 	end
-	-- 	local devLowRain = mMax(self.space.rainfallMin, self.rainfallAvg - self.space.rainfallMaxDeviation)
-	-- 	local devHighRain = mMin(self.space.rainfallMax, self.rainfallAvg + self.space.rainfallMaxDeviation)
-	-- 	local minLowRain = mMin(realLowRain, devLowRain)
-	-- 	local maxLowRain = mMax(realLowRain, devLowRain)
-	-- 	local minHighRain = mMin(realHighRain, devHighRain)
-	-- 	local maxHighRain = mMax(realHighRain, devHighRain)
-	-- 	self.rainfallMin = mRandom(minLowRain, maxLowRain)
-	-- 	self.rainfallMax = mRandom(minHighRain, maxHighRain)
-	-- end
-	-- self.rainfallMin, self.rainfallMax = IncreaseSpanToMinimum(self.rainfallMin, self.rainfallMax, self.space.rainfallMinSpan)
-end
-
-function Region:GiveTemperature()
-	if self.temperatureAvg then
-		-- EchoDebug("already have temperature")
-		return
-	end
-	self.temperatureAvg = self.space:GetTemperature(self.latitude)
-	local doNotIncrease
-	-- if self.space.useMapLatitudes then
-	-- 	local tempMaxDev = self.space.temperatureMaxDeviation
-	-- 	local realLowTemp = self.space:GetTemperature(self.maxLatitude)
-	-- 	local devLowTemp = mMax(self.space.temperatureMin, self.temperatureAvg - tempMaxDev)
-	-- 	local minLowTemp = mMin(realLowTemp, devLowTemp)
-	-- 	local maxLowTemp = mMax(realLowTemp, devLowTemp)
-	-- 	self.temperatureMin = mRandom(minLowTemp, maxLowTemp)
-	-- 	if realLowTemp == 0 then
-	-- 		self.temperatureMin = 0
-	-- 	end
-	-- 	if self.temperatureAvg < tempMaxDev then
-	-- 		doNotIncrease = true
-	-- 		tempMaxDev = tempMaxDev * (self.temperatureAvg / tempMaxDev)
-	-- 	end
-	-- 	local realHighTemp = self.space:GetTemperature(self.minLatitude)
-	-- 	local devHighTemp = mMin(self.space.temperatureMax, self.temperatureAvg + tempMaxDev)
-	-- 	local minHighTemp = mMin(realHighTemp, devHighTemp)
-	-- 	local maxHighTemp = mMax(realHighTemp, devHighTemp)
-	-- 	self.temperatureMax = mRandom(minHighTemp, maxHighTemp)
-	-- end
-	-- if not doNotIncrease then
-	-- 	self.temperatureMin, self.temperatureMax = IncreaseSpanToMinimum(self.temperatureMin, self.temperatureMax, self.space.temperatureMinSpan)
-	-- end
-end
-
-function Region:Relax(integerize)
-	if not self.temprains then return end
-	local totalTemp = 0
-	local totalRain = 0
-	for i, cell in pairs(self.temprains) do
-		totalTemp = totalTemp + cell.temp
-		totalRain = totalRain + cell.rain
-	end
-	local avgTemp = totalTemp / #self.temprains
-	local avgRain = totalRain / #self.temprains
-	if integerize then
-		avgTemp = mCeil(avgTemp)
-		avgRain = mCeil(avgRain)
-	end
-	-- EchoDebug(i, region.temperatureAvg .. "/" .. region.rainfallAvg, avgTemp .. "/" .. avgRain)
-	self.temperatureAvg = avgTemp
-	self.rainfallAvg = avgRain
-	self.temprains = nil
-end
-
-function Region:DoSpanCalcs()
-	local temperatureSpan = self.temperatureMax - self.temperatureMin
-	local rainfallSpan = self.rainfallMax - self.rainfallMin
-	if not self.space.temperatureSpanMax or temperatureSpan > self.space.temperatureSpanMax then self.space.temperatureSpanMax = temperatureSpan end
-	if not self.space.temperatureSpanMin or temperatureSpan < self.space.temperatureSpanMin then self.space.temperatureSpanMin = temperatureSpan end
-	if not self.space.rainfallSpanMax or rainfallSpan > self.space.rainfallSpanMax then self.space.rainfallSpanMax = rainfallSpan end
-	if not self.space.rainfallSpanMin or rainfallSpan < self.space.rainfallSpanMin then self.space.rainfallSpanMin = rainfallSpan end
-end
-
 function Region:GiveParameters()
 	self.blockFeatures = {}
 	for featureType, feature in pairs(FeatureDictionary) do
@@ -2024,12 +1938,6 @@ function Region:GiveParameters()
 	end
 	-- get latitude (real or fake)
 	self:GiveLatitude()
-	-- get temperature, rainfall, hillyness, mountainousness, lakeyness
-	self:GiveTemperature()
-	-- EchoDebug("temp ", self.temperatureMin, self.temperatureAvg, self.temperatureMax)
-	self:GiveRainfall()
-	-- EchoDebug("rain ", self.rainfallMin, self.rainfallAvg, self.rainfallMax)
-	self:DoSpanCalcs()
 	self.hillyness = self.space:GetHillyness()
 	self.mountainous = mRandom(1, 100) < self.space.mountainousRegionPercent
 	self.mountainousness = 0
@@ -2040,13 +1948,17 @@ function Region:GiveParameters()
 	self.marshy = self.space.marshHexCount < self.space.marshMinHexes
 	self.marshyness = 0
 	if self.marshy then self.marshyness = mRandom(self.space.marshynessMin, self.space.marshynessMax) end
-	-- EchoDebug("latitude " .. self.minLatitude .. " < " .. self.latitude .." < " .. self.maxLatitude, "temperature " .. self.temperatureMin .. " < " .. self.temperatureAvg .. " < " .. self.temperatureMax, "rainfall " .. self.rainfallMin .. " < " .. self.rainfallAvg .. " < " .. self.rainfallMax)
-	-- EchoDebug(self.latitude, self.minLatitude, self.maxLatitude, self.temperatureMin, self.temperatureMax, self.rainfallMin, self.rainfallMax, self.mountainousness, self.lakeyness, self.hillyness)
 end
 
 function Region:CreateCollection()
 	self:GiveParameters()
-	-- create the collection
+	-- get all elements possible
+	local possibleElements = {}
+	self.totalSize = #self.point.pixels
+	for i, pixel in pairs(self.point.pixels) do
+		tInsert(possibleElements, self:CreateElement(pixel.temp, pixel.rain))
+	end
+	-- determine collection size
 	self.size = self.space:GetCollectionSize()
 	local subPolys = 0
 	for i, polygon in pairs(self.polygons) do
@@ -2054,59 +1966,35 @@ function Region:CreateCollection()
 		subPolys = subPolys + #polygon.subPolygons
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
-	local allSize = 0
-	local subSizes = {}
+	-- create collection
+	local elementBuffer = tDuplicate(possibleElements)
+	local collection = {}
 	for i = 1, self.size do
 		local subSize = self.space:GetSubCollectionSize()
-		allSize = allSize + subSize
-		tInsert(subSizes, subSize)
-	end
-	self.totalSize = allSize
-	local allTemps = {}
-	local allRains = {}
-	local ti = (self.temperatureMax - self.temperatureMin) / (allSize - 1)
-	local ri = (self.rainfallMax - self.rainfallMin) / (allSize - 1)
-	for i = 1, allSize do
-		local temperature = self.temperatureMin + (ti * (i-1))
-		local rainfall = self.rainfallMin + (ri * (i-1))
-		tInsert(allTemps, temperature)
-		tInsert(allRains, rainfall)
-	end
-	-- EchoDebug(self.temperatureMin, self.temperatureMax, "temps", allTemps)
-	-- EchoDebug(self.rainfallMin, self.rainfallMax, "rains", allRains)
-
-	for i = 1, self.size do
-		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
-		local tempIndex = mRandom(1, #allTemps)
-		local rainIndex = mRandom(1, #allRains)
-		local subSize = subSizes[i]
-		local temps = {}
-		local rains = {}
+		local elements = {}
+		local polar
+		local tempTotal = 0
+		local rainTotal = 0
 		for ii = 1, subSize do
-			tInsert(temps, tRemove(allTemps, mMin(tempIndex, #allTemps)))
-			tInsert(rains, tRemove(allRains, mMin(rainIndex, #allRains)))
-		end
-		local subCollection = { elements = {}, lake = lake }
-		local tempTotal, rainTotal = 0, 0
-		for si = 1, subSize do
-			if #temps == 0 or #rains == 0 then EchoDebug(#temps, #rains) end
-			local temperature = tRemoveRandom(temps)
-			local rainfall = tRemoveRandom(rains)
-			if temperature == 0 then
-				subCollection.polar = true
+			local element = tRemoveRandom(elementBuffer)
+			tempTotal = tempTotal + element.temperature
+			rainTotal = rainTotal + element.rainfall
+			if element.terrainType == terrainSnow then
+				polar = true
 			end
-			-- EchoDebug(i, si, temperature, rainfall)
-			tempTotal = tempTotal + temperature
-			rainTotal = rainTotal + rainfall
-			tInsert(subCollection.elements, self:CreateElement(temperature, rainfall, lake))
+			tInsert(elements, element)
+			if #elementBuffer == 0 then
+				elementBuffer = tDuplicate(possibleElements)
+			end
 		end
-		subCollection.temperature = mFloor(tempTotal / subSize)
-		subCollection.rainfall = mFloor(rainTotal / subSize)
-		tInsert(self.collection, subCollection)
+		local subCollection = { elements = elements, polar = polar, temperature = tempTotal / subSize, rainfall = rainTotal / subSize }
+		tInsert(collection, subCollection)
 	end
+	self.collection = collection
 end
 
 function Region:CreateElement(temperature, rainfall, lake)
+	lake = lake or mRandom(1, 100) < self.lakeyness
 	temperature = temperature or mRandom(self.temperatureMin, self.temperatureMax)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
@@ -2764,20 +2652,12 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
-	-- if not self.useMapLatitudes then
-		EchoDebug("relaxing regions temperature/rainfall...")
-		local regionclimatetime = StartDebugTimer()
-		for i = 1, self.regionRelaxations do
-			local integerize = i == self.regionRelaxations
-			self:RelaxRegions(integerize)
-		end
-		EchoDebug("giving regions temperature & rainfall minimums & maximums...")
-		self:FillRegionTempRainVoronois(true)
-		EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
-	-- end
-	if self.useMapLatitudes then
-		self:RearrangeRegionsForLatitudes()
-	end
+	EchoDebug("creating climate voronoi...")
+	local regionclimatetime = StartDebugTimer()
+	self.tempRainVoronoi = self:CreateTempRainVoronoi(#self.regions, self.regionRelaxations)
+	EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
+	EchoDebug("assigning climate voronoi to regions...")
+	self:AssignTempRainVoronoiToRegions(self.tempRainVoronoi)
 	EchoDebug("filling regions...")
 	self:FillRegions()
 	EchoDebug("picking mountain ranges...")
@@ -3021,7 +2901,7 @@ function Space:ComputeOceanTemperatures()
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continent then
 					polygon.coast = true
-					coastTempTotal = coastTempTotal + neighbor.region.temperatureAvg
+					coastTempTotal = coastTempTotal + neighbor.region.temperature
 					coastTotal = coastTotal + 1
 					if not coastalContinents[neighbor.continent] then
 						coastalContinents[neighbor.continent] = true
@@ -4292,95 +4172,82 @@ function Space:PickRegions()
 	end
 end
 
-function Space:FillRegionTempRainVoronois(setTempRainLimits)
-	-- map each region's temp/rain cells
-	if setTempRainLimits then
-		for i, region in pairs(self.regions) do
-			region.temperatureMin, region.temperatureMax = nil, nil
-			region.rainfallMin, region.rainfallMax = nil, nil
+function Space:CreateTempRainVoronoi(number, relaxations)
+	relaxations = relaxations or 0
+	local tempRainVoronoi = {}
+	for i = 1, number do
+		local point = {
+			temp = self:GetTemperature(),
+			rain = self:GetRainfall(),
+		}
+		tInsert(tempRainVoronoi, point)
+	end
+	for iteration = 1, relaxations + 1 do
+		-- fill voronoi grid
+		for t = self.temperatureMin, self.temperatureMax do
+			for r = self.rainfallMin, self.rainfallMax do
+				local leastDist
+				local nearestPolygon
+				for i, point in pairs(tempRainVoronoi) do
+					local dt = mAbs(t - point.temp)
+					local dr = mAbs(r - point.rain)
+					local dist = (dt * dt) + (dr * dr)
+					if not leastDist or dist < leastDist then
+						leastDist = dist
+						nearestPoint = point
+					end
+				end
+				if iteration <= relaxations then
+					nearestPoint.totalT = (nearestPoint.totalT or 0) + t
+					nearestPoint.totalR = (nearestPoint.totalR or 0) + r
+					nearestPoint.pixelCount = (nearestPoint.pixelCount or 0) + 1
+				else
+					nearestPoint.pixels = nearestPoint.pixels or {}
+					tInsert(nearestPoint.pixels, {temp=t, rain=r})
+				end
+			end
+		end
+		-- relax points to centroids
+		if iteration <= relaxations then
+			for i, point in pairs(tempRainVoronoi) do
+				point.temp = point.totalT / point.pixelCount
+				point.rain = point.totalR / point.pixelCount
+				if relaxation == relaxations then
+					-- integerize at the last relaxation
+					point.temp = mFloor(point.temp)
+					point.rain = mFloor(point.rain)
+				end
+				point.totalT = nil
+				point.totalR = nil
+				point.pixelCount = nil
+			end
 		end
 	end
-	for t = self.temperatureMin, self.temperatureMax do
-		for r = self.rainfallMin, self.rainfallMax do
-			local leastDist
-			local nearestRegion
-			for i, region in pairs(self.regions) do
-				if not region.temperatureAvg then
-					region:GiveTemperature()
-					region:GiveRainfall()
-				end
-				local dt = t - region.temperatureAvg
-				local dr = r - region.rainfallAvg
+	return tempRainVoronoi
+end
+
+function Space:AssignTempRainVoronoiToRegions(tempRainVoronoi)
+	for i, region in pairs(self.regions) do
+		if self.useMapLatitudes then
+			region:GiveLatitude()
+			local temp = self:GetTemperature(region.latitude)
+			local rain = self:GetRainfall(region.latitude)
+			local bestDist, bestPoint
+			for ii, point in pairs(tempRainVoronoi) do
+				local dt = mAbs(temp - point.temp)
+				local dr = mAbs(rain - point.rain)
 				local dist = (dt * dt) + (dr * dr)
-				if not leastDist or dist < leastDist then
-					leastDist = dist
-					nearestRegion = region
+				if not bestDist or dist < bestDist then
+					bestDist = dist
+					bestPoint = point
 				end
 			end
-			nearestRegion.temprains = nearestRegion.temprains or {}
-			tInsert(nearestRegion.temprains, {temp=t, rain=r})
-			if setTempRainLimits then
-				if not nearestRegion.temperatureMin or t < nearestRegion.temperatureMin then
-					nearestRegion.temperatureMin = t
-				end
-				if not nearestRegion.temperatureMax or t > nearestRegion.temperatureMax then
-					nearestRegion.temperatureMax = t
-				end
-				if not nearestRegion.rainfallMin or r < nearestRegion.rainfallMin then
-					nearestRegion.rainfallMin = r
-				end
-				if not nearestRegion.rainfallMax or r > nearestRegion.rainfallMax then
-					nearestRegion.rainfallMax = r
-				end
-			end
+			region.point = bestPoint
+		else
+			region.point = tRemove(tempRainVoronoi)
 		end
-	end
-end
-
-function Space:RelaxRegions(integerize)
-	self:FillRegionTempRainVoronois()
-	-- determine each region's centroid and relax to it
-	for i, region in pairs(self.regions) do
-		region:Relax(integerize)
-	end
-end
-
-function Space:RearrangeRegionsForLatitudes()
-	local TRcoords = {}
-	local keysToCopy = { "temperatureMin", "temperatureAvg", "temperatureMax", "rainfallMin", "rainfallAvg", "rainfallMax" }
-	for i, region in pairs(self.regions) do
-		local coord = {}
-		for ii, key in pairs(keysToCopy) do
-			coord[key] = region[key] + 0 -- superstition
-		end
-		tInsert(TRcoords, coord)
-	end
-	local regionBuffer = tDuplicate(self.regions)
-	while #regionBuffer > 0 do
-		local region = tRemoveRandom(regionBuffer)
-		region:GiveLatitude()
-		-- local temp = self:GetTemperature(region.latitude)
-		local rain = self:GetRainfall(region.latitude)
-		local tempMin = self:GetTemperature(region.maxLatitude)
-		local tempMax = self:GetTemperature(region.minLatitude)
-		local bestDist, bestCoord, bestCoordIndex
-		for i, coord in pairs(TRcoords) do
-			-- local dt1 = mAbs(temp - coord.temperatureAvg)
-			local dt2 = mAbs(tempMin - coord.temperatureMin)
-			local dt3 = mAbs(tempMax - coord.temperatureMax)
-			local dr = mAbs(rain - coord.rainfallAvg)
-			local dist = dt2 + dt3 + (dr * 0.5)
-			if not bestDist or dist < bestDist then
-				bestDist = dist
-				bestCoord = coord
-				bestCoordIndex = i
-			end
-		end
-		for k, v in pairs(bestCoord) do
-			region[k] = v
-		end
-		-- tRemove(TRcoords, bestCoordIndex)
-		EchoDebug(bestCoordIndex, bestDist)
+		region.temperature = region.point.temp
+		region.rainfall = region.point.rain
 	end
 end
 
@@ -4443,8 +4310,6 @@ function Space:FillRegions()
 		region:Fill()
 	end
 	EchoDebug(#self.lakeSubPolygons .. " total lake subpolygons", self.marshHexCount .. " total marsh hexes")
-	EchoDebug("rainfall spans: " .. self.rainfallSpanMin .. " to " .. self.rainfallSpanMax)
-	EchoDebug("temperature spans: " .. self.temperatureSpanMin .. " to " .. self.temperatureSpanMax)
 end
 
 function Space:LabelSubPolygonsByPolygon()
@@ -4765,7 +4630,7 @@ function Space:FindRiverSeeds()
 				end
 			end
 			for nhex, d in pairs(polygonNeighs) do
-				local rainfall = mMin(hex.polygon.region.rainfallAvg, nhex.polygon.region.rainfallAvg) -- mFloor((hex.polygon.region.rainfallAvg + nhex.polygon.region.rainfallAvg) / 2)
+				local rainfall = mMin(hex.polygon.region.rainfall, nhex.polygon.region.rainfall) -- mFloor((hex.polygon.region.rainfall + nhex.polygon.region.rainfall) / 2)
 				local seed, connectsToOcean, connectsToLake
 				for dd, nnhex in pairs(nhex:Neighbors()) do
 					if neighs[nnhex] then
