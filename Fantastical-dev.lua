@@ -1943,7 +1943,25 @@ function Region:CreateCollection()
 	local possibleElements = {}
 	self.totalSize = #self.point.pixels
 	for i, pixel in pairs(self.point.pixels) do
-		tInsert(possibleElements, self:CreateElement(pixel.temp, pixel.rain))
+		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
+		local element = self:CreateElement(pixel.temp, pixel.rain, lake)
+		local isNew = true
+		for i, el in pairs(possibleElements) do
+			local different = false
+			for k, v in pairs(el) do
+				if k ~= "temperature" and k ~= "rainfall" and element[k] ~= v then
+					different = true
+					break
+				end
+			end
+			if not different then
+				isNew = false
+				break
+			end
+		end
+		if isNew then
+			tInsert(possibleElements, element)
+		end
 	end
 	-- determine collection size
 	self.size = self.space:GetCollectionSize()
@@ -1967,10 +1985,10 @@ function Region:CreateCollection()
 			if element.lake then
 				if i == 1 then
 					repeat
-						element = tRemoveRandom(elementBuffer)
 						if #elementBuffer == 0 then
 							elementBuffer = tDuplicate(possibleElements)
 						end
+						element = tRemoveRandom(elementBuffer)
 					until not element.lake
 				else
 					lake = true
@@ -1993,7 +2011,6 @@ function Region:CreateCollection()
 end
 
 function Region:CreateElement(temperature, rainfall, lake)
-	lake = lake or mRandom(1, 100) < self.lakeyness
 	temperature = temperature or mRandom(self.temperatureMin, self.temperatureMax)
 	rainfall = rainfall or mRandom(self.rainfallMin, self.rainfallMax)
 	local mountain = mRandom(1, 100) < self.mountainousness
@@ -4177,6 +4194,7 @@ function Space:CreateClimateVoronoi(number, relaxations)
 		}
 		tInsert(climateVoronoi, point)
 	end
+	local cullCount = 0
 	for iteration = 1, relaxations + 1 do
 		-- fill voronoi grid
 		for t = self.temperatureMin, self.temperatureMax do
@@ -4202,9 +4220,18 @@ function Space:CreateClimateVoronoi(number, relaxations)
 				end
 			end
 		end
+		-- cull empty points
+		for i = #climateVoronoi, 1, -1 do
+			local point = climateVoronoi[i]
+			if not point.pixelCount and not point.pixels then
+				tRemove(climateVoronoi, i)
+				cullCount = cullCount + 1
+			end
+		end
 		-- relax points to centroids
 		if iteration <= relaxations then
-			for i, point in pairs(climateVoronoi) do
+			for i = #climateVoronoi, 1, -1 do
+				local point = climateVoronoi[i]
 				point.temp = point.totalT / point.pixelCount
 				point.rain = point.totalR / point.pixelCount
 				if relaxation == relaxations then
@@ -4218,10 +4245,15 @@ function Space:CreateClimateVoronoi(number, relaxations)
 			end
 		end
 	end
+	EchoDebug(cullCount .. " points culled")
 	return climateVoronoi
 end
 
 function Space:AssignClimateVoronoiToRegions(climateVoronoi)
+	local voronoiBuffer
+	if not self.useMapLatitudes then
+		voronoiBuffer = tDuplicate(climateVoronoi)
+	end
 	for i, region in pairs(self.regions) do
 		if self.useMapLatitudes then
 			region:GiveLatitude()
@@ -4239,7 +4271,10 @@ function Space:AssignClimateVoronoiToRegions(climateVoronoi)
 			end
 			region.point = bestPoint
 		else
-			region.point = tRemove(climateVoronoi)
+			region.point = tRemoveRandom(voronoiBuffer)
+			if #voronoiBuffer == 0 then
+				voronoiBuffer = tDuplicate(climateVoronoi)
+			end
 		end
 		region.temperature = region.point.temp
 		region.rainfall = region.point.rain
