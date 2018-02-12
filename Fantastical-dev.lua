@@ -159,19 +159,6 @@ local function AngleDist(angle1, angle2)
 	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
 end
 
-local function IncreaseSpanToMinimum(numMin, numMax, minSpan)
-	if mAbs(numMax - numMin) < minSpan then
-		local spanDeficit = minSpan - mAbs(numMax - numMin)
-		local minDist = numMin
-		local maxDist = 99 - numMax
-		local minRatio = minDist / (minDist + maxDist)
-		local maxRatio = maxDist / (minDist + maxDist)
-		numMax = mMin(99, numMax + (spanDeficit * maxRatio))
-		numMin = mMax(0, numMin - (spanDeficit * minRatio))
-	end
-	return numMin, numMax
-end
-
 ------------------------------------------------------------------------------
 -- FOR CREATING CITY NAMES: MARKOV CHAINS
 -- ADAPTED FROM drow <drow@bin.sh> http://donjon.bin.sh/code/name/
@@ -2227,10 +2214,6 @@ Space = class(function(a)
 	a.rainfallMidpoint = 49.5 -- 25 means rainfall varies from 0 to 50, 75 means 50 to 100, 50 means 0 to 100.
 	a.temperatureMin = 0 -- lowest temperature possible (plus or minus temperatureMaxDeviation)
 	a.temperatureMax = 99 -- highest temperature possible (plus or minus temperatureMaxDeviation)
-	a.temperatureMaxDeviation = 12 -- how much at maximum can a temperature deviate from its latitude (+ and -)
-	a.temperatureMinSpan = 9 -- how much temperature range must a region have
-	a.rainfallMaxDeviation = 15 -- just like temperature above
-	a.rainfallMinSpan = 13 -- just like temperature above
 	a.hillynessMax = 40 -- of 100 how many of a region's tile collection can be hills
 	a.mountainousRegionPercent = 3 -- of 100 how many regions will have mountains
 	a.mountainousnessMin = 33 -- in those mountainous regions, what's the minimum percentage of mountains in their collection
