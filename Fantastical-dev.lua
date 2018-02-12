@@ -1959,11 +1959,20 @@ function Region:CreateCollection()
 	for i = 1, self.size do
 		local subSize = self.space:GetSubCollectionSize()
 		local elements = {}
-		local polar
+		local polar, lake
 		local tempTotal = 0
 		local rainTotal = 0
 		for ii = 1, subSize do
 			local element = tRemoveRandom(elementBuffer)
+			if element.lake then
+				if i == 1 then
+					repeat
+						element = tRemoveRandom(elementBuffer)
+					until not element.lake
+				else
+					lake = true
+				end
+			end
 			tempTotal = tempTotal + element.temperature
 			rainTotal = rainTotal + element.rainfall
 			if element.terrainType == terrainSnow then
@@ -1974,7 +1983,7 @@ function Region:CreateCollection()
 				elementBuffer = tDuplicate(possibleElements)
 			end
 		end
-		local subCollection = { elements = elements, polar = polar, temperature = tempTotal / subSize, rainfall = rainTotal / subSize }
+		local subCollection = { elements = elements, polar = polar, lake = lake, temperature = tempTotal / subSize, rainfall = rainTotal / subSize }
 		tInsert(collection, subCollection)
 	end
 	self.collection = collection
@@ -2032,7 +2041,7 @@ function Region:CreateElement(temperature, rainfall, lake)
 		plotType = plotHills
 		self.hillCount = self.hillCount + 1
 	end
-	return { plotType = plotType, terrainType = terrainType, featureType = featureType, temperature = temperature, rainfall = rainfall }
+	return { plotType = plotType, terrainType = terrainType, featureType = featureType, temperature = temperature, rainfall = rainfall, lake = lake }
 end
 
 function Region:Fill()
@@ -2064,7 +2073,7 @@ function Region:Fill()
 					local subCollectionBuffer = tDuplicate(self.collection)
 					repeat
 						subCollection = tRemoveRandom(subCollectionBuffer)
-					until not subCollection.lake
+					until not subCollection.lake or #subCollectionBuffer == 0
 				end
 			end
 			if subCollection.lake then
