@@ -1973,34 +1973,39 @@ function Region:CreateCollection()
 	-- create collection
 	local collection = {}
 	self.totalSize = 0
+	local hasPolar = false
 	for i, subPoint in pairs(subPoints) do
 		local elements = {}
 		local polar
 		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
-		for i, pixel in pairs(subPoint.pixels) do
-			polar = pixel.temp == 0
+		local subSize = mMin(self.space:GetSubCollectionSize(), #subPoint.pixels)
+		local subPixelBuffer = tDuplicate(subPoint.pixels)
+		for ii = 1, subSize do
+			local pixel = tRemoveRandom(subPixelBuffer)
 			local element = self:CreateElement(pixel.temp, pixel.rain, lake)
-			local isNew = true
-			for i, el in pairs(elements) do
-				local different = false
-				for k, v in pairs(el) do
-					if k ~= "temperature" and k ~= "rainfall" and element[k] ~= v then
-						different = true
-						break
-					end
-				end
-				if not different then
-					isNew = false
-					break
-				end
+			if element.terrainType == terrainSnow then
+				polar = true
+				hasPolar = true
 			end
-			if isNew then
+			tInsert(elements, element)
+			self.totalSize = self.totalSize + 1
+		end
+		local subCollection = { elements = elements, polar = polar, lake = lake, temperature = subPoint.temp, rainfall = subPoint.rain }
+		tInsert(collection, subCollection)
+	end
+	if self.polar and not hasPolar then
+		EchoDebug("provide a polar subcollection")
+		local rainPixel = tGetRandom(self.point.pixels)
+		local elements = { self:CreateElement(0, rainPixel.rain) }
+		local subSize = self.space:GetSubCollectionSize()
+		if subSize > 1 then
+			for i = 2, subSize do
+				local rainPixel = tGetRandom(self.point.pixels)
+				local element = self:CreateElement(0, rainPixel.rain)
 				tInsert(elements, element)
-				self.totalSize = self.totalSize + 1
 			end
 		end
-		EchoDebug(#elements)
-		local subCollection = { elements = elements, polar = polar, lake = lake, temperature = subPoint.temp, rainfall = subPoint.rain }
+		local subCollection = { elements = elements, polar = true, lake = false, temperature = 0, rainfall = rainPixel.rain }
 		tInsert(collection, subCollection)
 	end
 	self.collection = collection
@@ -2217,7 +2222,7 @@ Space = class(function(a)
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
@@ -4262,7 +4267,7 @@ function Space:AssignClimateVoronoiToRegions(climateVoronoi)
 			for ii, point in pairs(climateVoronoi) do
 				local dt = mAbs(temp - point.temp)
 				local dr = mAbs(rain - point.rain)
-				local dist = (dt * dt) + (dr * dr)
+				local dist = (dt * dt) + (dr * dr * ((90 - region.latitude) / 90))
 				if not bestDist or dist < bestDist then
 					bestDist = dist
 					bestPoint = point
@@ -5796,5 +5801,5 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 end
