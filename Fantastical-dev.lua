@@ -1939,30 +1939,6 @@ end
 
 function Region:CreateCollection()
 	self:GiveParameters()
-	-- get all elements possible
-	local possibleElements = {}
-	self.totalSize = #self.point.pixels
-	for i, pixel in pairs(self.point.pixels) do
-		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
-		local element = self:CreateElement(pixel.temp, pixel.rain, lake)
-		local isNew = true
-		for i, el in pairs(possibleElements) do
-			local different = false
-			for k, v in pairs(el) do
-				if k ~= "temperature" and k ~= "rainfall" and element[k] ~= v then
-					different = true
-					break
-				end
-			end
-			if not different then
-				isNew = false
-				break
-			end
-		end
-		if isNew then
-			tInsert(possibleElements, element)
-		end
-	end
 	-- determine collection size
 	self.size = self.space:GetCollectionSize()
 	local subPolys = 0
@@ -1971,40 +1947,60 @@ function Region:CreateCollection()
 		subPolys = subPolys + #polygon.subPolygons
 	end
 	self.size = mMin(self.size, subPolys) -- make sure there aren't more collections than subpolygons in the region
-	-- create collection
-	local elementBuffer = tDuplicate(possibleElements)
-	local collection = {}
+	self.size = mMin(self.size, #self.point.pixels) -- make sure there aren't more collections than climate pixels
+	-- divide pixels into subvoronoi
+	local pixelBuffer = tDuplicate(self.point.pixels)
+	local subPoints = {}
 	for i = 1, self.size do
-		local subSize = self.space:GetSubCollectionSize()
-		local elements = {}
-		local polar, lake
-		local tempTotal = 0
-		local rainTotal = 0
-		for ii = 1, subSize do
-			local element = tRemoveRandom(elementBuffer)
-			if element.lake then
-				if i == 1 then
-					repeat
-						if #elementBuffer == 0 then
-							elementBuffer = tDuplicate(possibleElements)
-						end
-						element = tRemoveRandom(elementBuffer)
-					until not element.lake
-				else
-					lake = true
-				end
-			end
-			tempTotal = tempTotal + element.temperature
-			rainTotal = rainTotal + element.rainfall
-			if element.terrainType == terrainSnow then
-				polar = true
-			end
-			tInsert(elements, element)
-			if #elementBuffer == 0 then
-				elementBuffer = tDuplicate(possibleElements)
+		local pixel = tRemoveRandom(pixelBuffer)
+		local subPoint = {temp = pixel.temp, rain = pixel.rain}
+		tInsert(subPoints, subPoint)
+	end
+	for i, pixel in pairs(self.point.pixels) do
+		local bestDist, bestPoint
+		for ii, subPoint in pairs(subPoints) do
+			local dt = mAbs(pixel.temp - subPoint.temp)
+			local dr = mAbs(pixel.rain - subPoint.rain)
+			local dist = (dt * dt) + (dr * dr)
+			if not bestDist or dist < bestDist then
+				bestDist = dist
+				bestPoint = subPoint
 			end
 		end
-		local subCollection = { elements = elements, polar = polar, lake = lake, temperature = tempTotal / subSize, rainfall = rainTotal / subSize }
+		bestPoint.pixels = bestPoint.pixels or {}
+		tInsert(bestPoint.pixels, pixel)
+	end
+	-- create collection
+	local collection = {}
+	self.totalSize = 0
+	for i, subPoint in pairs(subPoints) do
+		local elements = {}
+		local polar
+		local lake = i > 1 and mRandom(1, 100) < self.lakeyness
+		for i, pixel in pairs(subPoint.pixels) do
+			polar = pixel.temp == 0
+			local element = self:CreateElement(pixel.temp, pixel.rain, lake)
+			local isNew = true
+			for i, el in pairs(elements) do
+				local different = false
+				for k, v in pairs(el) do
+					if k ~= "temperature" and k ~= "rainfall" and element[k] ~= v then
+						different = true
+						break
+					end
+				end
+				if not different then
+					isNew = false
+					break
+				end
+			end
+			if isNew then
+				tInsert(elements, element)
+				self.totalSize = self.totalSize + 1
+			end
+		end
+		EchoDebug(#elements)
+		local subCollection = { elements = elements, polar = polar, lake = lake, temperature = subPoint.temp, rainfall = subPoint.rain }
 		tInsert(collection, subCollection)
 	end
 	self.collection = collection
@@ -4186,12 +4182,15 @@ end
 
 function Space:CreateClimateVoronoi(number, relaxations)
 	relaxations = relaxations or 0
+	local pixelBuffer = {}
+	for t = self.temperatureMin, self.temperatureMax do
+		for r = self.rainfallMin, self.rainfallMax do
+			tInsert(pixelBuffer, {temp=t, rain=r})
+		end
+	end
 	local climateVoronoi = {}
 	for i = 1, number do
-		local point = {
-			temp = self:GetTemperature(),
-			rain = self:GetRainfall(),
-		}
+		local point = tRemoveRandom(pixelBuffer)
 		tInsert(climateVoronoi, point)
 	end
 	local cullCount = 0
@@ -4306,14 +4305,14 @@ function Space:NearestTempRainThing(temperature, rainfall, things, oneTtwoF)
 			end
 		end
 	else
-		local nearestDist = 20000
+		local nearestDist
 		local nearest
 		local dearest = {}
 		for i, thing in pairs(things) do
 			if thing.points then
 				for p, point in pairs(thing.points) do
 					local trdist = self:TempRainDist(point.t, point.r, temperature, rainfall)
-					if trdist < nearestDist then
+					if not nearestDist or trdist < nearestDist then
 						nearestDist = trdist
 						nearest = thing
 					end
