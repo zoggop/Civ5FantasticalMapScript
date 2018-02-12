@@ -1968,6 +1968,9 @@ function Region:CreateCollection()
 				if i == 1 then
 					repeat
 						element = tRemoveRandom(elementBuffer)
+						if #elementBuffer == 0 then
+							elementBuffer = tDuplicate(possibleElements)
+						end
 					until not element.lake
 				else
 					lake = true
@@ -2204,7 +2207,7 @@ Space = class(function(a)
 	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.regionRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
+	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverForkRatio = 0.33 -- how much of the river area should be reserved for forks
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -2646,10 +2649,10 @@ function Space:Compute()
 	self:PickRegions()
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
-	self.tempRainVoronoi = self:CreateTempRainVoronoi(#self.regions, self.regionRelaxations)
+	self.climateVoronoi = self:CreateClimateVoronoi(#self.regions, self.climateVoronoiRelaxations)
 	EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
 	EchoDebug("assigning climate voronoi to regions...")
-	self:AssignTempRainVoronoiToRegions(self.tempRainVoronoi)
+	self:AssignClimateVoronoiToRegions(self.climateVoronoi)
 	EchoDebug("filling regions...")
 	self:FillRegions()
 	EchoDebug("picking mountain ranges...")
@@ -4164,15 +4167,15 @@ function Space:PickRegions()
 	end
 end
 
-function Space:CreateTempRainVoronoi(number, relaxations)
+function Space:CreateClimateVoronoi(number, relaxations)
 	relaxations = relaxations or 0
-	local tempRainVoronoi = {}
+	local climateVoronoi = {}
 	for i = 1, number do
 		local point = {
 			temp = self:GetTemperature(),
 			rain = self:GetRainfall(),
 		}
-		tInsert(tempRainVoronoi, point)
+		tInsert(climateVoronoi, point)
 	end
 	for iteration = 1, relaxations + 1 do
 		-- fill voronoi grid
@@ -4180,7 +4183,7 @@ function Space:CreateTempRainVoronoi(number, relaxations)
 			for r = self.rainfallMin, self.rainfallMax do
 				local leastDist
 				local nearestPolygon
-				for i, point in pairs(tempRainVoronoi) do
+				for i, point in pairs(climateVoronoi) do
 					local dt = mAbs(t - point.temp)
 					local dr = mAbs(r - point.rain)
 					local dist = (dt * dt) + (dr * dr)
@@ -4201,7 +4204,7 @@ function Space:CreateTempRainVoronoi(number, relaxations)
 		end
 		-- relax points to centroids
 		if iteration <= relaxations then
-			for i, point in pairs(tempRainVoronoi) do
+			for i, point in pairs(climateVoronoi) do
 				point.temp = point.totalT / point.pixelCount
 				point.rain = point.totalR / point.pixelCount
 				if relaxation == relaxations then
@@ -4215,17 +4218,17 @@ function Space:CreateTempRainVoronoi(number, relaxations)
 			end
 		end
 	end
-	return tempRainVoronoi
+	return climateVoronoi
 end
 
-function Space:AssignTempRainVoronoiToRegions(tempRainVoronoi)
+function Space:AssignClimateVoronoiToRegions(climateVoronoi)
 	for i, region in pairs(self.regions) do
 		if self.useMapLatitudes then
 			region:GiveLatitude()
 			local temp = self:GetTemperature(region.latitude)
 			local rain = self:GetRainfall(region.latitude)
 			local bestDist, bestPoint
-			for ii, point in pairs(tempRainVoronoi) do
+			for ii, point in pairs(climateVoronoi) do
 				local dt = mAbs(temp - point.temp)
 				local dr = mAbs(rain - point.rain)
 				local dist = (dt * dt) + (dr * dr)
@@ -4236,7 +4239,7 @@ function Space:AssignTempRainVoronoiToRegions(tempRainVoronoi)
 			end
 			region.point = bestPoint
 		else
-			region.point = tRemove(tempRainVoronoi)
+			region.point = tRemove(climateVoronoi)
 		end
 		region.temperature = region.point.temp
 		region.rainfall = region.point.rain
