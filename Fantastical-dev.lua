@@ -1611,7 +1611,7 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 	end
 	if self.astronomyIndex then return nil end
 	self.astronomyIndex = astronomyIndex
-	if self.space.astronomyBasins[astronomyIndex] == nil then self.space.astronomyBasins[astronomyIndex] = {} end
+	self.space.astronomyBasins[astronomyIndex] = self.space.astronomyBasins[astronomyIndex] or {}
 	tInsert(self.space.astronomyBasins[astronomyIndex], self)
 	for i, neighbor in pairs(self.neighbors) do
 		neighbor:FloodFillAstronomy(astronomyIndex)
@@ -2218,7 +2218,7 @@ function Region:Fill()
 				if not doNotLake then
 					for ni, neighbor in pairs(subPolygon.neighbors) do
 						if not neighbor.superPolygon.continent or neighbor.lake then
-							-- can't have a lake that's actually a part of the ocean
+							-- can't have a lake that's actually a part of the ocean or inland sea
 							doNotLake = true
 							-- EchoDebug("can't have a lake next to a lake or the ocean")
 							break
@@ -2479,11 +2479,11 @@ function Space:SetOptions(optDict)
 			end
 		end
 	end
-	for key, value in pairsByKeys(self) do
-		if not keySetByOption[key] and type(value) ~= "table" then
-			EchoDebug(key, value)
-		end
-	end
+	-- for key, value in pairsByKeys(self) do
+	-- 	if not keySetByOption[key] and type(value) ~= "table" then
+	-- 		EchoDebug(key, value)
+	-- 	end
+	-- end
 end
 
 function Space:DoCentuariIfActivated()
@@ -2802,7 +2802,9 @@ function Space:Compute()
     EchoDebug("picking continents...")
     self:PickContinents()
     EchoDebug("filling in continent gaps...")
-    self:PatchContinents()
+    repeat
+    	local patchedCount = self:PatchContinents()
+    until patchedCount == 0
     EchoDebug("flooding inland seas...")
     self:FindInlandSeas()
     EchoDebug("filling inland seas...")
@@ -4050,12 +4052,14 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	EchoDebug(maxTotalPolygons .. " total polygons possible for land", islandPolygons .. " polygons reserved for islands", nonIslandPolygons .. " polygons reserved for continents")
 	local filledPolygons = 0
 	local continentIndex = 1
+	local polygonBufferSides
 	if self.oceanSides then
 		self.nonOceanSides = {}
 		if not self.oceanSides["bottomX"] then tInsert(self.nonOceanSides, "bottomX") end
 		if not self.oceanSides["topX"] then tInsert(self.nonOceanSides, "topX") end
 		if not self.oceanSides["bottomY"] then tInsert(self.nonOceanSides, "bottomY") end
 		if not self.oceanSides["topY"] then tInsert(self.nonOceanSides, "topY") end
+		EchoDebug(#self.nonOceanSides)
 	end
 	while #polygonBuffer > 0 do
 		-- determine theoretical continent size
@@ -4067,19 +4071,17 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			polygon = tRemoveRandom(polygonBuffer)
 			if polygon.continent == nil and not polygon:NearOther(nil, "continent") then
 				local nearPole = polygon:NearOther(nil, "topY") or polygon:NearOther(nil, "bottomY")
-				if (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) and (not nearPole or not self.noContinentsNearPoles) then
-					break
-				elseif (not self.wrapX and not self.wrapY) then
-					local goodSide = false
-					local sides = 0
-					for nosi, side in pairs(self.nonOceanSides) do
-						if polygon[side] then
-							goodSide = true
-							break
+				if self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0 then
+						local goodSide = false
+						for nosi, side in pairs(self.nonOceanSides) do
+							if polygon[side] then
+								goodSide = true
+								break
+							end
 						end
-						sides = sides + 1
-					end
-					if goodSide or sides == 0 then break else polygon = nil end
+						if goodSide then break else polygon = nil end
+				elseif (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) and (not nearPole or not self.noContinentsNearPoles) then
+					break
 				else
 					polygon = nil
 				end
@@ -4590,6 +4592,7 @@ function Space:PatchContinents()
 		end
 	end
 	EchoDebug(patchedPolygonCount .. " non-continent polygons with no route to ocean patched")
+	return patchedPolygonCount
 end
 
 function Space:FindInlandSeas()

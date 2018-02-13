@@ -3,3 +3,5 @@
 - need some way of preventing pangaea doughnuts. maybe any astronomy blobs need to begin either at a pole polygon, or at an ocean neighbor?
 
 - need to prevent multiple inland seas from merging into one. possibly lake subpolygons are causing this to happen?
+
+- need to prevent coasts and peninsulas from getting cut off on their non-ocean side
