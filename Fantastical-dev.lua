@@ -549,15 +549,15 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons" }, default = 9,
+	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
 	values = {
 			[1] = { name = "Land All Around", values = {true, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
 			[2] = { name = "Lakes", values = {true, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
 			[3] = { name = "Inland Seas", values = {true, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
-			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.25, 1, 0.0065, 0} },
+			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
 			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.15, 0, 0, 0.0065, 1, 1, 1} },
 			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 2, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
-			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 1, 1} },
+			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 3, 7, true} },
 			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 1, 0.2, 0.03, 1, 0.0065, 0} },
 			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 1, 0.25, 0.02, 1, 0.0065, 0} },
 			[10] = { name = "Earthish", values = {true, 2, 2, 15, 1, 0.4, 0.02, 1, 0.0065, 0} },
@@ -2216,6 +2216,7 @@ Space = class(function(a)
 	a.astronomyBlobNumber = 0
 	a.astronomyBlobMinPolygons = 10
 	a.astronomyBlobMaxPolygons = 20
+	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.15 -- how much of the land in each astronomy basin can be at the poles
@@ -3717,7 +3718,31 @@ function Space:InterpretPosition(position)
 end
 
 function Space:PickOceansAstronomyBlobs()
-	local polygonBuffer = tDuplicate(self.polygons)
+	local polygonBuffer
+	if self.astronomyBlobsMustConnectToOcean then
+		local chosen = {}
+		polygonBuffer = {}
+		if self.wrapX then
+			for i, polygon in pairs(self.polygons) do
+				if polygon.edgeY then
+					tInsert(polygonBuffer, polygon)
+					chosen[polygon] = true
+				end
+			end
+		end
+		for i, ocean in pairs(self.oceans) do
+			for ii, polygon in pairs(ocean) do
+				for iii, neighbor in pairs(polygon.neighbors) do
+					if not neighbor.oceanIndex and not chosen[neighbor] then
+						tInsert(polygonBuffer, neighbor)
+						chosen[neighbor] = true
+					end
+				end
+			end
+		end
+	else
+		polygonBuffer = tDuplicate(self.polygons)
+	end
 	local astronomyBlobCount = 0
 	local maxDistRatioFromOceans = 0
 	if self.oceanNumber > 0 then 
@@ -3731,7 +3756,7 @@ function Space:PickOceansAstronomyBlobs()
 		repeat
 			-- polygon = self:GetPolygonByXY(self.halfWidth, self.halfHeight)
 			polygon = tRemoveRandom(polygonBuffer)
-			if self.oceanNumber > 0 then
+			if not self.astronomyBlobsMustConnectToOcean and self.oceanNumber > 0 then
 				local minOceanDist
 				for i, ocean in pairs(self.oceans) do
 					for ii, poly in pairs(ocean) do
@@ -5821,5 +5846,5 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 end
