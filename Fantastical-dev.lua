@@ -557,7 +557,19 @@ local OptionDictionary = {
 			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
 			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.15, 0, 0, 0.0065, 1, 1, 1} },
 			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 2, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
-			[7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 3, 7, true} },
+			-- [7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 3, 7, true} },
+			[7] = { name = "Pangaea", values = {
+				oceanNumber = 						1,
+				majorContinentNumber = 				1,
+				tinyIslandChance = 					20,
+				islandRatio = 						0.1,
+				inlandSeaContinentRatio = 			0.02,
+				inlandSeasMax = 					1,
+				astronomyBlobNumber = 				1,
+				astronomyBlobMinPolygons = 			3,
+				astronomyBlobMaxPolygons = 			7,
+				astronomyBlobsMustConnectToOcean = 	true,
+			}},
 			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 1, 0.2, 0.03, 1, 0.0065, 0} },
 			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 1, 0.25, 0.02, 1, 0.0065, 0} },
 			[10] = { name = "Earthish", values = {true, 2, 2, 15, 1, 0.4, 0.02, 1, 0.0065, 0} },
@@ -2218,8 +2230,8 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.islandRatio = 0.5 -- what part of the continent polygons are taken up by 1-3 polygon continents
-	a.polarMaxLandRatio = 0.15 -- how much of the land in each astronomy basin can be at the poles
+	a.islandRatio = 0.2 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
@@ -2237,8 +2249,8 @@ Space = class(function(a)
 	a.mountainRangeMult = 1.3 -- higher mult means more (globally) scattered mountain ranges
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
-	a.coastalPolygonChance = 2 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandChance = 40 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
+	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
+	a.tinyIslandChance = 15 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -2321,15 +2333,24 @@ function Space:SetOptions(optDict)
 			end
 			option.values[optionChoice].values = randValues
 		end
- 		for valueNumber, key in ipairs(option.keys) do
-			EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
-			local val = option.values[optionChoice].values[valueNumber]
-			if val == nil then
-				if type(self[key]) == "number" then
-					val = self[key]
-				end
+		if option.values[optionChoice].values[1] == nil then
+			-- each value already has a string-key
+			for key, value in pairs(option.values[optionChoice].values) do
+				EchoDebug(option.name, option.values[optionChoice].name, key, value)
+				self[key] = value
 			end
-			self[key] = val
+		else
+			-- each value is listed in order of the option's listed keys
+	 		for valueNumber, key in ipairs(option.keys) do
+				EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
+				local val = option.values[optionChoice].values[valueNumber]
+				if val == nil then
+					if type(self[key]) == "number" then
+						val = self[key]
+					end
+				end
+				self[key] = val
+			end
 		end
 	end
 end
