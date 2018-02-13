@@ -24,7 +24,7 @@ local function EchoDebug(...)
 		for i,v in ipairs(arg) do
 			local vString
 			if type(v) == "number" and math.floor(v) ~= v then
-				vString = string.format("%.2f", v)
+				vString = string.format("%.4f", v)
 			elseif type(v) == "table" and v[1] then
 				vString = ""
 				for ii, vv in ipairs(v) do
@@ -551,13 +551,50 @@ end
 local OptionDictionary = {
 	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
 	values = {
-			[1] = { name = "Land All Around", values = {true, -1, 1, 5, 1, 0, 0, 0, 0, 0} },
-			[2] = { name = "Lakes", values = {true, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
-			[3] = { name = "Inland Seas", values = {true, -1, 1, 8, 1, 0, 0.04, 3, 0.015, 0} },
-			[4] = { name = "Inland Sea", values = {true, -1, 1, 3, 1, 0, 0.4, 1, 0.0065, 0} },
-			[5] = { name = "Low Seas", values = {true, 0, 3, 15, 1, 0.15, 0, 0, 0.0065, 1, 1, 1} },
-			[6] = { name = "Archipelago", values = {true, 0, 7, 30, 2, 0.32, 0.02, 1, 0.0065, 2, 1, 5} },
-			-- [7] = { name = "Pangaea", values = {true, 1, 1, 20, 2, 0.15, 0.02, 1, 0.0065, 1, 3, 7, true} },
+			[1] = { name = "Land All Around", values = {
+				oceanNumber = -1,
+				inlandSeasMax = 0,
+				lakeMinRatio = 0,
+			}},
+			[2] = { name = "Lakes", values = {
+				oceanNumber = -1,
+				tinyIslandChance = 30,
+				inlandSeaContinentRatio = 0.015,
+				inlandSeasMax = 2,
+				lakeMinRatio = 0.02,
+			}},
+			[3] = { name = "Inland Seas", values = {
+				oceanNumber = -1,
+				tinyIslandChance = 8,
+				inlandSeaContinentRatio = 0.04,
+				inlandSeasMax = 3,
+				lakeMinRatio = 0.015,
+			}},
+			[4] = { name = "Inland Sea", values = {
+				oceanNumber = -1,
+				tinyIslandChance = 3,
+				inlandSeaContinentRatio = 0.4,
+				inlandSeasMax = 1,
+			}},
+			[5] = { name = "Low Seas", values = {
+				oceanNumber = 0,
+				majorContinentNumber = 3,
+				islandRatio = 0.15,
+				inlandSeasMax = 0,
+				astronomyBlobNumber = 1,
+				astronomyBlobMinPolygons = 1,
+				astronomyBlobMaxPolygons = 1,
+			}},
+			[6] = { name = "Archipelago", values = {
+				oceanNumber = 0,
+				majorContinentNumber = 7,
+				tinyIslandChance = 30,
+				coastalPolygonChance = 2,
+				islandRatio = 0.32,
+				astronomyBlobNumber = 2,
+				astronomyBlobMinPolygons = 1,
+				astronomyBlobMaxPolygons = 5,
+			}},
 			[7] = { name = "Pangaea", values = {
 				oceanNumber = 						1,
 				majorContinentNumber = 				1,
@@ -570,11 +607,35 @@ local OptionDictionary = {
 				astronomyBlobMaxPolygons = 			7,
 				astronomyBlobsMustConnectToOcean = 	true,
 			}},
-			[8] = { name = "Centauri-like", values = {true, 1, 3, 15, 1, 0.2, 0.03, 1, 0.0065, 0} },
-			[9] = { name = "Two Continents", values = {true, 2, 1, 15, 1, 0.25, 0.02, 1, 0.0065, 0} },
-			[10] = { name = "Earthish", values = {true, 2, 2, 15, 1, 0.4, 0.02, 1, 0.0065, 0} },
-			[11] = { name = "Earthseaish", values = {true, 3, 5, 25, 2, 0.75, 0.02, 1, 0.0065, 0} },
-			[12] = { name = "Lonely Oceans", values = {true, 0, 12, 100, 1, 0.8, 0.02, 0, 0.0065, 5} },
+			[8] = { name = "Centauri-like", values = {
+				oceanNumber = 1,
+				majorContinentNumber = 3,
+				islandRatio = 0.2,
+				inlandSeaContinentRatio = 0.03,
+				inlandSeasMax = 1,
+			}},
+			[9] = { name = "Two Continents", values = {
+				-- all defaults
+			}},
+			[10] = { name = "Earthish", values = {
+				majorContinentNumber = 2,
+				islandRatio = 0.3,
+			}},
+			[11] = { name = "Earthseaish", values = {
+				oceanNumber = 3,
+				majorContinentNumber = 5,
+				tinyIslandChance = 25,
+				coastalPolygonChance = 2,
+				islandRatio = 0.75,
+			}},
+			[12] = { name = "Lonely Oceans", values = {
+				oceanNumber = 0,
+				majorContinentNumber = 12,
+				tinyIslandChance = 100,
+				coastalPolygonChance = 1,
+				islandRatio = 0.8,
+				astronomyBlobNumber = 5,
+			}},
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
 			[14] = { name = "Dry Land", values = {false, -1, 1, 40, 2, 0.4, 0, 0, 0, 0} },
 			[15] = { name = "Landlocked Lakes", values = {false, -1, 1, 30, 1, 0, 0.015, 2, 0.02, 0} },
@@ -2230,7 +2291,7 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.islandRatio = 0.2 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.islandRatio = 0.25 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
@@ -2269,7 +2330,7 @@ Space = class(function(a)
 	a.marshynessMin = 5
 	a.marshynessMax = 50
 	a.marshMinHexRatio = 0.015
-	a.inlandSeaContinentRatio = 0.025 -- maximum size of each inland sea as a fraction of the polygons of the continent they're inside
+	a.inlandSeaContinentRatio = 0.02 -- maximum size of each inland sea as a fraction of the polygons of the continent they're inside
 	a.inlandSeasMax = 1 -- maximum number of inland seas
 	a.ancientCitiesCount = 3
 	a.falloutEnabled = false -- place fallout on the map?
@@ -2311,6 +2372,7 @@ Space = class(function(a)
 end)
 
 function Space:SetOptions(optDict)
+	local keySetByOption = {}
 	for optionNumber, option in ipairs(optDict) do
 		local optionChoice = Map.GetCustomOption(optionNumber)
 		if option.values[optionChoice].values == "keys" then
@@ -2338,6 +2400,7 @@ function Space:SetOptions(optDict)
 			for key, value in pairs(option.values[optionChoice].values) do
 				EchoDebug(option.name, option.values[optionChoice].name, key, value)
 				self[key] = value
+				keySetByOption[key] = true
 			end
 		else
 			-- each value is listed in order of the option's listed keys
@@ -2350,7 +2413,13 @@ function Space:SetOptions(optDict)
 					end
 				end
 				self[key] = val
+				keySetByOption[key] = true
 			end
+		end
+	end
+	for key, value in pairsByKeys(self) do
+		if not keySetByOption[key] and type(value) ~= "table" then
+			EchoDebug(key, value)
 		end
 	end
 end

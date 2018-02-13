@@ -1,0 +1,5 @@
+- possibly instead of using min and max to for global climate options, use an exponent (like polarexponent) that the whole climate grid is distorted by. this would have to be used in conjunction with modifying mins and maxes, because it tends to leave in too much of the upper or lower part of the curve
+
+- need some way of preventing pangaea doughnuts. maybe any astronomy blobs need to begin either at a pole polygon, or at an ocean neighbor?
+
+- need to prevent multiple inland seas from merging into one. possibly lake subpolygons are causing this to happen?
