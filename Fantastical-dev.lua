@@ -61,6 +61,7 @@ local mMin = math.min
 local mMax = math.max
 local mAbs = math.abs
 local mSqrt = math.sqrt
+local mLog = math.log
 local mSin = math.sin
 local mCos = math.cos
 local mPi = math.pi
@@ -595,11 +596,11 @@ local OptionDictionary = {
 	{ name = "Granularity", keys = { "polygonCount" }, default = 3,
 	values = {
 			[1] = { name = "Very Low", values = {100} },
-			[2] = { name = "Low", values = {140} },
-			[3] = { name = "Fair", values = {180} },
-			[4] = { name = "High", values = {230} },
-			[5] = { name = "Very High", values = {290} },
-			[6] = { name = "Random", values = "keys" },
+			[2] = { name = "Low", values = {150} },
+			[3] = { name = "Fair", values = {200} },
+			[4] = { name = "High", values = {250} },
+			[5] = { name = "Very High", values = {300} },
+			[6] = { name = "Random", values = "values", lowValues = {100}, highValues = {300} },
 		}
 	},
 	{ name = "Climate Realism", keys = { "useMapLatitudes" }, default = 1,
@@ -622,7 +623,7 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
 	values = {
-			[1] = { name = "Snowball", values = {1.8, 0, 14} },
+			[1] = { name = "Snowball", values = {1.8, 0, 13} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 33} },
 			[3] = { name = "Cool", values = {1.4, 0, 71} },
 			[4] = { name = "Temperate", values = {1.2, 0, 99} },
@@ -2209,7 +2210,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 18 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 25 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2665,6 +2666,8 @@ function Space:Compute()
 	self:ComputeSeas()
 	EchoDebug("picking regions...")
 	self:PickRegions()
+	-- EchoDebug("distorting climate grid...")
+	-- climateGrid = self:DistortClimateGrid(climateGrid, 1.5, 1)
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
 	self.climateVoronoi = self:CreateClimateVoronoi(#self.regions, self.climateVoronoiRelaxations)
@@ -4183,6 +4186,23 @@ function Space:PickRegions()
 		polygon.region.archipelago = true
 		tInsert(self.regions, polygon.region)
 	end
+end
+
+function Space:DistortClimateGrid(grid, tempExponent, rainExponent)
+	tempExponent = tempExponent or 1
+	rainExponent = rainExponent or 1
+	local tempExpComp = 99 / (99 ^ tempExponent)
+	local rainExpComp = 99 / (99 ^ rainExponent)
+	local newGrid = {}
+	for t, rains in pairs(grid) do
+		local temp = mFloor( tempExpComp * (t ^ tempExponent) )
+		newGrid[t] = {}
+		for r, pixel in pairs(rains) do
+			local rain = mFloor( rainExpComp * (r ^ rainExponent) )
+			newGrid[t][r] = grid[temp][rain]
+		end
+	end
+	return newGrid
 end
 
 function Space:CreateClimateVoronoi(number, relaxations)

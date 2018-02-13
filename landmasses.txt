@@ -17,6 +17,4 @@ landmass types
 
 ---
 
-- using random elements is pretty bad, how about dividing up the region's TR pixels with subvoronoi, or in another way
-
 - possibly instead of using min and max to for global climate options, use an exponent (like polarexponent) that the whole climate grid is distorted by
