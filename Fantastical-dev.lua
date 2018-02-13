@@ -3713,7 +3713,10 @@ function Space:PickOceansRectangle()
 		local sideIndex = mRandom(1, #sides)
 		local removeAlsoSide
 		if oceanIndex == 1 and self.oceanNumber == 2 then
-			local removeAlsoSideIndex = (sideIndex + 2) % 4
+			local removeAlsoSideIndex = sideIndex + 2
+			if removeAlsoSideIndex > #sides then
+				removeAlsoSideIndex = removeAlsoSideIndex - #sides
+			end
 			removeAlsoSide = sides[removeAlsoSideIndex]
 			EchoDebug("prevent parallel oceans", sideIndex, removeAlsoSideIndex, removeAlsoSide)
 		end
@@ -3727,7 +3730,6 @@ function Space:PickOceansRectangle()
 				end
 			end
 		end
-		EchoDebug("side: ", side[1][1], side[1][2], side[2][1], side[2][2])
 		local x, y = side[1][1] * self.w, side[1][2] * self.h
 		local xUp = side[2][1] - x == 1
 		local yUp = side[2][2] - y == 1
@@ -4059,19 +4061,27 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		if not self.oceanSides["topX"] then tInsert(self.nonOceanSides, "topX") end
 		if not self.oceanSides["bottomY"] then tInsert(self.nonOceanSides, "bottomY") end
 		if not self.oceanSides["topY"] then tInsert(self.nonOceanSides, "topY") end
-		EchoDebug(#self.nonOceanSides)
 	end
 	while #polygonBuffer > 0 do
 		-- determine theoretical continent size
 		local size = mCeil((nonIslandPolygons / self.majorContinentNumber) * sizeMult) -- because of the space left between continents
 		if filledPolygons >= nonIslandPolygons * sizeMult then size = mRandom(1, 3) end
+		local putTheContinentOnMyGoodSide = size > 3 and self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0
+		if putTheContinentOnMyGoodSide then
+			local goodSidePolygonCount = 0
+			for i, side in pairs(self.nonOceanSides) do
+				goodSidePolygonCount = goodSidePolygonCount + #self[side .. "Polygons"]
+			end
+			putTheContinentOnMyGoodSide = mFloor((goodSidePolygonCount / self.majorContinentNumber) * sizeMult)
+			-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
+		end
 		-- pick a polygon to start the continent
 		local polygon
 		repeat
 			polygon = tRemoveRandom(polygonBuffer)
 			if polygon.continent == nil and not polygon:NearOther(nil, "continent") then
 				local nearPole = polygon:NearOther(nil, "topY") or polygon:NearOther(nil, "bottomY")
-				if self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0 then
+				if putTheContinentOnMyGoodSide then
 						local goodSide = false
 						for nosi, side in pairs(self.nonOceanSides) do
 							if polygon[side] then
@@ -4090,8 +4100,10 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			end
 		until #polygonBuffer == 0
 		if polygon == nil then break end
+		local goodSideThisContinent = 0
 		local backlog = {}
 		local polarBacklog = {}
+		local goodSideBacklog = {}
 		self.filledArea = self.filledArea + #polygon.hexes
 		self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
 		filledPolygons = filledPolygons + 1
@@ -4101,11 +4113,23 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		repeat
 			local candidates = {}
 			local polarCandidates = {}
+			local goodSideCandidates = {}
 			for ni, neighbor in pairs(polygon.neighbors) do
 				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 100 then
+					local onGoodSide
+					if putTheContinentOnMyGoodSide then
+						for si, side in pairs(self.nonOceanSides) do
+							if neighbor[side] then
+								onGoodSide = true
+								break
+							end
+						end
+					end
 					local nearPole = neighbor.betaBottomY or neighbor.betaTopY
 					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY or (self.noContinentsNearPoles and nearPole)) then
 						tInsert(polarCandidates, neighbor)
+					elseif onGoodSide then
+						tInsert(goodSideCandidates, neighbor)
 					else
 						tInsert(candidates, neighbor)
 					end
@@ -4116,29 +4140,54 @@ function Space:PickContinentsInBasin(astronomyIndex)
 				if #polarCandidates > 0 and polarPolygonCount < maxPolarPolygons then
 					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
 					polarPolygonCount = polarPolygonCount + 1
+				elseif putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideCandidates > 0 then
+					candidate = tRemoveRandom(goodSideCandidates) -- use a goodside polygon
+					goodSideThisContinent = goodSideThisContinent + 1
 				else
 					-- when there are no immediate candidates
-					if #backlog > 0 then
+					if putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideBacklog > 0 then
+						repeat
+							candidate = tRemove(goodSideBacklog, #goodSideBacklog)
+							if candidate.continent ~= nil then candidate = nil end
+						until candidate ~= nil or #goodSideBacklog == 0
+						if candidate ~= nil then
+							goodSideThisContinent = goodSideThisContinent + 1
+						end
+					end
+					if candidate == nil and #backlog > 0 then
 						repeat
 							candidate = tRemove(backlog, #backlog) -- pop off the most recent
 							if candidate.continent ~= nil then candidate = nil end
 						until candidate ~= nil or #backlog == 0
-					elseif #polarBacklog > 0 then
+					end
+					if candidate == nil and #polarBacklog > 0 then
 						repeat
 							candidate = tRemove(polarBacklog, #polarBacklog) -- pop off the most recent polar
 							if candidate.continent ~= nil then candidate = nil end
 						until candidate ~= nil or #polarBacklog == 0
-					else
-						break -- nothing left to do but stop
+						if candidate ~= nil then
+							polarPolygonCount = polarPolygonCount + 1
+						end
 					end
 				end
 			else
-				candidate = tRemoveRandom(candidates)
+				if putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideCandidates > 0 then
+					candidate = tRemoveRandom(goodSideCandidates)
+					goodSideThisContinent = goodSideThisContinent + 1
+				else
+					candidate = tRemoveRandom(candidates)
+				end
 			end
-			if candidate == nil then break end
+			if candidate == nil then
+				-- EchoDebug(#candidates, #polarCandidates, #goodSideCandidates, #backlog, #polarBacklog, #goodSideBacklog)
+				break
+			end
 			-- put the rest of the candidates in the backlog
 			for nothing, polygon in pairs(candidates) do
 				tInsert(backlog, polygon)
+			end
+			for nothing, polygon in pairs(goodSideCandidates) do
+				tInsert(goodSideBacklog, polygon)
 			end
 			for nothing, polygon in pairs(polarCandidates) do
 				tInsert(polarBacklog, polygon)
