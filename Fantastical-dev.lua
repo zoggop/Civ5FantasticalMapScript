@@ -1855,6 +1855,19 @@ function Polygon:FillHexes()
 	end
 end
 
+function Polygon:Flop(superPolygon)
+	for ii, subPoly in pairs(self.superPolygon.subPolygons) do
+		if subPoly == self then
+			tRemove(self.superPolygon.subPolygons, ii)
+			break
+		end
+	end
+	self.superPolygon = superPolygon
+	tInsert(superPolygon.subPolygons, self)
+	self.flopped = true
+	self.space.flopCount = (self.space.flopCount or 0) + 1
+end
+
 function Polygon:PickTinyIslands()
 	if (self.bottomX or self.topX) and self.oceanIndex and not self.space.wrapX then return end
 	if (self.bottomY or self.topY) and self.oceanIndex and not self.space.wrapX then return end
@@ -2381,7 +2394,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 25 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 10 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2820,16 +2833,17 @@ function Space:Compute()
     end
     EchoDebug("filling polygons post-relaxation...")
     self:FillPolygons()
+    EchoDebug("determining subpolygon neighbors...")
+    self:FindSubPolygonNeighbors()
+    EchoDebug("flip-flopping subpolygons...")
+    self:FlipFlopSubPolygons()
+    EchoDebug((self.flopCount or 0) .. " subpolygons flopped")
     EchoDebug("populating polygon hex tables...")
     self:FillPolygonHexes()
-    -- EchoDebug("flip-flopping subpolygons...")
-    -- self:FlipFlopSubPolygons()
     EchoDebug("culling empty polygons...")
     self:CullPolygons(self.polygons)
     self:GetPolygonSizes()
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
-    EchoDebug("determining subpolygon neighbors...")
-    self:FindSubPolygonNeighbors()
     EchoDebug("finding polygon neighbors...")
     self:FindPolygonNeighbors()
     EchoDebug("finding subedge connections...")
@@ -3488,48 +3502,31 @@ end
 function Space:FlipFlopSubPolygons()
 	for i, subPolygon in pairs(self.subPolygons) do
 		-- see if it's next to another superpolygon
-		local adjacent = {}
+		local choices = {}
 		for n, neighbor in pairs(subPolygon.neighbors) do
 			if neighbor.superPolygon ~= subPolygon.superPolygon then
-				adjacent[neighbor.superPolygon] = true
+				choices[#choices+1] = neighbor.superPolygon
 			end
 		end
-		local choices = {}
-		for superPolygon, yes in pairs(adjacent) do
-			tInsert(choices, superPolygon)
-		end
-		if #choices > 0 and not subPolygon.flopped and mRandom(1, 100) < self.subPolygonFlopPercent then
+		if #choices > 0 and mRandom(1, 100) < self.subPolygonFlopPercent then
 			-- flop the subpolygon
-			local superPolygon = tGetRandom(choices)
-			for h, hex in pairs(subPolygon.hexes) do
-				hex.polygon = superPolygon
-			end
-			subPolygon.superPolygon = superPolygon
-			subPolygon.flopped = true
+			subPolygon:Flop(tGetRandom(choices))
 		end
 	end
 	-- fix stranded single subpolygons
 	for i, subPolygon in pairs(self.subPolygons) do
 		local hasFriendlyNeighbors = false
-		local unfriendly = {}
+		local uchoices = {}
 		for n, neighbor in pairs(subPolygon.neighbors) do
 			if neighbor.superPolygon == subPolygon.superPolygon then
 				hasFriendlyNeighbors = true
 				break
 			else
-				unfriendly[neighbor.superPolygon] = true
+				uchoices[#uchoices+1] = neighbor.superPolygon
 			end
 		end
-		if not hasFriendlyNeighbors then
-			local uchoices = {}
-			for superPolygon, yes in pairs(unfriendly) do
-				tInsert(uchoices, superPolygon)
-			end
-			subPolygon.superPolygon = tGetRandom(uchoices)
-			for h, hex in pairs(subPolygon.hexes) do
-				hex.polygon = subPolygon.superPolygon
-			end
-			subPolygon.flopped = true
+		if not hasFriendlyNeighbors and not subPolygon.flopped and #subPolygon.superPolygon.subPolygons > 1 and #uchoices > 0 then
+			subPolygon:Flop(tGetRandom(uchoices))
 		end
 	end
 end
