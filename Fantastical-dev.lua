@@ -1281,7 +1281,7 @@ function Hex:Place(relax)
 				self.latitude = self.space:RealmLatitude(self.y)
 			end
 		end
-		self:InsidePolygon(self.subPolygon)
+		-- self:InsidePolygon(self.subPolygon) -- this now happens in CalcSubPolygonLimits()
 	end
 end
 
@@ -1372,9 +1372,17 @@ function Hex:Unstrand()
 	end
 	if not anybodyFriendly and #self.subPolygon.hexes > 1 then
 		-- EchoDebug(self.x, self.y)
-		self.stranded = true
+		self.stranded = true -- for debugging purposes. the idea is this is no longer stranded
+		for i = #self.subPolygon.hexes, 1, -1 do
+			local hex = self.subPolygon.hexes[i]
+			if hex == self then
+				tRemove(self.subPolygon.hexes, i)
+				break
+			end
+		end
+		self.subPolygon = tGetRandom(others)
+		tInsert(self.subPolygon.hexes, self)
 		return true
-		-- self.subPolygon = tGetRandom(others)
 	end
 end
 
@@ -2798,7 +2806,10 @@ function Space:Compute()
     self:FillSubPolygons()
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
-    self:GetSubPolygonSizes()
+    EchoDebug("unstranding hexes...")
+	self:UnstrandHexes()
+	EchoDebug("calculating subpolygon limits..")
+	self:CalcSubPolygonLimits()
 	EchoDebug("smallest subpolygon: " .. self.subPolygonMinArea, "largest subpolygon: " .. self.subPolygonMaxArea)
     if self.relaxations > 0 then
     	for r = 1, self.relaxations do
@@ -2818,8 +2829,6 @@ function Space:Compute()
     self:CullPolygons(self.polygons)
     self:GetPolygonSizes()
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
-	EchoDebug("unstranding hexes...")
-	self:UnstrandHexes()
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("finding polygon neighbors...")
@@ -3525,10 +3534,13 @@ function Space:FlipFlopSubPolygons()
 	end
 end
 
-function Space:GetSubPolygonSizes()
+function Space:CalcSubPolygonLimits()
 	self.subPolygonMinArea = self.iA
 	self.subPolygonMaxArea = 0
 	for i, polygon in pairs(self.subPolygons) do
+		for ii, hex in pairs(polygon.hexes) do
+			hex:InsidePolygon(polygon)
+		end
 		if #polygon.hexes < self.subPolygonMinArea and #polygon.hexes > 0 then
 			self.subPolygonMinArea = #polygon.hexes
 		end
