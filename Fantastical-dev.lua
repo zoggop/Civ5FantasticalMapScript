@@ -10,6 +10,7 @@ end
 include("math")
 include("bit")
 include("MapGenerator")
+include("FLuaVector.lua")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
@@ -120,6 +121,10 @@ local function mRandom(lower, upper)
 	return number
 end
 
+local function int(x)
+	return x + 0.5 - (x + 0.5) % 1
+end
+
 local function tRemoveRandom(fromTable)
 	return tRemove(fromTable, mRandom(1, #fromTable))
 end
@@ -158,6 +163,44 @@ end
 
 local function AngleDist(angle1, angle2)
 	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
+end
+
+-- Calculate the distance between two plots
+--
+-- See http://www-cs-students.stanford.edu/~amitp/Articles/HexLOS.html
+-- Also http://keekerdc.com/2011/03/hexagon-grids-coordinate-systems-and-distance-calculations/
+--
+
+local function PlotToHex(pPlot)
+  local hex = ToHexFromGrid(Vector2(pPlot:GetX(), pPlot:GetY()))
+
+  -- X + y + z = 0, hence z = -(x+y)
+  hex.z = -(hex.x + hex.y)
+
+  return hex
+end
+
+local function distanceBetweenXY(x1, y1, x2, y2)
+  local mapX, mapY = Map.GetGridSize()
+
+  -- Need to work on a hex based grid
+  local z1 = -(x1+y1)
+  local z2 = -(x2+y2)
+
+  -- Calculate the distance between the x and z co-ordinate pairs
+  -- allowing for the East-West wrap, (ie shortest route may be by going backwards!)
+  local deltaX = math.min(math.abs(x2 - x1), mapX - math.abs(x2 - x1))
+  local deltaZ = math.min(math.abs(z2 - z1), mapX - math.abs(z2 - z1))
+
+  -- Calculate the distance between the y co-ordinates
+  -- there is no North-South wrap, so this is easy
+  local deltaY = math.abs(y2 - y1)
+
+  -- Calculate the distance between the plots
+  local distance = math.max(deltaX, deltaY, deltaZ)
+
+  -- Allow for both end points in the distance calculation
+  return distance + 1
 end
 
 ------------------------------------------------------------------------------
@@ -1345,6 +1388,24 @@ end
 
 function Hex:ClosestSubPolygon()
 	return self.space:ClosestThing(self, self.space.subPolygons)
+end
+
+function Hex:Unstrand()
+	local anybodyFriendly
+	local others = {}
+	for direction, nhex in pairs(self:Neighbors()) do -- 3 and 4 are are never there yet?
+		if nhex.subPolygon == self.subPolygon then
+			anybodyFriendly = true
+		else
+			tInsert(others, nhex.subPolygon)
+		end
+	end
+	if not anybodyFriendly and #self.subPolygon.hexes > 1 then
+		-- EchoDebug(self.x, self.y)
+		self.stranded = true
+		return true
+		-- self.subPolygon = tGetRandom(others)
+	end
 end
 
 function Hex:FindSubPolygonNeighbors()
@@ -2690,10 +2751,10 @@ function Space:Compute()
     self.halfDiagonalWidth = self.diagonalWidth / 2
     self.halfDiagonalWidthSq = (self.halfWidth * self.halfWidth) + (self.halfHeight * self.halfHeight)
 
-    -- EchoDebug(self:HexDistance(self.halfWidth+5, self.halfHeight, 1, self.h), self.halfWidth+5, self.halfHeight, 1, self.h)
-    -- EchoDebug(self:HexDistance(1, self.halfHeight, self.halfWidth-5, self.h), 1, self.halfHeight, self.halfWidth-5, self.h)
-    -- EchoDebug(self:HexDistance(self.w, 0, 0, self.h), self.w, 0, 0, self.h)
-    -- EchoDebug(self:HexDistance(self.w, 0, 1, self.h), self.w, 0, 1, self.h)
+    EchoDebug(self:HexDistance(self.halfWidth+5, self.halfHeight, 1, self.h), self.halfWidth+5, self.halfHeight, 1, self.h)
+    EchoDebug(self:HexDistance(1, self.halfHeight, self.halfWidth-5, self.h), 1, self.halfHeight, self.halfWidth-5, self.h)
+    EchoDebug(self:HexDistance(self.w, 0, 0, self.h), self.w, 0, 0, self.h)
+    EchoDebug(self:HexDistance(self.w, 0, 1, self.h), self.w, 0, 1, self.h)
 
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     self.xFakeLatitudeConversion = 180 / self.iW
@@ -2787,6 +2848,8 @@ function Space:Compute()
     self:CullPolygons(self.polygons)
     self:GetPolygonSizes()
 	EchoDebug("smallest polygon: " .. self.polygonMinArea, "largest polygon: " .. self.polygonMaxArea)
+	EchoDebug("unstranding hexes...")
+	self:UnstrandHexes()
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("finding polygon neighbors...")
@@ -3308,13 +3371,70 @@ function Space:SetContinentArtTypes()
 	end
 end
 
+function Space:PolygonDebugDisplay()
+	local fills = {}
+	for terrainType, terrainDef in pairs(TerrainDictionary) do
+		for i, featureType in pairs(terrainDef.features) do
+			if featureType == featureForest or featureType == featureNone then
+				tInsert(fills, {plotType = plotLand, terrainType = terrainType, featureType = featureType})
+			end
+		end
+	end
+	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureNone})
+	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureIce})
+	tInsert(fills, {plotType = plotOcean, terrainType = terrainCoast, featureType = featureNone})
+	EchoDebug(#fills .. " fill types")
+	local highestNeighbors = 0
+	for i, polygon in pairs(self.polygons) do
+		local fillsLeft = tDuplicate(fills)
+		if #polygon.neighbors > highestNeighbors then
+			highestNeighbors = #polygon.neighbors
+		end
+		for ii, neighbor in pairs(polygon.neighbors) do
+			if neighbor.fill then
+				for iii = #fillsLeft, 1, -1 do
+					local fill = fillsLeft[iii]
+					if fill == neighbor.fill then
+						tRemove(fillsLeft, iii)
+						break
+					end
+				end
+			end
+		end
+		local fill = tGetRandom(fillsLeft)
+		polygon.fill = fill
+		for ii, hex in pairs(polygon.hexes) do
+			hex.plot:SetPlotType(fill.plotType)
+			hex.plot:SetTerrainType(fill.terrainType)
+			hex.plot:SetFeatureType(fill.featureType)
+			if hex.stranded then
+				hex.plot:SetFeatureType(featureFloodPlains)
+			elseif hex.x == polygon.x and hex.y == polygon.y then
+				hex.plot:SetFeatureType(featureReef)
+			end
+		end
+	end
+	EchoDebug(highestNeighbors .. " most polygon neighbors")
+end
+
     ----------------------------------
     -- INTERNAL METAFUNCTIONS: --
 
 function Space:InitPolygons()
+	local XYs = {}
+	for x = 0, self.w do
+		for y = 0, self.h do
+			tInsert(XYs, {x=x, y=y})
+		end
+	end
+	local xyBuffer = tDuplicate(XYs)
 	for i = 1, self.subPolygonCount do
-		local subPolygon = Polygon(self)
+		local xy = tRemoveRandom(xyBuffer)
+		local subPolygon = Polygon(self, xy.x, xy.y)
 		tInsert(self.subPolygons, subPolygon)
+		if #xyBuffer == 0 then
+			break
+		end
 	end
 	for i = 1, self.polygonCount do
 		local polygon = Polygon(self)
@@ -3359,7 +3479,7 @@ function Space:FillPolygonHexes()
 end
 
 function Space:CullPolygons(polygons)
-	culled = 0
+	local culled = 0
 	for i = #polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
 		local polygon = polygons[i]
 		if #polygon.hexes == 0 then
@@ -3368,6 +3488,16 @@ function Space:CullPolygons(polygons)
 		end
 	end
 	EchoDebug(culled .. " polygons culled", #polygons .. " remaining")
+end
+
+function Space:UnstrandHexes()
+	local strandedCount = 0
+	for i, hex in pairs(self.hexes) do
+		if hex:Unstrand() then
+			strandedCount = strandedCount + 1
+		end
+	end
+	EchoDebug(strandedCount .. " hexes stranded")
 end
 
 function Space:FindSubPolygonNeighbors()
@@ -5793,17 +5923,24 @@ end
 function Space:ClosestThing(this, things)
 	local closestDist
 	local closestThing
+	local thingsByDist = {}
 	-- find the closest point to this point
 	for i, thing in pairs(things) do
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
 		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
-		local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
-		-- local dist = self:HexDistance(thing.x, thing.y, this.x, this.y)
+		-- local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
+		local dist = self:HexDistance(thing.x, thing.y, this.x, this.y)
 		if not closestDist or dist < closestDist then
 			closestDist = dist
 			closestThing = thing
 		end
+		thingsByDist[dist] = thingsByDist[dist] or {}
+		tInsert(thingsByDist[dist], thing)
 	end
+	if #thingsByDist[closestDist] > 1 then
+		closestThing = tGetRandom(thingsByDist[closestDist])
+		-- EchoDebug(#thingsByDist[closestDist] .. " things at same closest distance")
+	end 
 	return closestThing
 end
 
@@ -5871,31 +6008,27 @@ function Space:EucDistance(x1, y1, x2, y2)
 end
 
 function Space:HexDistance(x1, y1, x2, y2)
-	x1 = mFloor(x1)
-	y1 = mFloor(y1)
-	x2 = mFloor(x2)
-	y2 = mFloor(y2)
-	local xx1 = x1
-	local zz1 = y1 - (x1 + x1%2) / 2
-	local yy1 = -xx1-zz1
-	local xx2 = x2
-	local zz2 = y2 - (x2 + x2%2) / 2
-	local yy2 = -xx2-zz2
-	local xdist = mAbs(x1 - x2)
-	-- x is the same orientation, so it can still wrap?
-	if self.wrapX then
-		if xdist > self.halfWidth then
-			if x1 < x2 then
-				xdist = x1 + (self.iW - x2)
-			else
-				xdist = x2 + (self.iW - x1)
-			end
-		end
-	end
+	-- return distanceBetweenXY(x1, y1, x2, y2)
+	x1 = int(x1)
+	y1 = int(y1)
+	x2 = int(x2)
+	y2 = int(y2)
+	local xx1 = x1 - (y1 - y1%2) / 2
+	local zz1 = y1
+	local yy1 = -(xx1+zz1)
+	local xx2 = x2 - (y2 - y2%2) / 2
+	local zz2 = y2
+	local yy2 = -(xx2+zz2)
+	local xdist = mAbs(xx1 - xx2)
 	local ydist = mAbs(yy1 - yy2)
 	local zdist = mAbs(zz1 - zz2)
-	-- EchoDebug(xdist, ydist, zdist)
-	return mFloor( (xdist + ydist + zdist) / 2 )
+	if self.wrapX then
+		xdist = mMin(xdist, self.iW - xdist)
+		ydist = mMin(ydist, self.iW - ydist)
+	end
+	local dist = mMax(xdist, ydist, zdist)
+	-- local dist = int( (xdist + ydist + zdist) / 2 )
+	return dist
 end
 
 function Space:GetPolygonByXY(x, y)
@@ -6050,5 +6183,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
