@@ -51,7 +51,28 @@ local function StartDebugTimer()
 end
 
 local function StopDebugTimer(timer)
-	return math.ceil(1000 * (os.clock() - timer)) .. " ms"
+	local time = os.clock() - timer
+	local multiplier
+	local unit
+	local format
+	if time < 1 then
+		multiplier = 1000
+		unit = "ms"
+		format  ="%.0f"
+	else
+		multiplier = 1
+		unit = "s"
+		if time < 10 then
+			format = "%.3f"
+		elseif time < 100 then
+			format = "%.2f"
+		elseif time < 1000 then
+			format = "%.1f"
+		else
+			format = "%.0f"
+		end
+	end
+	return string.format(format, multiplier * time) .. " " .. unit
 end
 
 ------------------------------------------------------------------------------
@@ -2406,7 +2427,7 @@ Space = class(function(a)
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
-	a.collectionSizeMax = 4 -- of how many groups of kinds of tiles does a region consist, at maximum
+	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
 	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
@@ -3444,12 +3465,21 @@ end
 function Space:FillSubPolygons(relax)
 	local timer = StartDebugTimer()
 	self.totalSubPolygons = #self.subPolygons -- so that closestThing can be sped up
-	local lastPercent = 0
 	for i = 1, #self.hexes do
 		local hex = self.hexes[i]
 		hex:Place(relax)
 	end
 	EchoDebug("filled subpolygons in " .. StopDebugTimer(timer))
+	-- below is to test the distribution of times one subpolygon is picked, to see if getting a random subpolygon when more than one is at the same distance from a hex is worth the performance hit (i say no)
+	-- local byTimesPicked = {}
+	-- for i, subPolygon in pairs(self.subPolygons) do
+	-- 	if subPolygon.pickedFirst then
+	-- 		byTimesPicked[subPolygon.pickedFirst] = (byTimesPicked[subPolygon.pickedFirst] or 0) + 1
+	-- 	end
+	-- end
+	-- for timesPicked, count in pairsByKeys(byTimesPicked) do
+	-- 	EchoDebug(timesPicked, count)
+	-- end
 end
 
 function Space:FillPolygons()
@@ -5904,7 +5934,7 @@ end
 function Space:ClosestThing(this, things, thingsCount)
 	local closestDist
 	local closestThing
-	local thingsByDist = {}
+	-- local thingsByDist = {}
 	for i = 1, thingsCount or #things do
 		local thing = things[i]
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
@@ -5915,13 +5945,14 @@ function Space:ClosestThing(this, things, thingsCount)
 			closestDist = dist
 			closestThing = thing
 		end
-		thingsByDist[dist] = thingsByDist[dist] or {}
-		thingsByDist[dist][#thingsByDist[dist]+1] = thing
+		-- thingsByDist[dist] = thingsByDist[dist] or {}
+		-- thingsByDist[dist][#thingsByDist[dist]+1] = thing
 	end
-	if #thingsByDist[closestDist] > 1 then
-		closestThing = tGetRandom(thingsByDist[closestDist])
+	-- if #thingsByDist[closestDist] > 1 then
+		-- closestThing = tGetRandom(thingsByDist[closestDist])
 		-- EchoDebug(#thingsByDist[closestDist] .. " things at same closest distance")
-	end
+	-- end
+	closestThing.pickedFirst = (closestThing.pickedFirst or 0) + 1
 	return closestThing
 end
 
