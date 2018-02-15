@@ -2396,12 +2396,12 @@ Space = class(function(a)
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
-	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
+	a.collectionSizeMax = 4 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
 	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
-	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
+	a.climateVoronoiRelaxations = 0 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
 	a.riverLandRatio = 0.19 -- how much of the map to have tiles next to rivers. is modified by global rainfall
 	a.riverForkRatio = 0.33 -- how much of the river area should be reserved for forks
 	a.hillChance = 3 -- how many possible mountains out of ten become a hill when expanding and reducing
@@ -4614,26 +4614,28 @@ function Space:CreateClimateVoronoi(number, relaxations)
 end
 
 function Space:AssignClimateVoronoiToRegions(climateVoronoi)
-	local voronoiBuffer
-	if not self.useMapLatitudes then
-		voronoiBuffer = tDuplicate(climateVoronoi)
-	end
+	local voronoiBuffer = tDuplicate(climateVoronoi)
 	for i, region in pairs(self.regions) do
 		if self.useMapLatitudes then
 			region:GiveLatitude()
 			local temp = self:GetTemperature(region.latitude)
 			local rain = self:GetRainfall(region.latitude)
-			local bestDist, bestPoint
-			for ii, point in pairs(climateVoronoi) do
+			local bestDist, bestPoint, bestIndex
+			for ii, point in pairs(voronoiBuffer) do
 				local dt = mAbs(temp - point.temp)
 				local dr = mAbs(rain - point.rain)
 				local dist = (dt * dt) + (dr * dr * ((90 - region.latitude) / 90))
 				if not bestDist or dist < bestDist then
 					bestDist = dist
 					bestPoint = point
+					bestIndex = ii
 				end
 			end
 			region.point = bestPoint
+			tRemove(voronoiBuffer, bestIndex)
+			if #voronoiBuffer == 0 then
+				voronoiBuffer = tDuplicate(climateVoronoi)
+			end
 		else
 			region.point = tRemoveRandom(voronoiBuffer)
 			if #voronoiBuffer == 0 then
