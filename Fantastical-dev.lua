@@ -165,42 +165,12 @@ local function AngleDist(angle1, angle2)
 	return mAbs((angle1 + mPi -  angle2) % mTwicePi - mPi)
 end
 
--- Calculate the distance between two plots
---
--- See http://www-cs-students.stanford.edu/~amitp/Articles/HexLOS.html
--- Also http://keekerdc.com/2011/03/hexagon-grids-coordinate-systems-and-distance-calculations/
---
-
-local function PlotToHex(pPlot)
-  local hex = ToHexFromGrid(Vector2(pPlot:GetX(), pPlot:GetY()))
-
-  -- X + y + z = 0, hence z = -(x+y)
-  hex.z = -(hex.x + hex.y)
-
-  return hex
-end
-
-local function distanceBetweenXY(x1, y1, x2, y2)
-  local mapX, mapY = Map.GetGridSize()
-
-  -- Need to work on a hex based grid
-  local z1 = -(x1+y1)
-  local z2 = -(x2+y2)
-
-  -- Calculate the distance between the x and z co-ordinate pairs
-  -- allowing for the East-West wrap, (ie shortest route may be by going backwards!)
-  local deltaX = math.min(math.abs(x2 - x1), mapX - math.abs(x2 - x1))
-  local deltaZ = math.min(math.abs(z2 - z1), mapX - math.abs(z2 - z1))
-
-  -- Calculate the distance between the y co-ordinates
-  -- there is no North-South wrap, so this is easy
-  local deltaY = math.abs(y2 - y1)
-
-  -- Calculate the distance between the plots
-  local distance = math.max(deltaX, deltaY, deltaZ)
-
-  -- Allow for both end points in the distance calculation
-  return distance + 1
+-- converts civ 5's two dimensional hex coords to cube coords
+local function OddRToCube(x, y)
+	local xx = x - (y - y%2) / 2
+	local zz = y
+	local yy = -(xx+zz)
+	return xx, yy, zz
 end
 
 ------------------------------------------------------------------------------
@@ -6008,20 +5978,15 @@ function Space:EucDistance(x1, y1, x2, y2)
 end
 
 function Space:HexDistance(x1, y1, x2, y2)
-	-- return distanceBetweenXY(x1, y1, x2, y2)
-	x1 = int(x1)
-	y1 = int(y1)
-	x2 = int(x2)
-	y2 = int(y2)
-	local xx1 = x1 - (y1 - y1%2) / 2
-	local zz1 = y1
-	local yy1 = -(xx1+zz1)
-	local xx2 = x2 - (y2 - y2%2) / 2
-	local zz2 = y2
-	local yy2 = -(xx2+zz2)
-	local xdist = mAbs(xx1 - xx2)
-	local ydist = mAbs(yy1 - yy2)
-	local zdist = mAbs(zz1 - zz2)
+	-- x1 = int(x1)
+	-- y1 = int(y1)
+	-- x2 = int(x2)
+	-- y2 = int(y2)
+	local cx1, cy1, cz1 = OddRToCube(x1, y1)
+	local cx2, cy2, cz2 = OddRToCube(x2, y2)
+	local xdist = mAbs(cx1 - cx2)
+	local ydist = mAbs(cy1 - cy2)
+	local zdist = mAbs(cz1 - cz2)
 	if self.wrapX then
 		xdist = mMin(xdist, self.iW - xdist)
 		ydist = mMin(ydist, self.iW - ydist)
@@ -6184,5 +6149,5 @@ function DetermineContinents()
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
 	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
+	mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
