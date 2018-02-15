@@ -2721,10 +2721,10 @@ function Space:Compute()
     self.halfDiagonalWidth = self.diagonalWidth / 2
     self.halfDiagonalWidthSq = (self.halfWidth * self.halfWidth) + (self.halfHeight * self.halfHeight)
 
-    EchoDebug(self:HexDistance(self.halfWidth+5, self.halfHeight, 1, self.h), self.halfWidth+5, self.halfHeight, 1, self.h)
-    EchoDebug(self:HexDistance(1, self.halfHeight, self.halfWidth-5, self.h), 1, self.halfHeight, self.halfWidth-5, self.h)
-    EchoDebug(self:HexDistance(self.w, 0, 0, self.h), self.w, 0, 0, self.h)
-    EchoDebug(self:HexDistance(self.w, 0, 1, self.h), self.w, 0, 1, self.h)
+    -- EchoDebug(self:HexDistance(self.halfWidth+5, self.halfHeight, 1, self.h), self.halfWidth+5, self.halfHeight, 1, self.h)
+    -- EchoDebug(self:HexDistance(1, self.halfHeight, self.halfWidth-5, self.h), 1, self.halfHeight, self.halfWidth-5, self.h)
+    -- EchoDebug(self:HexDistance(self.w, 0, 0, self.h), self.w, 0, 0, self.h)
+    -- EchoDebug(self:HexDistance(self.w, 0, 1, self.h), self.w, 0, 1, self.h)
 
     self.northLatitudeMult = 90 / Map.GetPlot(0, self.h):GetLatitude()
     self.xFakeLatitudeConversion = 180 / self.iW
@@ -6148,6 +6148,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-	mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
