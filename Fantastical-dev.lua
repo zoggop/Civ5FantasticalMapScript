@@ -756,7 +756,7 @@ local OptionDictionary = {
 	-- },
 	{ name = "Land at Poles", keys = { "polarMaxLandRatio" }, default = 1,
 	values = {
-			[1] = { name = "Yes", values = {0.3} },
+			[1] = { name = "Yes", values = {0.4} },
 			[2] = { name = "No", values = {0} },
 			[3] = { name = "Random", values = "keys" },
  		}
@@ -2427,9 +2427,10 @@ Space = class(function(a)
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.35 -- what part of the continent polygons are taken up by 1-3 polygon continents
-	a.oceanRatio = 0.4 -- what part of an astronomy basin is reserved for ocean
+	a.openWaterRatio = 0.1 -- what part of an astronomy basin is reserved for open water
 	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
-	a.polarMaxLandRatio = 0.3 -- how much of the land in each astronomy basin can be at the poles
+	a.islandsPerAstronomyBasinDeviation = 1 -- number of 1-3-polygon islands can vary by this much per astronomy basin
+	a.polarMaxLandRatio = 0.4 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
@@ -2448,7 +2449,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandChance = 15 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
+	a.tinyIslandChance = 10 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -4242,9 +4243,12 @@ function Space:GetContinentSeeds(polygonBuffer, number, noBoundaries)
 	return seeds
 end
 
-function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, islandNumber)
+function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, polygonLimit)
 	islandNumber = islandNumber or 0
+	polygonLimit = polygonLimit or coastOrContinentLimit
 	local filledPolygons = 0
+	local coastOrContinent = {}
+	local coastOrContinentCount = 0
 	local seeds = {}
 	local islandChance = islandNumber / #seedPolygons
 	local islandsToPlace = islandNumber
@@ -4274,6 +4278,16 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, is
 			seed.filledContinentArea = seed.filledContinentArea + #polygon.hexes
 			self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
 			filledPolygons = filledPolygons + 1
+			if not coastOrContinent[polygon] then
+				coastOrContinent[polygon] = true
+				coastOrContinentCount = coastOrContinentCount + 1
+			end
+			for ni, neighbor in pairs(polygon.neighbors) do
+				if not coastOrContinent[neighbor] then
+					coastOrContinent[neighbor] = true
+					coastOrContinentCount = coastOrContinentCount + 1
+				end
+			end
 			polygon.continent = continent
 			local polarWanted = self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex]
 			local goodSideWanted = self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]
@@ -4341,16 +4355,16 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, is
 					candidate = tRemoveRandom(candidates)
 				end
 			end
-			if candidate and (not seed.maxPolygons or #seed.continent < seed.maxPolygons) then
+			if not candidate or (seed.maxPolygons and #seed.continent >= seed.maxPolygons) or filledPolygons >= polygonLimit or coastOrContinentCount >= coastOrContinentLimit then
+				tInsert(grownSeeds, seed)
+				tRemove(seeds, i)
+			else
 				candidate.continent = continent
 				tInsert(seed.continent, candidate)
 				seed.polygon = candidate
-			else
-				tInsert(grownSeeds, seed)
-				tRemove(seeds, i)
 			end
 		end
-	until filledPolygons >= polygonLimit or #seeds == 0
+	until filledPolygons >= polygonLimit or coastOrContinentCount >= coastOrContinentLimit or #seeds == 0
 	for i, seed in pairs(seeds) do
 		tInsert(grownSeeds, seed)
 	end
@@ -4362,16 +4376,29 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, is
 		end
 	end
 	self.filledPolygons = self.filledPolygons + filledPolygons
-	return filledPolygons
+	EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
+	return filledPolygons, coastOrContinentCount
 end
 
 function Space:PickContinentsInBasin(astronomyIndex)
 	local polygonBuffer = {}
 	local polarPolygonsHere = 0
+	local basinPlusSurround = 0
+	local countedForPlusSurround = {}
 	for i, polygon in pairs(self.astronomyBasins[astronomyIndex]) do
 		tInsert(polygonBuffer, polygon)
 		if self.wrapX and polygon.edgeY then
 			polarPolygonsHere = polarPolygonsHere + 1
+		end
+		if not countedForPlusSurround[polygon] then
+			countedForPlusSurround[polygon] = true
+			basinPlusSurround = basinPlusSurround + 1
+		end
+		for ni, neighbor in pairs(polygon.neighbors) do
+			if not countedForPlusSurround[neighbor] then
+				countedForPlusSurround[neighbor] = true
+				basinPlusSurround = basinPlusSurround + 1
+			end
 		end
 	end
 	self.maxPolarPolygons = self.maxPolarPolygons or {}
@@ -4379,11 +4406,18 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	-- local sizeMult = 1 - (self.majorContinentNumber * 0.1)
 	self.polarPolygonCount = self.polarPolygonCount or {}
 	self.polarPolygonCount[astronomyIndex] = 0
-	local maxTotalPolygons = (#polygonBuffer - polarPolygonsHere) + self.maxPolarPolygons[astronomyIndex]
-	local landPolygons = mCeil(maxTotalPolygons * (1-self.oceanRatio))
-	local islandPolygons = mCeil(maxTotalPolygons * self.islandRatio)
-	local nonIslandPolygons = mMax(1, maxTotalPolygons - islandPolygons)
-	EchoDebug(maxTotalPolygons .. " total polygons possible for land", islandPolygons .. " polygons reserved for islands", nonIslandPolygons .. " polygons reserved for continents")
+	local polarAdd = 0
+	if self.wrapX and self.polarMaxLandRatio < 1 then
+		polarAdd = self.maxPolarPolygons[astronomyIndex] - polarPolygonsHere
+	end
+	local maxTotalPolygons = #polygonBuffer + polarAdd
+	local coastOrContinentLimit = basinPlusSurround + polarAdd
+	if self.wrapX and self.polarMaxLandRatio < 1 then
+		coastOrContinentLimit = coastOrContinentLimit + 4
+	end
+	local openWaterReservation = mFloor(coastOrContinentLimit * self.openWaterRatio)
+	coastOrContinentLimit = coastOrContinentLimit - openWaterReservation
+	EchoDebug(maxTotalPolygons .. " polygons possible in astronomy basin", coastOrContinentLimit .. " polygons reserved for coast or continent", openWaterReservation .. " polygons reserved for open water")
 	if self.oceanSides and not self.nonOceanSides then
 		self.nonOceanSides = {}
 		if not self.oceanSides["bottomX"] then tInsert(self.nonOceanSides, "bottomX") end
@@ -4401,9 +4435,9 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		self.putTheContinentOnMyGoodSide[astronomyIndex] = mFloor(goodSidePolygonCount / self.majorContinentNumber)
 		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
-	-- pick polygons to start every non-island continent in the basin
-	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + self.islandsPerAstronomyBasin)
-	self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
+	local islandNumber = mRandom(mMax(0, self.islandsPerAstronomyBasin - self.islandsPerAstronomyBasinDeviation), self.islandsPerAstronomyBasin + self.islandsPerAstronomyBasinDeviation)
+	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + islandNumber)
+	self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons)
 	-- local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.islandsPerAstronomyBasin)
 	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
 	-- seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
@@ -4411,7 +4445,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	-- for i = 1, self.majorContinentNumber do
 	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
 	-- 	if #seedPolygons ~= 0 then
-	-- 		self:GrowContinentSeeds(seedPolygons, (nonIslandPolygons / self.majorContinentNumber) * (1-self.oceanRatio), astronomyIndex, 0)
+	-- 		self:GrowContinentSeeds(seedPolygons, (nonIslandPolygons / self.majorContinentNumber) * (1-self.openWaterRatio), astronomyIndex, 0)
 	-- 	else
 	-- 		break
 	-- 	end
