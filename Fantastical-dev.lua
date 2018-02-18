@@ -613,7 +613,7 @@ local OptionDictionary = {
 			[5] = { name = "Low Seas", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.1,
+				islandRatio = 0.15,
 				inlandSeasMax = 0,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 1,
@@ -624,7 +624,7 @@ local OptionDictionary = {
 				majorContinentNumber = 12,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.5,
+				islandRatio = 0.32,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
@@ -633,7 +633,7 @@ local OptionDictionary = {
 				oceanNumber = 						1,
 				majorContinentNumber = 				1,
 				tinyIslandChance = 					20,
-				islandRatio = 						0.067,
+				islandRatio = 						0.2,
 				inlandSeaContinentRatio = 			0.02,
 				inlandSeasMax = 					1,
 				astronomyBlobNumber = 				1,
@@ -644,7 +644,7 @@ local OptionDictionary = {
 			[8] = { name = "Centauri-like", values = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.2,
 				inlandSeaContinentRatio = 0.03,
 				inlandSeasMax = 1,
 			}},
@@ -653,21 +653,21 @@ local OptionDictionary = {
 			}},
 			[10] = { name = "Earthish", values = {
 				majorContinentNumber = 2,
-				islandRatio = 0.25,
+				islandRatio = 0.3,
 			}},
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
 				majorContinentNumber = 5,
 				tinyIslandChance = 25,
 				coastalPolygonChance = 2,
-				islandRatio = 0.7,
+				islandRatio = 0.75,
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
 				tinyIslandChance = 100,
 				coastalPolygonChance = 1,
-				islandRatio = 0.75,
+				islandRatio = 0.8,
 				astronomyBlobNumber = 5,
 			}},
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
@@ -704,7 +704,7 @@ local OptionDictionary = {
 				wrapX = false,
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.1,
+				islandRatio = 0.15,
 				inlandSeasMax = 0,
 			}},
 			[19] = { name = "Coast", values = {
@@ -712,7 +712,7 @@ local OptionDictionary = {
 				oceanNumber = 2,
 				tinyIslandChance = 20,
 				coastalPolygonChance = 2,
-				islandRatio = 0.15,
+				islandRatio = 0.2,
 				inlandSeasMax = 0,
 			}},
 			[20] = { name = "Peninsula", values = {
@@ -727,7 +727,7 @@ local OptionDictionary = {
 				oceanNumber = 4,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.2,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 3,
 				astronomyBlobMaxPolygons = 7,
@@ -739,7 +739,7 @@ local OptionDictionary = {
 				majorContinentNumber = 7,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.75,
+				islandRatio = 0.8,
 				astronomyBlobNumber = 2,
 			}},
 			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
@@ -2427,7 +2427,7 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.islandRatio = 0.2 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.islandRatio = 0.25 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
@@ -4255,9 +4255,12 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
 			local continent = seed.continent
 			local candidate
 			self.filledArea = self.filledArea + #polygon.hexes
+			seed.filledContinentArea = seed.filledContinentArea + #polygon.hexes
 			self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
 			filledPolygons = filledPolygons + 1
 			polygon.continent = continent
+			local polarWanted = self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex]
+			local goodSideWanted = self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]
 			local candidates = {}
 			local polarCandidates = {}
 			local goodSideCandidates = {}
@@ -4297,25 +4300,25 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
 						end
 					end
 				end
-				if firstTry and #candidates == 0 then
+				if firstTry and #candidates == 0 and (#goodSideCandidates == 0 or not goodSideWanted) and (#polarCandidates == 0 or not polarWanted) then
 					if #continent > 1 then
 						searchBuffer = searchBuffer or tDuplicate(continent)
 						searched = polygon
 					end
 					firstTry = false
 				end
-			until #candidates ~= 0 or (searchBuffer and #searchBuffer == 0) or (#continent == 1 and not firstTry) or (#goodSideCandidates ~= 0 and self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]) or (#polarCandidates ~= 0 and self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex])
+			until #candidates ~= 0 or (searchBuffer and #searchBuffer == 0) or (#continent == 1 and not firstTry) or (#goodSideCandidates ~= 0 and goodSideWanted) or (#polarCandidates ~= 0 and polarWanted)
 			local candidate
 			if #candidates == 0 then
-				if #polarCandidates > 0 and self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex] then
+				if polarWanted and #polarCandidates > 0 then
 					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
 					self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + 1
-				elseif self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex] and #goodSideCandidates > 0 then
+				elseif goodSideWanted and #goodSideCandidates > 0 then
 					candidate = tRemoveRandom(goodSideCandidates) -- use a goodside polygon
 					seed.goodSideThisContinent = seed.goodSideThisContinent + 1
 				end
 			else
-				if self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex] and #goodSideCandidates > 0 then
+				if goodSideWanted and #goodSideCandidates > 0 then
 					candidate = tRemoveRandom(goodSideCandidates)
 					seed.goodSideThisContinent = seed.goodSideThisContinent + 1
 				else
@@ -4324,10 +4327,6 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
 			end
 			if candidate then
 				candidate.continent = continent
-				self.filledArea = self.filledArea + #candidate.hexes
-				self.filledSubPolygons = self.filledSubPolygons + #candidate.subPolygons
-				seed.filledContinentArea = seed.filledContinentArea + #candidate.hexes
-				filledPolygons = filledPolygons + 1
 				tInsert(seed.continent, candidate)
 				seed.polygon = candidate
 			else
@@ -5989,8 +5988,8 @@ function Space:ClosestThing(this, things, thingsCount)
 		local thing = things[i]
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
 		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
-		-- local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
-		local dist = self:HexDistance(thing.x, thing.y, this.x, this.y)
+		local dist = self:MinkowskiDistance(thing.x, thing.y, this.x, this.y, 1.5)
+		-- local dist = self:HexDistance(thing.x, thing.y, this.x, this.y)
 		if not closestDist or dist < closestDist then
 			closestDist = dist
 			closestThing = thing
