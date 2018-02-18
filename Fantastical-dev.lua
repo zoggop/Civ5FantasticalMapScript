@@ -756,7 +756,7 @@ local OptionDictionary = {
 	-- },
 	{ name = "Land at Poles", keys = { "polarMaxLandRatio" }, default = 1,
 	values = {
-			[1] = { name = "Yes", values = {0.5} },
+			[1] = { name = "Yes", values = {0.3} },
 			[2] = { name = "No", values = {0} },
 			[3] = { name = "Random", values = "keys" },
  		}
@@ -2427,9 +2427,9 @@ Space = class(function(a)
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
 	a.islandRatio = 0.35 -- what part of the continent polygons are taken up by 1-3 polygon continents
-	a.oceanRatio = 0.35 -- what part of an astronomy basin is reserved for ocean
+	a.oceanRatio = 0.4 -- what part of an astronomy basin is reserved for ocean
 	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
-	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
+	a.polarMaxLandRatio = 0.3 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
@@ -4256,7 +4256,7 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, is
 		seed.filledContinentArea = #polygon.hexes
 		seed.continent = { polygon }
 		seed.polygon = polygon
-		if i > 1 and islandsToPlace > 0 and (mRandom() < islandChance or i > #seedPolygons - islandsToPlace) then
+		if (i > 1 or islandNumber >= #seedPolygons) and islandsToPlace > 0 and (mRandom() < islandChance or i > #seedPolygons - islandsToPlace) then
 			seed.maxPolygons = mRandom(1, 3)
 			islandsToPlace = islandsToPlace - 1
 		end
@@ -4404,12 +4404,18 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	-- pick polygons to start every non-island continent in the basin
 	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + self.islandsPerAstronomyBasin)
 	self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
-	-- repeat
+	-- local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.islandsPerAstronomyBasin)
+	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
+	-- seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
+	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex)
+	-- for i = 1, self.majorContinentNumber do
 	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
 	-- 	if #seedPolygons ~= 0 then
-	-- 		self:GrowContinentSeeds(seedPolygons, mRandom(1,3), astronomyIndex, 0)
+	-- 		self:GrowContinentSeeds(seedPolygons, (nonIslandPolygons / self.majorContinentNumber) * (1-self.oceanRatio), astronomyIndex, 0)
+	-- 	else
+	-- 		break
 	-- 	end
-	-- until #seedPolygons == 0
+	-- end
 end
 
 function Space:PickMountainRanges()
