@@ -613,7 +613,7 @@ local OptionDictionary = {
 			[5] = { name = "Low Seas", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.4,
 				inlandSeasMax = 0,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 1,
@@ -624,7 +624,7 @@ local OptionDictionary = {
 				majorContinentNumber = 12,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.32,
+				islandRatio = 0.4,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
@@ -644,7 +644,7 @@ local OptionDictionary = {
 			[8] = { name = "Centauri-like", values = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
-				islandRatio = 0.2,
+				islandRatio = 0.4,
 				inlandSeaContinentRatio = 0.03,
 				inlandSeasMax = 1,
 			}},
@@ -653,21 +653,20 @@ local OptionDictionary = {
 			}},
 			[10] = { name = "Earthish", values = {
 				majorContinentNumber = 2,
-				islandRatio = 0.3,
 			}},
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
 				majorContinentNumber = 5,
 				tinyIslandChance = 25,
 				coastalPolygonChance = 2,
-				islandRatio = 0.75,
+				islandRatio = 0.8,
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
 				tinyIslandChance = 100,
 				coastalPolygonChance = 1,
-				islandRatio = 0.8,
+				islandRatio = 0.85,
 				astronomyBlobNumber = 5,
 			}},
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
@@ -704,7 +703,7 @@ local OptionDictionary = {
 				wrapX = false,
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.2,
 				inlandSeasMax = 0,
 			}},
 			[19] = { name = "Coast", values = {
@@ -712,7 +711,7 @@ local OptionDictionary = {
 				oceanNumber = 2,
 				tinyIslandChance = 20,
 				coastalPolygonChance = 2,
-				islandRatio = 0.2,
+				islandRatio = 0.25,
 				inlandSeasMax = 0,
 			}},
 			[20] = { name = "Peninsula", values = {
@@ -727,7 +726,7 @@ local OptionDictionary = {
 				oceanNumber = 4,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 3,
-				islandRatio = 0.2,
+				islandRatio = 0.25,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 3,
 				astronomyBlobMaxPolygons = 7,
@@ -739,7 +738,7 @@ local OptionDictionary = {
 				majorContinentNumber = 7,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.8,
+				islandRatio = 0.85,
 				astronomyBlobNumber = 2,
 			}},
 			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
@@ -2427,7 +2426,9 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.islandRatio = 0.25 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.islandRatio = 0.35 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.oceanRatio = 0.35 -- what part of an astronomy basin is reserved for ocean
+	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
@@ -4177,7 +4178,7 @@ function Space:PickContinents()
 	end
 end
 
-function Space:GetContinentSeeds(polygonBuffer, number)
+function Space:GetContinentSeeds(polygonBuffer, number, noBoundaries)
 	local putTheContinentOnMyGoodSide = self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0
 	local seedBag = {}
 	for i, polygon in pairs(polygonBuffer) do
@@ -4208,16 +4209,24 @@ function Space:GetContinentSeeds(polygonBuffer, number)
 		for i = 2, number do
 			local bestDist = 0
 			local bestIndex
-			for ii, polygon in pairs(seedBag) do
-				if not self.wrapX or not polygon.edgeY or polarCount < polarMax then
-					local totalDist = 0
-					for iii, seed in pairs(seeds) do
-						local dist = polygon:DistanceToPolygon(seed)
-						totalDist = totalDist + dist
-					end
-					if totalDist > bestDist then
-						bestDist = totalDist
-						bestIndex = ii
+			if noBoundaries then
+				local iterationsLeft = #seedBag
+				repeat
+					bestIndex = mRandom(1, #seedBag)
+					iterationsLeft = iterationsLeft - 1
+				until iterationsLeft == 0 or seedBag[bestIndex].edgeY or polarCount < polarMax
+			else
+				for ii, polygon in pairs(seedBag) do
+					if not self.wrapX or not polygon.edgeY or polarCount < polarMax then
+						local totalDist = 0
+						for iii, seed in pairs(seeds) do
+							local dist = polygon:DistanceToPolygon(seed)
+							totalDist = totalDist + dist
+						end
+						if totalDist > bestDist then
+							bestDist = totalDist
+							bestIndex = ii
+						end
 					end
 				end
 			end
@@ -4233,9 +4242,12 @@ function Space:GetContinentSeeds(polygonBuffer, number)
 	return seeds
 end
 
-function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
+function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex, islandNumber)
+	islandNumber = islandNumber or 0
 	local filledPolygons = 0
 	local seeds = {}
+	local islandChance = islandNumber / #seedPolygons
+	local islandsToPlace = islandNumber
 	for i = 1, #seedPolygons do
 		local polygon = seedPolygons[i]
 		local seed = {}
@@ -4244,6 +4256,10 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
 		seed.filledContinentArea = #polygon.hexes
 		seed.continent = { polygon }
 		seed.polygon = polygon
+		if i > 1 and islandsToPlace > 0 and (mRandom() < islandChance or i > #seedPolygons - islandsToPlace) then
+			seed.maxPolygons = mRandom(1, 3)
+			islandsToPlace = islandsToPlace - 1
+		end
 		tInsert(seeds, seed)
 	end
 	local grownSeeds = {}
@@ -4325,7 +4341,7 @@ function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
 					candidate = tRemoveRandom(candidates)
 				end
 			end
-			if candidate then
+			if candidate and (not seed.maxPolygons or #seed.continent < seed.maxPolygons) then
 				candidate.continent = continent
 				tInsert(seed.continent, candidate)
 				seed.polygon = candidate
@@ -4364,6 +4380,7 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	self.polarPolygonCount = self.polarPolygonCount or {}
 	self.polarPolygonCount[astronomyIndex] = 0
 	local maxTotalPolygons = (#polygonBuffer - polarPolygonsHere) + self.maxPolarPolygons[astronomyIndex]
+	local landPolygons = mCeil(maxTotalPolygons * (1-self.oceanRatio))
 	local islandPolygons = mCeil(maxTotalPolygons * self.islandRatio)
 	local nonIslandPolygons = mMax(1, maxTotalPolygons - islandPolygons)
 	EchoDebug(maxTotalPolygons .. " total polygons possible for land", islandPolygons .. " polygons reserved for islands", nonIslandPolygons .. " polygons reserved for continents")
@@ -4385,14 +4402,14 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
 	-- pick polygons to start every non-island continent in the basin
-	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
-	self:GrowContinentSeeds(seedPolygons, nonIslandPolygons, astronomyIndex)
-	repeat
-		seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
-		if #seedPolygons ~= 0 then
-			self:GrowContinentSeeds(seedPolygons, mRandom(1,3), astronomyIndex)
-		end
-	until #seedPolygons == 0
+	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + self.islandsPerAstronomyBasin)
+	self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
+	-- repeat
+	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
+	-- 	if #seedPolygons ~= 0 then
+	-- 		self:GrowContinentSeeds(seedPolygons, mRandom(1,3), astronomyIndex, 0)
+	-- 	end
+	-- until #seedPolygons == 0
 end
 
 function Space:PickMountainRanges()
