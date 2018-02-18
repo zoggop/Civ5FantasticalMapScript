@@ -613,7 +613,7 @@ local OptionDictionary = {
 			[5] = { name = "Low Seas", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.1,
 				inlandSeasMax = 0,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 1,
@@ -621,10 +621,10 @@ local OptionDictionary = {
 			}},
 			[6] = { name = "Archipelago", values = {
 				oceanNumber = 0,
-				majorContinentNumber = 7,
+				majorContinentNumber = 12,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.32,
+				islandRatio = 0.5,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
@@ -633,7 +633,7 @@ local OptionDictionary = {
 				oceanNumber = 						1,
 				majorContinentNumber = 				1,
 				tinyIslandChance = 					20,
-				islandRatio = 						0.1,
+				islandRatio = 						0.067,
 				inlandSeaContinentRatio = 			0.02,
 				inlandSeasMax = 					1,
 				astronomyBlobNumber = 				1,
@@ -644,7 +644,7 @@ local OptionDictionary = {
 			[8] = { name = "Centauri-like", values = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
-				islandRatio = 0.2,
+				islandRatio = 0.15,
 				inlandSeaContinentRatio = 0.03,
 				inlandSeasMax = 1,
 			}},
@@ -653,21 +653,21 @@ local OptionDictionary = {
 			}},
 			[10] = { name = "Earthish", values = {
 				majorContinentNumber = 2,
-				islandRatio = 0.3,
+				islandRatio = 0.25,
 			}},
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
 				majorContinentNumber = 5,
 				tinyIslandChance = 25,
 				coastalPolygonChance = 2,
-				islandRatio = 0.75,
+				islandRatio = 0.7,
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
 				tinyIslandChance = 100,
 				coastalPolygonChance = 1,
-				islandRatio = 0.8,
+				islandRatio = 0.75,
 				astronomyBlobNumber = 5,
 			}},
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
@@ -704,7 +704,7 @@ local OptionDictionary = {
 				wrapX = false,
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.15,
+				islandRatio = 0.1,
 				inlandSeasMax = 0,
 			}},
 			[19] = { name = "Coast", values = {
@@ -712,7 +712,7 @@ local OptionDictionary = {
 				oceanNumber = 2,
 				tinyIslandChance = 20,
 				coastalPolygonChance = 2,
-				islandRatio = 0.2,
+				islandRatio = 0.15,
 				inlandSeasMax = 0,
 			}},
 			[20] = { name = "Peninsula", values = {
@@ -727,7 +727,7 @@ local OptionDictionary = {
 				oceanNumber = 4,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 3,
-				islandRatio = 0.2,
+				islandRatio = 0.15,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 3,
 				astronomyBlobMaxPolygons = 7,
@@ -739,7 +739,7 @@ local OptionDictionary = {
 				majorContinentNumber = 7,
 				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
-				islandRatio = 0.8,
+				islandRatio = 0.75,
 				astronomyBlobNumber = 2,
 			}},
 			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
@@ -2004,6 +2004,10 @@ function Polygon:GiveFakeLatitude(latitude)
 	end
 end
 
+function Polygon:DistanceToPolygon(polygon)
+	return self.space:HexDistance(self.x, self.y, polygon.x, polygon.y)
+end
+
 ------------------------------------------------------------------------------
 
 SubEdge = class(function(a, polygon1, polygon2)
@@ -2423,7 +2427,7 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
-	a.islandRatio = 0.25 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.islandRatio = 0.2 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.polarMaxLandRatio = 0.5 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
@@ -4149,6 +4153,7 @@ function Space:FindAstronomyBasins()
 end
 
 function Space:PickContinents()
+	self.lastContinentIndex = 0
 	self.filledArea = 0
 	self.filledSubPolygons = 0
 	self.filledPolygons = 0
@@ -4172,6 +4177,179 @@ function Space:PickContinents()
 	end
 end
 
+function Space:GetContinentSeeds(polygonBuffer, number)
+	local putTheContinentOnMyGoodSide = self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0
+	local seedBag = {}
+	for i, polygon in pairs(polygonBuffer) do
+		local bagIt
+		if polygon.continent == nil and not polygon:NearOther(nil, "continent") then
+			local nearPole = polygon:NearOther(nil, "topY") or polygon:NearOther(nil, "bottomY")
+			if putTheContinentOnMyGoodSide then
+				for nosi, side in pairs(self.nonOceanSides) do
+					if polygon[side] then
+						bagIt = true
+						break
+					end
+				end
+			elseif (self.wrapY or not polygon.edgeY) and (self.wrapX or not polygon.edgeX) and (not nearPole or not self.noContinentsNearPoles) then
+				bagIt = true
+			end
+		end
+		if bagIt then tInsert(seedBag, polygon) end
+	end
+	-- EchoDebug(#seedBag .. " potential continent seeds")
+	local polarCount = 0
+	local polarMax = mCeil(self.polarMaxLandRatio * number)
+	local seeds = { tRemoveRandom(seedBag) }
+	if number > 1 and #seedBag > 0 then
+		if self.wrapX and seeds[1].edgeY then
+			polarCount = 1
+		end
+		for i = 2, number do
+			local bestDist = 0
+			local bestIndex
+			for ii, polygon in pairs(seedBag) do
+				if not self.wrapX or not polygon.edgeY or polarCount < polarMax then
+					local totalDist = 0
+					for iii, seed in pairs(seeds) do
+						local dist = polygon:DistanceToPolygon(seed)
+						totalDist = totalDist + dist
+					end
+					if totalDist > bestDist then
+						bestDist = totalDist
+						bestIndex = ii
+					end
+				end
+			end
+			if bestIndex then
+				local bestPoly = tRemove(seedBag, bestIndex)
+				if self.wrapX and bestPoly.edgeY then
+					polarCount = polarCount + 1
+				end
+				tInsert(seeds, bestPoly)
+			end
+		end
+	end
+	return seeds
+end
+
+function Space:GrowContinentSeeds(seedPolygons, polygonLimit, astronomyIndex)
+	local filledPolygons = 0
+	local seeds = {}
+	for i = 1, #seedPolygons do
+		local polygon = seedPolygons[i]
+		local seed = {}
+		seed.continentIndex = i + self.lastContinentIndex
+		seed.goodSideThisContinent = 0
+		seed.filledContinentArea = #polygon.hexes
+		seed.continent = { polygon }
+		seed.polygon = polygon
+		tInsert(seeds, seed)
+	end
+	local grownSeeds = {}
+	repeat
+		for i = #seeds, 1, -1 do
+			local seed = seeds[i]
+			local continentIndex = seed.continentIndex
+			local polygon = seed.polygon
+			local continent = seed.continent
+			local candidate
+			self.filledArea = self.filledArea + #polygon.hexes
+			self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
+			filledPolygons = filledPolygons + 1
+			polygon.continent = continent
+			local candidates = {}
+			local polarCandidates = {}
+			local goodSideCandidates = {}
+			local searchBuffer
+			local searched
+			local firstTry = true
+			repeat
+				if not firstTry then
+					polygon = tRemoveRandom(searchBuffer)
+					if polygon == searched then
+						polygon = tRemoveRandom(searchBuffer)
+						if not polygon then
+							break
+						end
+					end
+					polarCandidates = {}
+					goodSideCandidates = {}
+				end
+				for ni, neighbor in pairs(polygon.neighbors) do
+					if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 100 then
+						local onGoodSide
+						if self.putTheContinentOnMyGoodSide[astronomyIndex] then
+							for si, side in pairs(self.nonOceanSides) do
+								if neighbor[side] then
+									onGoodSide = true
+									break
+								end
+							end
+						end
+						local nearPole = neighbor.betaBottomY or neighbor.betaTopY
+						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) then
+							tInsert(polarCandidates, neighbor)
+						elseif onGoodSide then
+							tInsert(goodSideCandidates, neighbor)
+						else
+							tInsert(candidates, neighbor)
+						end
+					end
+				end
+				if firstTry and #candidates == 0 then
+					if #continent > 1 then
+						searchBuffer = searchBuffer or tDuplicate(continent)
+						searched = polygon
+					end
+					firstTry = false
+				end
+			until #candidates ~= 0 or (searchBuffer and #searchBuffer == 0) or (#continent == 1 and not firstTry) or (#goodSideCandidates ~= 0 and self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]) or (#polarCandidates ~= 0 and self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex])
+			local candidate
+			if #candidates == 0 then
+				if #polarCandidates > 0 and self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex] then
+					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
+					self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + 1
+				elseif self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex] and #goodSideCandidates > 0 then
+					candidate = tRemoveRandom(goodSideCandidates) -- use a goodside polygon
+					seed.goodSideThisContinent = seed.goodSideThisContinent + 1
+				end
+			else
+				if self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex] and #goodSideCandidates > 0 then
+					candidate = tRemoveRandom(goodSideCandidates)
+					seed.goodSideThisContinent = seed.goodSideThisContinent + 1
+				else
+					candidate = tRemoveRandom(candidates)
+				end
+			end
+			if candidate then
+				candidate.continent = continent
+				self.filledArea = self.filledArea + #candidate.hexes
+				self.filledSubPolygons = self.filledSubPolygons + #candidate.subPolygons
+				seed.filledContinentArea = seed.filledContinentArea + #candidate.hexes
+				filledPolygons = filledPolygons + 1
+				tInsert(seed.continent, candidate)
+				seed.polygon = candidate
+			else
+				tInsert(grownSeeds, seed)
+				tRemove(seeds, i)
+			end
+		end
+	until filledPolygons >= polygonLimit or #seeds == 0
+	for i, seed in pairs(seeds) do
+		tInsert(grownSeeds, seed)
+	end
+	for i, seed in pairs(grownSeeds) do
+		EchoDebug("continent #" .. seed.continentIndex .. " of " ..  #seed.continent .. " polygons")
+		self.continents[seed.continentIndex] = seed.continent
+		if seed.continentIndex > self.lastContinentIndex then
+			self.lastContinentIndex = seed.continentIndex
+		end
+	end
+	self.filledPolygons = self.filledPolygons + filledPolygons
+	return filledPolygons
+end
+
 function Space:PickContinentsInBasin(astronomyIndex)
 	local polygonBuffer = {}
 	local polarPolygonsHere = 0
@@ -4181,169 +4359,41 @@ function Space:PickContinentsInBasin(astronomyIndex)
 			polarPolygonsHere = polarPolygonsHere + 1
 		end
 	end
-	local maxPolarPolygons = mFloor(polarPolygonsHere * self.polarMaxLandRatio)
+	self.maxPolarPolygons = self.maxPolarPolygons or {}
+	self.maxPolarPolygons[astronomyIndex] = mFloor(polarPolygonsHere * self.polarMaxLandRatio)
 	-- local sizeMult = 1 - (self.majorContinentNumber * 0.1)
-	local sizeMult = ((1 / self.majorContinentNumber) ^ 0.3) * 0.92
-	EchoDebug(maxPolarPolygons .. " maximum polar polygons of " .. polarPolygonsHere .. " polar polygons in astronomy basin of " .. #polygonBuffer .. " polygons")
-	EchoDebug("theoretical size multiplier: " .. sizeMult)
-	local polarPolygonCount = 0
-	local maxTotalPolygons = (#polygonBuffer - polarPolygonsHere) + maxPolarPolygons
+	self.polarPolygonCount = self.polarPolygonCount or {}
+	self.polarPolygonCount[astronomyIndex] = 0
+	local maxTotalPolygons = (#polygonBuffer - polarPolygonsHere) + self.maxPolarPolygons[astronomyIndex]
 	local islandPolygons = mCeil(maxTotalPolygons * self.islandRatio)
 	local nonIslandPolygons = mMax(1, maxTotalPolygons - islandPolygons)
 	EchoDebug(maxTotalPolygons .. " total polygons possible for land", islandPolygons .. " polygons reserved for islands", nonIslandPolygons .. " polygons reserved for continents")
-	local filledPolygons = 0
-	local continentIndex = 1
-	local polygonBufferSides
-	if self.oceanSides then
+	if self.oceanSides and not self.nonOceanSides then
 		self.nonOceanSides = {}
 		if not self.oceanSides["bottomX"] then tInsert(self.nonOceanSides, "bottomX") end
 		if not self.oceanSides["topX"] then tInsert(self.nonOceanSides, "topX") end
 		if not self.oceanSides["bottomY"] then tInsert(self.nonOceanSides, "bottomY") end
 		if not self.oceanSides["topY"] then tInsert(self.nonOceanSides, "topY") end
 	end
-	while #polygonBuffer > 0 do
-		-- determine theoretical continent size
-		local size = mCeil((nonIslandPolygons / self.majorContinentNumber) * sizeMult) -- because of the space left between continents
-		if filledPolygons >= nonIslandPolygons * sizeMult then size = mRandom(1, 3) end
-		local putTheContinentOnMyGoodSide = size > 3 and self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0
-		if putTheContinentOnMyGoodSide then
-			local goodSidePolygonCount = 0
-			for i, side in pairs(self.nonOceanSides) do
-				goodSidePolygonCount = goodSidePolygonCount + #self[side .. "Polygons"]
-			end
-			putTheContinentOnMyGoodSide = mFloor((goodSidePolygonCount / self.majorContinentNumber) * sizeMult)
-			-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
+	self.putTheContinentOnMyGoodSide = self.putTheContinentOnMyGoodSide or {}
+	local putTheContinentOnMyGoodSide = self.nonOceanSides and #self.nonOceanSides < 4 and #self.nonOceanSides > 0
+	if putTheContinentOnMyGoodSide then
+		local goodSidePolygonCount = 0
+		for i, side in pairs(self.nonOceanSides) do
+			goodSidePolygonCount = goodSidePolygonCount + #self[side .. "Polygons"]
 		end
-		-- pick a polygon to start the continent
-		local polygon
-		repeat
-			polygon = tRemoveRandom(polygonBuffer)
-			if polygon.continent == nil and not polygon:NearOther(nil, "continent") then
-				local nearPole = polygon:NearOther(nil, "topY") or polygon:NearOther(nil, "bottomY")
-				if putTheContinentOnMyGoodSide then
-						local goodSide = false
-						for nosi, side in pairs(self.nonOceanSides) do
-							if polygon[side] then
-								goodSide = true
-								break
-							end
-						end
-						if goodSide then break else polygon = nil end
-				elseif (self.wrapY or (not polygon.topY and not polygon.bottomY)) and (self.wrapX or (not polygon.topX and not polygon.bottomX)) and (not nearPole or not self.noContinentsNearPoles) then
-					break
-				else
-					polygon = nil
-				end
-			else
-				polygon = nil
-			end
-		until #polygonBuffer == 0
-		if polygon == nil then break end
-		local goodSideThisContinent = 0
-		local backlog = {}
-		local polarBacklog = {}
-		local goodSideBacklog = {}
-		self.filledArea = self.filledArea + #polygon.hexes
-		self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
-		filledPolygons = filledPolygons + 1
-		local filledContinentArea = #polygon.hexes
-		local continent = { polygon }
-		polygon.continent = continent
-		repeat
-			local candidates = {}
-			local polarCandidates = {}
-			local goodSideCandidates = {}
-			for ni, neighbor in pairs(polygon.neighbors) do
-				if neighbor.continent == nil and not neighbor:NearOther(continent, "continent") and neighbor.astronomyIndex < 100 then
-					local onGoodSide
-					if putTheContinentOnMyGoodSide then
-						for si, side in pairs(self.nonOceanSides) do
-							if neighbor[side] then
-								onGoodSide = true
-								break
-							end
-						end
-					end
-					local nearPole = neighbor.betaBottomY or neighbor.betaTopY
-					if self.wrapX and not self.wrapY and (neighbor.topY or neighbor.bottomY or (self.noContinentsNearPoles and nearPole)) then
-						tInsert(polarCandidates, neighbor)
-					elseif onGoodSide then
-						tInsert(goodSideCandidates, neighbor)
-					else
-						tInsert(candidates, neighbor)
-					end
-				end
-			end
-			local candidate
-			if #candidates == 0 then
-				if #polarCandidates > 0 and polarPolygonCount < maxPolarPolygons then
-					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
-					polarPolygonCount = polarPolygonCount + 1
-				elseif putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideCandidates > 0 then
-					candidate = tRemoveRandom(goodSideCandidates) -- use a goodside polygon
-					goodSideThisContinent = goodSideThisContinent + 1
-				else
-					-- when there are no immediate candidates
-					if putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideBacklog > 0 then
-						repeat
-							candidate = tRemove(goodSideBacklog, #goodSideBacklog)
-							if candidate.continent ~= nil then candidate = nil end
-						until candidate ~= nil or #goodSideBacklog == 0
-						if candidate ~= nil then
-							goodSideThisContinent = goodSideThisContinent + 1
-						end
-					end
-					if candidate == nil and #backlog > 0 then
-						repeat
-							candidate = tRemove(backlog, #backlog) -- pop off the most recent
-							if candidate.continent ~= nil then candidate = nil end
-						until candidate ~= nil or #backlog == 0
-					end
-					if candidate == nil and #polarBacklog > 0 then
-						repeat
-							candidate = tRemove(polarBacklog, #polarBacklog) -- pop off the most recent polar
-							if candidate.continent ~= nil then candidate = nil end
-						until candidate ~= nil or #polarBacklog == 0
-						if candidate ~= nil then
-							polarPolygonCount = polarPolygonCount + 1
-						end
-					end
-				end
-			else
-				if putTheContinentOnMyGoodSide and goodSideThisContinent < putTheContinentOnMyGoodSide and #goodSideCandidates > 0 then
-					candidate = tRemoveRandom(goodSideCandidates)
-					goodSideThisContinent = goodSideThisContinent + 1
-				else
-					candidate = tRemoveRandom(candidates)
-				end
-			end
-			if candidate == nil then
-				-- EchoDebug(#candidates, #polarCandidates, #goodSideCandidates, #backlog, #polarBacklog, #goodSideBacklog)
-				break
-			end
-			-- put the rest of the candidates in the backlog
-			for nothing, polygon in pairs(candidates) do
-				tInsert(backlog, polygon)
-			end
-			for nothing, polygon in pairs(goodSideCandidates) do
-				tInsert(goodSideBacklog, polygon)
-			end
-			for nothing, polygon in pairs(polarCandidates) do
-				tInsert(polarBacklog, polygon)
-			end
-			candidate.continent = continent
-			self.filledArea = self.filledArea + #candidate.hexes
-			self.filledSubPolygons = self.filledSubPolygons + #candidate.subPolygons
-			filledContinentArea = filledContinentArea + #candidate.hexes
-			filledPolygons = filledPolygons + 1
-			tInsert(continent, candidate)
-			polygon = candidate
-		until #backlog == 0 or #continent >= size
-		EchoDebug("continent of " .. #continent .. " polygons (" .. filledContinentArea .. " hexes) of " .. size .. " theoretical polygons")
-		tInsert(self.continents, continent)
-		continentIndex = continentIndex + 1
+		self.putTheContinentOnMyGoodSide[astronomyIndex] = mFloor(goodSidePolygonCount / self.majorContinentNumber)
+		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
-	self.filledPolygons = self.filledPolygons + filledPolygons
+	-- pick polygons to start every non-island continent in the basin
+	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
+	self:GrowContinentSeeds(seedPolygons, nonIslandPolygons, astronomyIndex)
+	repeat
+		seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
+		if #seedPolygons ~= 0 then
+			self:GrowContinentSeeds(seedPolygons, mRandom(1,3), astronomyIndex)
+		end
+	until #seedPolygons == 0
 end
 
 function Space:PickMountainRanges()
@@ -6190,6 +6240,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
