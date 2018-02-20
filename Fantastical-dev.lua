@@ -584,7 +584,7 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "tinyIslandChance", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
+	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
 	values = {
 			[1] = { name = "Land All Around", values = {
 				oceanNumber = -1,
@@ -593,21 +593,18 @@ local OptionDictionary = {
 			}},
 			[2] = { name = "Lakes", values = {
 				oceanNumber = -1,
-				tinyIslandChance = 30,
 				inlandSeaContinentRatio = 0.015,
 				inlandSeasMax = 2,
 				lakeMinRatio = 0.02,
 			}},
 			[3] = { name = "Inland Seas", values = {
 				oceanNumber = -1,
-				tinyIslandChance = 8,
 				inlandSeaContinentRatio = 0.04,
 				inlandSeasMax = 3,
 				lakeMinRatio = 0.015,
 			}},
 			[4] = { name = "Inland Sea", values = {
 				oceanNumber = -1,
-				tinyIslandChance = 3,
 				inlandSeaContinentRatio = 0.4,
 				inlandSeasMax = 1,
 			}},
@@ -623,7 +620,6 @@ local OptionDictionary = {
 			[6] = { name = "Archipelago", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
-				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
 				islandRatio = 0.4,
 				astronomyBlobNumber = 2,
@@ -633,7 +629,6 @@ local OptionDictionary = {
 			[7] = { name = "Pangaea", values = {
 				oceanNumber = 						1,
 				majorContinentNumber = 				1,
-				tinyIslandChance = 					20,
 				islandRatio = 						0.2,
 				inlandSeaContinentRatio = 			0.02,
 				inlandSeasMax = 					1,
@@ -658,14 +653,12 @@ local OptionDictionary = {
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
 				majorContinentNumber = 5,
-				tinyIslandChance = 25,
 				coastalPolygonChance = 2,
 				islandRatio = 0.8,
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
-				tinyIslandChance = 100,
 				coastalPolygonChance = 1,
 				islandRatio = 0.85,
 				astronomyBlobNumber = 5,
@@ -680,7 +673,6 @@ local OptionDictionary = {
 			[15] = { name = "Landlocked Lakes", values = {
 				wrapX = false,
 				oceanNumber = -1,
-				tinyIslandChance = 30,
 				inlandSeaContinentRatio = 0.015,
 				inlandSeasMax = 2,
 				lakeMinRatio = 0.02,
@@ -688,7 +680,6 @@ local OptionDictionary = {
 			[16] = { name = "Landlocked Seas", values = {
 				wrapX = false,
 				oceanNumber = -1,
-				tinyIslandChance = 8,
 				inlandSeaContinentRatio = 0.04,
 				inlandSeasMax = 3,
 				lakeMinRatio = 0.015,
@@ -696,7 +687,6 @@ local OptionDictionary = {
 			[17] = { name = "Landlocked Sea", values = {
 				wrapX = false,
 				oceanNumber = -1,
-				tinyIslandChance = 3,
 				inlandSeaContinentRatio = 0.4,
 				inlandSeasMax = 1,
 			}},
@@ -707,25 +697,29 @@ local OptionDictionary = {
 				islandRatio = 0.2,
 				inlandSeasMax = 0,
 			}},
-			[19] = { name = "Coast", values = {
+			[19] = { name = "Coastline", values = {
 				wrapX = false,
-				oceanNumber = 2,
-				tinyIslandChance = 20,
+				oceanNumber = 1,
 				coastalPolygonChance = 2,
 				islandRatio = 0.25,
 				inlandSeasMax = 0,
 			}},
-			[20] = { name = "Peninsula", values = {
+			[20] = { name = "Coast", values = {
+				wrapX = false,
+				oceanNumber = 2,
+				coastalPolygonChance = 2,
+				islandRatio = 0.25,
+				inlandSeasMax = 0,
+			}},
+			[21] = { name = "Peninsula", values = {
 				wrapX = false,
 				oceanNumber = 3,
-				tinyIslandChance = 25,
 				coastalPolygonChance = 2,
 				inlandSeasMax = 0,
 			}},
-			[21] = { name = "Continent", values = {
+			[22] = { name = "Continent", values = {
 				wrapX = false,
 				oceanNumber = 4,
-				tinyIslandChance = 30,
 				coastalPolygonChance = 3,
 				islandRatio = 0.25,
 				astronomyBlobNumber = 1,
@@ -733,16 +727,15 @@ local OptionDictionary = {
 				astronomyBlobMaxPolygons = 7,
 				astronomyBlobsMustConnectToOcean = true,
 			}},
-			[22] = { name = "Island Chain", values = {
+			[23] = { name = "Island Chain", values = {
 				wrapX = false,
 				oceanNumber = 4,
 				majorContinentNumber = 7,
-				tinyIslandChance = 30,
 				coastalPolygonChance = 2,
 				islandRatio = 0.85,
 				astronomyBlobNumber = 2,
 			}},
-			[23] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22} },
+			[24] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23} },
 		}
 	},
 	-- { name = "Inland Water Bodies", keys = { "inlandSeasMax", "inlandSeaContinentRatio", "lakeMinRatio" }, default = 2,
@@ -1900,7 +1893,7 @@ function Polygon:PickTinyIslands()
 	if (self.bottomX or self.topX) and self.oceanIndex and not self.space.wrapX then return end
 	if (self.bottomY or self.topY) and self.oceanIndex and not self.space.wrapX then return end
 	local subPolyBuffer = tDuplicate(self.subPolygons)
-	while #subPolyBuffer > 0 do
+	while #subPolyBuffer > 0 and #self.space.tinyIslandSubPolygons < self.space.tinyIslandMax do
 		local subPolygon = tRemoveRandom(subPolyBuffer)
 		local tooCloseForIsland = self.space.wrapX and (subPolygon.bottomY or subPolygon.topY) and mRandom(0, 100) > self.space.polarMaxLandPercent
 		if not tooCloseForIsland then
@@ -1918,12 +1911,14 @@ function Polygon:PickTinyIslands()
 				if tooCloseForIsland then break end
 			end
 		end
-		local chance = self.space.tinyIslandChance
+		local chance = self.space.currentTinyIslandChance or 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandMax))
 		if self.oceanIndex or self.loneCoastal then chance = chance * 2 end
-		if not tooCloseForIsland and Map.Rand(100, "tiny island chance") < chance then
+		if not tooCloseForIsland and mRandom() < chance then
 			subPolygon.tinyIsland = true
 			tInsert(self.space.tinyIslandSubPolygons, subPolygon)
 			self.hasTinyIslands = true
+			self.space.currentTinyIslandChance = 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandMax))
+			-- EchoDebug(self.space.currentTinyIslandChance, #self.space.tinyIslandSubPolygons)
 		end
 	end
 end
@@ -2457,7 +2452,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandChance = 10 -- out of 100 possible subpolygons, how often do coastal shelves produce tiny islands
+	a.tinyIslandMax = 5 -- how many tiny islands will a map have at maximum
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -4388,7 +4383,7 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 	end
 	EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
 	self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + polarPolygonCount
-	return grownSeeds
+	return grownSeeds, coastOrContinentCount, filledPolygons, filledArea
 end
 
 function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
@@ -4447,20 +4442,25 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
 	islandNumber = islandNumber or mFloor(coastOrContinentLimit * 0.0303)
-	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + islandNumber)
-	local testSeeds = self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons, true)
-	local sizes = {}
-	local isTest = {}
-	for i, seed in pairs(testSeeds) do
-		tInsert(sizes, #seed.continent)
-		isTest[seed.continent] = true
-	end
-	for i, polygon in pairs(self.polygons) do
-		if isTest[polygon.continent] then
-			polygon.continent = nil
+	local iterations = 0
+	local sizes
+	repeat
+		local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + islandNumber)
+		local testSeeds, coastOrContinentCount = self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons, true)
+		local isTest = {}
+		sizes = {}
+		for i, seed in pairs(testSeeds) do
+			tInsert(sizes, #seed.continent)
+			isTest[seed.continent] = true
 		end
-	end
-	self.polarPolygonCount[astronomyIndex] = 0
+		for i, polygon in pairs(self.polygons) do
+			if isTest[polygon.continent] then
+				polygon.continent = nil
+			end
+		end
+		self.polarPolygonCount[astronomyIndex] = 0
+		iterations = iterations + 1
+	until coastOrContinentCount > coastOrContinentLimit * 0.5 or iterations >= 20
 	EchoDebug("growing actual continents...")
 	tSort(sizes)
 	for i = #sizes, 1, -1 do
@@ -5908,14 +5908,19 @@ end
 function Space:PickCoasts()
 	self.coastalPolygonCount = 0
 	self.polarMaxLandPercent = self.polarMaxLandRatio * 100
-	for i, polygon in pairs(self.polygons) do
+	-- for i, polygon in pairs(self.polygons) do
+	local polygonBuffer = tDuplicate(self.polygons)
+	while #polygonBuffer ~= 0 do
+		local polygon = tRemoveRandom(polygonBuffer)
 		if polygon.continent == nil then
 			if polygon.oceanIndex == nil and Map.Rand(10, "coastal polygon dice") < self.coastalPolygonChance then
 				polygon.coastal = true
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
 			end
-			polygon:PickTinyIslands()
+			if #self.tinyIslandSubPolygons < self.tinyIslandMax then
+				polygon:PickTinyIslands()
+			end
 			if polygon.hasTinyIslands then
 				tInsert(self.tinyIslandPolygons, polygon)
 			end
@@ -6246,7 +6251,6 @@ end
 
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
-	-- if Map.GetCustomOption(1) == 2 then
 	if Map.GetCustomOption(1) > 12 then
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
