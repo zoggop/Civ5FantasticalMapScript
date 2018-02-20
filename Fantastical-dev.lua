@@ -1675,12 +1675,13 @@ function Polygon:FloodFillAstronomy(astronomyIndex)
 	return true
 end
 
-function Polygon:PatchContinent()
+function Polygon:PatchContinent(continent)
 	if self.continent then return end
-	local continent
-	for i, neighbor in pairs(self.neighbors) do
-		continent = neighbor.continent
-		if continent then break end
+	if not continent then
+		for i, neighbor in pairs(self.neighbors) do
+			continent = neighbor.continent
+			if continent then break end
+		end
 	end
 	self.continent = continent
 	tInsert(continent, self)
@@ -1711,18 +1712,24 @@ function Polygon:FloodFillToWholeContinent(searched, floodFound, sea)
 	return floodFound, sea
 end
 
-function Polygon:FloodFillToOcean(searched)
+function Polygon:FloodFillToOcean(searched, continent)
 	searched = searched or {}
 	if searched[self] then return end
 	searched[self] = true
-	if self.continent then return end
-	if self.oceanIndex then return self.oceanIndex end
-	if self.topY or self.bottomY then return -2 end
-	if not self.space.wrapX and (self.topX or self.bottomX) then return -3 end
-	for i, neighbor in pairs(self.neighbors) do
-		local oceanIndex = neighbor:FloodFillToOcean(searched)
-		if oceanIndex then return oceanIndex end
+	if self.continent then return nil, self.continent end
+	if self.oceanIndex then return self.oceanIndex, continent end
+	if self.space.wrapX and self.edgeY then
+		return -2, continent
 	end
+	if not self.space.wrapX and self.space.oceanNumber == 0 and (self.edgeY or self.edgeX) then
+		return -3, continent
+	end
+	for i, neighbor in pairs(self.neighbors) do
+		local oceanIndex, possibleContinent = neighbor:FloodFillToOcean(searched, continent)
+		continent = continent or possibleContinent
+		if oceanIndex then return oceanIndex, continent end
+	end
+	return nil, continent
 end
 
 function Polygon:FloodFillSea(sea)
@@ -4292,7 +4299,7 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 			end
 			polygon.continent = continent
 			local polarWanted = polarPolygonCount < self.maxPolarPolygons[astronomyIndex]
-			local goodSideWanted = self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]
+			local goodSideWanted = not seed.maxPolygons and self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]
 			local candidates = {}
 			local polarCandidates = {}
 			local goodSideCandidates = {}
@@ -4378,8 +4385,8 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 		self.filledPolygons = self.filledPolygons + filledPolygons
 		self.filledArea = self.filledArea + filledArea
 		self.filledSubPolygons = self.filledSubPolygons + filledSubPolygons
-		EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
 	end
+	EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
 	self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + polarPolygonCount
 	return grownSeeds
 end
@@ -4914,9 +4921,10 @@ function Space:PatchContinents()
 	local patchedPolygonCount = 0
 	for i, polygon in pairs(self.polygons) do
 		if not polygon.continent and not polygon.oceanIndex then
-			if not polygon:FloodFillToOcean() then
+			local oceanIndex, continent = polygon:FloodFillToOcean()
+			if not oceanIndex then
 				patchedPolygonCount = patchedPolygonCount + 1
-				polygon:PatchContinent()
+				polygon:PatchContinent(continent)
 			end
 		end
 	end
