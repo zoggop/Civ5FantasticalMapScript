@@ -1,3 +1,5 @@
+- attempting to make growcontinentseeds independent so that it can be used to test sizes without affecting Space's totals and stuff
+
 - annoyed that desert regions tend not to contain anything but desert
 
 - possibly instead of using min and max to for global climate options, use an exponent (like polarexponent) that the whole climate grid is distorted by. this would have to be used in conjunction with modifying mins and maxes, because it tends to leave in too much of the upper or lower part of the curve

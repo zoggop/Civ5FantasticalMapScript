@@ -91,13 +91,14 @@ local mTwicePi = math.pi * 2
 local mAtan2 = math.atan2
 local tInsert = table.insert
 local tRemove = table.remove
+local tSort = table.sort
 
 ------------------------------------------------------------------------------
 
 function pairsByKeys (t, f)
   local a = {}
-  for n in pairs(t) do table.insert(a, n) end
-  table.sort(a, f)
+  for n in pairs(t) do tInsert(a, n) end
+  tSort(a, f)
   local i = 0      -- iterator variable
   local iter = function ()   -- iterator function
     i = i + 1
@@ -4155,7 +4156,6 @@ function Space:FindAstronomyBasins()
 end
 
 function Space:PickContinents()
-	self.lastContinentIndex = 0
 	self.filledArea = 0
 	self.filledSubPolygons = 0
 	self.filledPolygons = 0
@@ -4173,6 +4173,7 @@ function Space:PickContinents()
 		EchoDebug("whole-world continent of " .. #continent .. " polygons")
 		return
 	end
+	-- grow continents in astronomy basins
 	for astronomyIndex, basin in pairs(self.astronomyBasins) do
 		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons...")
 		self:PickContinentsInBasin(astronomyIndex)
@@ -4243,10 +4244,13 @@ function Space:GetContinentSeeds(polygonBuffer, number, noBoundaries)
 	return seeds
 end
 
-function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, polygonLimit)
+function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, polygonLimit, testOnly)
 	islandNumber = islandNumber or 0
 	polygonLimit = polygonLimit or coastOrContinentLimit
 	local filledPolygons = 0
+	local filledArea = 0
+	local filledSubPolygons = 0
+	local polarPolygonCount = self.polarPolygonCount[astronomyIndex]
 	local coastOrContinent = {}
 	local coastOrContinentCount = 0
 	local seeds = {}
@@ -4255,7 +4259,6 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 	for i = 1, #seedPolygons do
 		local polygon = seedPolygons[i]
 		local seed = {}
-		seed.continentIndex = i + self.lastContinentIndex
 		seed.goodSideThisContinent = 0
 		seed.filledContinentArea = #polygon.hexes
 		seed.continent = { polygon }
@@ -4270,13 +4273,12 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 	repeat
 		for i = #seeds, 1, -1 do
 			local seed = seeds[i]
-			local continentIndex = seed.continentIndex
 			local polygon = seed.polygon
 			local continent = seed.continent
 			local candidate
-			self.filledArea = self.filledArea + #polygon.hexes
+			filledArea = filledArea + #polygon.hexes
 			seed.filledContinentArea = seed.filledContinentArea + #polygon.hexes
-			self.filledSubPolygons = self.filledSubPolygons + #polygon.subPolygons
+			filledSubPolygons = filledSubPolygons + #polygon.subPolygons
 			filledPolygons = filledPolygons + 1
 			if not coastOrContinent[polygon] then
 				coastOrContinent[polygon] = true
@@ -4289,7 +4291,7 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 				end
 			end
 			polygon.continent = continent
-			local polarWanted = self.polarPolygonCount[astronomyIndex] < self.maxPolarPolygons[astronomyIndex]
+			local polarWanted = polarPolygonCount < self.maxPolarPolygons[astronomyIndex]
 			local goodSideWanted = self.putTheContinentOnMyGoodSide[astronomyIndex] and seed.goodSideThisContinent < self.putTheContinentOnMyGoodSide[astronomyIndex]
 			local candidates = {}
 			local polarCandidates = {}
@@ -4342,7 +4344,7 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 			if #candidates == 0 then
 				if polarWanted and #polarCandidates > 0 then
 					candidate = tRemoveRandom(polarCandidates) -- use a polar polygon
-					self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + 1
+					polarPolygonCount = polarPolygonCount + 1
 				elseif goodSideWanted and #goodSideCandidates > 0 then
 					candidate = tRemoveRandom(goodSideCandidates) -- use a goodside polygon
 					seed.goodSideThisContinent = seed.goodSideThisContinent + 1
@@ -4368,19 +4370,21 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 	for i, seed in pairs(seeds) do
 		tInsert(grownSeeds, seed)
 	end
-	for i, seed in pairs(grownSeeds) do
-		EchoDebug("continent #" .. seed.continentIndex .. " of " ..  #seed.continent .. " polygons")
-		self.continents[seed.continentIndex] = seed.continent
-		if seed.continentIndex > self.lastContinentIndex then
-			self.lastContinentIndex = seed.continentIndex
+	if not testOnly then
+		for i, seed in pairs(grownSeeds) do
+			EchoDebug("continent of " ..  #seed.continent .. " polygons")
+			tInsert(self.continents, seed.continent)
 		end
+		self.filledPolygons = self.filledPolygons + filledPolygons
+		self.filledArea = self.filledArea + filledArea
+		self.filledSubPolygons = self.filledSubPolygons + filledSubPolygons
+		EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
 	end
-	self.filledPolygons = self.filledPolygons + filledPolygons
-	EchoDebug(filledPolygons .. " / " .. polygonLimit .. " polygons filled with land", coastOrContinentCount .. " / " .. coastOrContinentLimit .. " polygons of coast or land")
-	return filledPolygons, coastOrContinentCount
+	self.polarPolygonCount[astronomyIndex] = self.polarPolygonCount[astronomyIndex] + polarPolygonCount
+	return grownSeeds
 end
 
-function Space:PickContinentsInBasin(astronomyIndex)
+function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 	local polygonBuffer = {}
 	local polarPolygonsHere = 0
 	local basinPlusSurround = 0
@@ -4435,9 +4439,32 @@ function Space:PickContinentsInBasin(astronomyIndex)
 		self.putTheContinentOnMyGoodSide[astronomyIndex] = mFloor(goodSidePolygonCount / self.majorContinentNumber)
 		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
-	local islandNumber = mRandom(mMax(0, self.islandsPerAstronomyBasin - self.islandsPerAstronomyBasinDeviation), self.islandsPerAstronomyBasin + self.islandsPerAstronomyBasinDeviation)
+	islandNumber = islandNumber or mFloor(coastOrContinentLimit * 0.0303)
 	local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + islandNumber)
-	self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons)
+	local testSeeds = self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons, true)
+	local sizes = {}
+	local isTest = {}
+	for i, seed in pairs(testSeeds) do
+		tInsert(sizes, #seed.continent)
+		isTest[seed.continent] = true
+	end
+	for i, polygon in pairs(self.polygons) do
+		if isTest[polygon.continent] then
+			polygon.continent = nil
+		end
+	end
+	self.polarPolygonCount[astronomyIndex] = 0
+	EchoDebug("growing actual continents...")
+	tSort(sizes)
+	for i = #sizes, 1, -1 do
+		local size = sizes[i]
+		seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
+		if #seedPolygons ~= 0 then
+			self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, 0, size)
+		else
+			break
+		end
+	end
 	-- local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.islandsPerAstronomyBasin)
 	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
 	-- seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
@@ -4445,7 +4472,13 @@ function Space:PickContinentsInBasin(astronomyIndex)
 	-- for i = 1, self.majorContinentNumber do
 	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
 	-- 	if #seedPolygons ~= 0 then
-	-- 		self:GrowContinentSeeds(seedPolygons, (nonIslandPolygons / self.majorContinentNumber) * (1-self.openWaterRatio), astronomyIndex, 0)
+	-- 		self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit / self.majorContinentNumber, astronomyIndex, 0)
+	-- 	else
+	-- 		break
+	-- 	end
+	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
+	-- 	if #seedPolygons ~= 0 then
+	-- 		self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, 1)
 	-- 	else
 	-- 		break
 	-- 	end
@@ -6296,6 +6329,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
