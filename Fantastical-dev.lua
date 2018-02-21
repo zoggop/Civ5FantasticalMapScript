@@ -3398,14 +3398,18 @@ function Space:ShiftGlobe()
 	EchoDebug(#splits .. " splits")
 	local largestShift
 	for i, continuities in pairs(splits) do
+		local smallestShift
 		for ii, continuity in pairs(continuities) do
 			local shift = continuity.x2 - continuity.x1
-			if not largestShift or shift > mAbs(largestShift) then
-				largestShift = shift
+			if not smallestShift or shift < mAbs(smallestShift) then
+				smallestShift = shift
 				if continuity.x1 == 0 then
-					largestShift = -largestShift
+					smallestShift = -smallestShift
 				end
 			end
+		end
+		if smallestShift and (not largestShift or mAbs(smallestShift) > largestShift) then
+			largestShift = smallestShift
 		end
 	end
 	if largestShift then
