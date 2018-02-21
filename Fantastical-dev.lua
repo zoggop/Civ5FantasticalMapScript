@@ -700,6 +700,7 @@ local OptionDictionary = {
 			[19] = { name = "Coastline", values = {
 				wrapX = false,
 				oceanNumber = 1,
+				majorContinentNumber = 1,
 				coastalPolygonChance = 2,
 				islandNumber = 1,
 				inlandSeasMax = 0,
@@ -707,6 +708,7 @@ local OptionDictionary = {
 			[20] = { name = "Coast", values = {
 				wrapX = false,
 				oceanNumber = 2,
+				majorContinentNumber = 1,
 				coastalPolygonChance = 2,
 				islandNumber = 1,
 				inlandSeasMax = 0,
@@ -714,6 +716,7 @@ local OptionDictionary = {
 			[21] = { name = "Peninsula", values = {
 				wrapX = false,
 				oceanNumber = 3,
+				majorContinentNumber = 1,
 				coastalPolygonChance = 2,
 				islandNumber = 2,
 				inlandSeasMax = 0,
@@ -721,6 +724,7 @@ local OptionDictionary = {
 			[22] = { name = "Continent", values = {
 				wrapX = false,
 				oceanNumber = 4,
+				majorContinentNumber = 1,
 				coastalPolygonChance = 3,
 				islandNumber = 2,
 				astronomyBlobNumber = 1,
@@ -2457,7 +2461,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandTarget = 9 -- how many tiny islands will a map attempt to have
+	a.tinyIslandTarget = 7 -- how many tiny islands will a map attempt to have
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
