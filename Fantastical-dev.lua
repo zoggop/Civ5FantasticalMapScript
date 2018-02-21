@@ -584,7 +584,7 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "coastalPolygonChance", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
+	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "islandNumber", "tinyIslandTarget", "coastalPolygonChance", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
 	values = {
 			[1] = { name = "Land All Around", values = {
 				oceanNumber = -1,
@@ -599,14 +599,15 @@ local OptionDictionary = {
 			}},
 			[3] = { name = "Inland Seas", values = {
 				oceanNumber = -1,
+				tinyIslandTarget = 5,
 				inlandSeaContinentRatio = 0.04,
 				inlandSeasMax = 3,
 				lakeMinRatio = 0.015,
 			}},
 			[4] = { name = "Inland Sea", values = {
 				oceanNumber = -1,
+				tinyIslandTarget = 5,
 				inlandSeaContinentRatio = 0.4,
-				inlandSeasMax = 1,
 			}},
 			[5] = { name = "Low Seas", values = {
 				oceanNumber = 0,
@@ -621,6 +622,7 @@ local OptionDictionary = {
 				majorContinentNumber = 12,
 				coastalPolygonChance = 2,
 				islandNumber = 12,
+				tinyIslandTarget = 9,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
@@ -629,8 +631,7 @@ local OptionDictionary = {
 				oceanNumber = 1,
 				majorContinentNumber = 1,
 				islandNumber = 2,
-				inlandSeaContinentRatio = 0.02,
-				inlandSeasMax = 1,
+				tinyIslandTarget = 5,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 3,
 				astronomyBlobMaxPolygons = 7,
@@ -640,7 +641,6 @@ local OptionDictionary = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
 				inlandSeaContinentRatio = 0.03,
-				inlandSeasMax = 1,
 			}},
 			[9] = { name = "Two Continents", values = {
 				-- all defaults
@@ -659,12 +659,16 @@ local OptionDictionary = {
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 15,
-				coastalPolygonChance = 1,
 				islandNumber = 12,
 				tinyIslandTarget = 12,
 				astronomyBlobNumber = 5,
 			}},
-			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
+			-- [13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
+			-- { "wrapX", "oceanNumber", "majorContinentNumber", "islandNumber", "tinyIslandTarget", "coastalPolygonChance", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }
+			[13] = { name = "Random Globe", values = "values",
+				lowValues = { true, -1, 1, 1, 1, 1, 0.01, 0, 0.001, 0, 1, 1, false },
+				highValues = { true, 3, 8, 9, 13, 3, 0.3, 3, 0.02, 3, 10, 20, true }
+			},
 			[14] = { name = "Dry Land", values = {
 				wrapX = false,
 				oceanNumber = -1,
@@ -689,7 +693,6 @@ local OptionDictionary = {
 				wrapX = false,
 				oceanNumber = -1,
 				inlandSeaContinentRatio = 0.4,
-				inlandSeasMax = 1,
 			}},
 			[18] = { name = "Estuary", values = {
 				wrapX = false,
@@ -2537,10 +2540,21 @@ function Space:SetOptions(optDict)
 			local randValues = {}
 			for valueNumber, key in pairs(option.keys) do
 				local low, high = lowValues[valueNumber], highValues[valueNumber]
-				local change = high - low
-				randValues[valueNumber] = low + (change * mRandom(1))
-				if mFloor(low) == low and mFloor(high) == high then
-					randValues[valueNumber] = mFloor(randValues[valueNumber])
+				local lowType = type(low)
+				if lowType == "number" then
+					local change = high - low
+					randValues[valueNumber] = low + (change * mRandom(1))
+					if mFloor(low) == low and mFloor(high) == high then
+						randValues[valueNumber] = mFloor(randValues[valueNumber])
+					end
+				elseif lowType == "boolean" then
+					if type(high) == "boolean" and low ~= high then
+						randValues[valueNumber] = mRandom(1, 2) == 1
+					else
+						randValues[valueNumber] = low
+					end
+				elseif lowType == "string" then
+					randValues[valueNumber] = low
 				end
 			end
 			option.values[optionChoice].values = randValues
@@ -6390,6 +6404,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
