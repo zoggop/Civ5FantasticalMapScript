@@ -648,11 +648,11 @@ local OptionDictionary = {
 				-- all defaults
 			}},
 			[10] = { name = "Earthish", values = {
-				majorContinentNumber = 2,
+				majorContinentNumber = 5,
 			}},
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
-				majorContinentNumber = 5,
+				majorContinentNumber = 13,
 				coastalPolygonChance = 2,
 				islandRatio = 0.8,
 			}},
@@ -2428,8 +2428,9 @@ Space = class(function(a)
 	a.astronomyBlobMinPolygons = 10
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
-	a.majorContinentNumber = 1 -- how many large continents per astronomy basin
+	a.majorContinentNumber = 2 -- how many large continents on the whole map
 	a.islandRatio = 0.35 -- what part of the continent polygons are taken up by 1-3 polygon continents
+	a.islandNumber = 3 -- how many 1-3-polygon islands on the whole map
 	a.openWaterRatio = 0.1 -- what part of an astronomy basin is reserved for open water
 	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
 	a.islandsPerAstronomyBasinDeviation = 1 -- number of 1-3-polygon islands can vary by this much per astronomy basin
@@ -4144,8 +4145,11 @@ function Space:FindAstronomyBasins()
 	self.astronomyBasins = {}
 	for i, polygon in pairs(self.polygons) do
 		if polygon:FloodFillAstronomy(astronomyIndex) then
+			EchoDebug("astronomy basin #" .. astronomyIndex .. " has " .. #self.astronomyBasins[astronomyIndex] .. " polygons")
+			if not self.largestAstronomyBasin or #self.astronomyBasins[astronomyIndex] > #self.largestAstronomyBasin then
+				self.largestAstronomyBasin = self.astronomyBasins[astronomyIndex]
+			end
 			astronomyIndex = astronomyIndex + 1
-			EchoDebug("astronomy basin #" .. astronomyIndex-1 .. " has " .. #self.astronomyBasins[astronomyIndex-1] .. " polygons")
 		end
 	end
 	for i, polygon in pairs(self.polygons) do
@@ -4175,10 +4179,47 @@ function Space:PickContinents()
 		EchoDebug("whole-world continent of " .. #continent .. " polygons")
 		return
 	end
+	-- decide where islands and continents go
+	self.majorContinentsInBasin = {}
+	local islandsInBasin = {}
+	local largeEnoughBasinIndices = {}
+	local basinSizeMin = #self.largestAstronomyBasin / 2
+	for astronomyIndex, basin in pairs(self.astronomyBasins) do
+		self.majorContinentsInBasin[astronomyIndex] = 0
+		islandsInBasin[astronomyIndex] = 0
+		if #basin > basinSizeMin then
+			tInsert(largeEnoughBasinIndices, astronomyIndex)
+		end
+	end
+	-- decide where continents go
+	local lebi = mRandom(1, #largeEnoughBasinIndices)
+	local continentCount = 0
+	while continentCount < self.majorContinentNumber do
+		local astronomyIndex = largeEnoughBasinIndices[lebi]
+		self.majorContinentsInBasin[astronomyIndex] = self.majorContinentsInBasin[astronomyIndex] + 1
+		continentCount = continentCount + 1
+		lebi = lebi + 1
+		if lebi > #largeEnoughBasinIndices then
+			lebi = 1
+		end
+	end
+	-- decide where islands go
+	lebi = mRandom(1, #largeEnoughBasinIndices)
+	local islandCount = 0
+	while islandCount < self.islandNumber do
+		local astronomyIndex = largeEnoughBasinIndices[lebi]
+		islandsInBasin[astronomyIndex] = islandsInBasin[astronomyIndex] + 1
+		islandCount = islandCount + 1
+		lebi = lebi + 1
+		if lebi > #largeEnoughBasinIndices then
+			lebi = 1
+		end
+	end
 	-- grow continents in astronomy basins
 	for astronomyIndex, basin in pairs(self.astronomyBasins) do
-		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons...")
-		self:PickContinentsInBasin(astronomyIndex)
+		local islandNumber = islandsInBasin[astronomyIndex]
+		EchoDebug("picking for astronomy basin #" .. astronomyIndex .. ": " .. #basin .. " polygons, " .. self.majorContinentsInBasin[astronomyIndex] .. " continents, & " .. islandNumber .. " islands...")
+		self:PickContinentsInBasin(astronomyIndex, islandNumber)
 	end
 end
 
@@ -4409,7 +4450,6 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 	end
 	self.maxPolarPolygons = self.maxPolarPolygons or {}
 	self.maxPolarPolygons[astronomyIndex] = mFloor(polarPolygonsHere * self.polarMaxLandRatio)
-	-- local sizeMult = 1 - (self.majorContinentNumber * 0.1)
 	self.polarPolygonCount = self.polarPolygonCount or {}
 	self.polarPolygonCount[astronomyIndex] = 0
 	local polarAdd = 0
@@ -4417,6 +4457,9 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 		polarAdd = self.maxPolarPolygons[astronomyIndex] - polarPolygonsHere
 	end
 	local maxTotalPolygons = #polygonBuffer + polarAdd
+	if maxTotalPolygons == 0 then
+		return
+	end
 	local coastOrContinentLimit = basinPlusSurround + polarAdd
 	if self.wrapX and self.polarMaxLandRatio < 1 then
 		coastOrContinentLimit = coastOrContinentLimit + 4
@@ -4438,15 +4481,15 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 		for i, side in pairs(self.nonOceanSides) do
 			goodSidePolygonCount = goodSidePolygonCount + #self[side .. "Polygons"]
 		end
-		self.putTheContinentOnMyGoodSide[astronomyIndex] = mFloor(goodSidePolygonCount / self.majorContinentNumber)
+		self.putTheContinentOnMyGoodSide[astronomyIndex] = mFloor(goodSidePolygonCount / self.majorContinentsInBasin[astronomyIndex])
 		-- EchoDebug("put the continent on my good side", putTheContinentOnMyGoodSide)
 	end
 	islandNumber = islandNumber or mFloor(coastOrContinentLimit * 0.0303)
 	local iterations = 0
 	local sizes
 	repeat
-		local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber + islandNumber)
-		local testSeeds, coastOrContinentCount = self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons, true)
+		local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentsInBasin[astronomyIndex] + islandNumber)
+		local testSeeds, coastOrContinentCount, polygonCount = self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, islandNumber, maxTotalPolygons, true)
 		local isTest = {}
 		sizes = {}
 		for i, seed in pairs(testSeeds) do
@@ -4460,7 +4503,7 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 		end
 		self.polarPolygonCount[astronomyIndex] = 0
 		iterations = iterations + 1
-	until coastOrContinentCount > coastOrContinentLimit * 0.5 or iterations >= 20
+	until polygonCount >= maxTotalPolygons or coastOrContinentCount > coastOrContinentLimit * 0.5 or iterations >= 10
 	EchoDebug("growing actual continents...")
 	tSort(sizes)
 	for i = #sizes, 1, -1 do
