@@ -15,36 +15,7 @@ include("FLuaVector.lua")
 
 local debugEnabled = true
 local clockEnabled = false
-local function EchoDebug(...)
-	if debugEnabled then
-		local printResult = ""
-		if clockEnabled then
-			local clock = math.floor(os.clock() / 0.1) * 0.1
-			printResult = printResult .. "(" .. clock .. "): \t"
-		end
-		for i,v in ipairs(arg) do
-			local vString
-			if type(v) == "number" and math.floor(v) ~= v then
-				vString = string.format("%.4f", v)
-			elseif type(v) == "table" and v[1] then
-				vString = ""
-				for ii, vv in ipairs(v) do
-					if type(vv) == "number" and math.floor(vv) ~= vv then
-						vvStr = string.format("%.2f", vv)
-					else
-						vvStr = tostring(vv)
-					end
-					vString = vString .. vvStr
-					if ii < #v then vString = vString .. ", " end
-				end
-			else
-				vString = tostring(v)
-			end
-			printResult = printResult .. vString .. "\t"
-		end
-		print(printResult)
-	end
-end
+local lastDebugTimer
 
 local function StartDebugTimer()
 	return os.clock()
@@ -74,6 +45,42 @@ local function StopDebugTimer(timer)
 	end
 	return string.format(format, multiplier * time) .. " " .. unit
 end
+
+local function EchoDebug(...)
+	if debugEnabled then
+		local printResult = ""
+		if clockEnabled then
+			-- local clock = math.floor(os.clock() / 0.1) * 0.1
+			-- printResult = printResult .. "(" .. clock .. "): \t"
+			if lastDebugTimer then
+				printResult = printResult .. "(" .. StopDebugTimer(lastDebugTimer) .. "): \t"
+			end
+			lastDebugTimer = StartDebugTimer()
+		end
+		for i,v in ipairs(arg) do
+			local vString
+			if type(v) == "number" and math.floor(v) ~= v then
+				vString = string.format("%.4f", v)
+			elseif type(v) == "table" and v[1] then
+				vString = ""
+				for ii, vv in ipairs(v) do
+					if type(vv) == "number" and math.floor(vv) ~= vv then
+						vvStr = string.format("%.2f", vv)
+					else
+						vvStr = tostring(vv)
+					end
+					vString = vString .. vvStr
+					if ii < #v then vString = vString .. ", " end
+				end
+			else
+				vString = tostring(v)
+			end
+			printResult = printResult .. vString .. "\t"
+		end
+		print(printResult)
+	end
+end
+
 
 ------------------------------------------------------------------------------
 
@@ -2442,8 +2449,6 @@ Space = class(function(a)
 	a.majorContinentNumber = 2 -- how many large continents on the whole map
 	a.islandNumber = 3 -- how many 1-3-polygon islands on the whole map
 	a.openWaterRatio = 0.1 -- what part of an astronomy basin is reserved for open water
-	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
-	a.islandsPerAstronomyBasinDeviation = 1 -- number of 1-3-polygon islands can vary by this much per astronomy basin
 	a.polarMaxLandRatio = 0.4 -- how much of the land in each astronomy basin can be at the poles
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
@@ -3376,7 +3381,6 @@ function Space:ShiftGlobe()
 			end
 		end
 		if occupiedXs[0] and occupiedXs[self.w] then
-			EchoDebug("continent is split")
 			-- the continent is split
 			local continuities = {}
 			local newCon = false
@@ -3418,7 +3422,7 @@ function Space:ShiftGlobe()
 		else
 			largestShift = largestShift + 2
 		end
-		EchoDebug("shifting globe X by " .. largestShift)
+		EchoDebug("shifting globe X by " .. largestShift .. "...")
 		for i, hex in pairs(self.hexes) do
 			local shiftedX = hex.x + largestShift
 			if shiftedX < 0 then
@@ -4602,24 +4606,6 @@ function Space:PickContinentsInBasin(astronomyIndex, islandNumber)
 			break
 		end
 	end
-	-- local seedPolygons = self:GetContinentSeeds(polygonBuffer, self.islandsPerAstronomyBasin)
-	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex, self.islandsPerAstronomyBasin)
-	-- seedPolygons = self:GetContinentSeeds(polygonBuffer, self.majorContinentNumber)
-	-- self:GrowContinentSeeds(seedPolygons, landPolygons, astronomyIndex)
-	-- for i = 1, self.majorContinentNumber do
-	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
-	-- 	if #seedPolygons ~= 0 then
-	-- 		self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit / self.majorContinentNumber, astronomyIndex, 0)
-	-- 	else
-	-- 		break
-	-- 	end
-	-- 	seedPolygons = self:GetContinentSeeds(polygonBuffer, 1)
-	-- 	if #seedPolygons ~= 0 then
-	-- 		self:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomyIndex, 1)
-	-- 	else
-	-- 		break
-	-- 	end
-	-- end
 end
 
 function Space:PickMountainRanges()
@@ -4867,11 +4853,12 @@ function Space:CreateClimateVoronoi(number, relaxations)
 		for t = self.temperatureMin, self.temperatureMax do
 			for r = self.rainfallMin, self.rainfallMax do
 				local leastDist
-				local nearestPolygon
+				local nearestPoint
 				for i, point in pairs(climateVoronoi) do
 					local dt = mAbs(t - point.temp)
 					local dr = mAbs(r - point.rain)
-					local dist = (dt * dt) + (dr * dr)
+					-- local dist = (dt * dt) + (dr * dr)
+					local dist = dt + dr
 					if not leastDist or dist < leastDist then
 						leastDist = dist
 						nearestPoint = point
