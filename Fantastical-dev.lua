@@ -619,10 +619,10 @@ local OptionDictionary = {
 			}},
 			[6] = { name = "Archipelago", values = {
 				oceanNumber = 0,
-				majorContinentNumber = 12,
+				majorContinentNumber = 0,
 				coastalPolygonChance = 2,
-				islandNumber = 12,
-				tinyIslandTarget = 9,
+				islandNumber = 24,
+				tinyIslandTarget = 16,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
@@ -637,7 +637,7 @@ local OptionDictionary = {
 				astronomyBlobMaxPolygons = 7,
 				astronomyBlobsMustConnectToOcean = 	true,
 			}},
-			[8] = { name = "Centauri-like", values = {
+			[8] = { name = "Alpha Centaurish", values = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
 				inlandSeaContinentRatio = 0.03,
@@ -658,13 +658,12 @@ local OptionDictionary = {
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
-				majorContinentNumber = 15,
-				islandNumber = 12,
-				tinyIslandTarget = 12,
+				majorContinentNumber = 0,
+				islandNumber = 20,
+				tinyIslandTarget = 14,
 				astronomyBlobNumber = 5,
 			}},
 			-- [13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
-			-- { "wrapX", "oceanNumber", "majorContinentNumber", "islandNumber", "tinyIslandTarget", "coastalPolygonChance", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }
 			[13] = { name = "Random Globe", values = "values",
 				lowValues = { true, -1, 1, 1, 1, 1, 0.01, 0, 0.001, 0, 1, 1, false },
 				highValues = { true, 3, 8, 9, 13, 3, 0.3, 3, 0.02, 3, 10, 20, true }
@@ -4226,15 +4225,14 @@ function Space:PickContinents()
 		end
 	end
 	-- decide where islands go
-	lebi = mRandom(1, #largeEnoughBasinIndices)
+	local astronomyIndex = mRandom(1, #self.astronomyBasins)
 	local islandCount = 0
 	while islandCount < self.islandNumber do
-		local astronomyIndex = largeEnoughBasinIndices[lebi]
 		islandsInBasin[astronomyIndex] = islandsInBasin[astronomyIndex] + 1
 		islandCount = islandCount + 1
-		lebi = lebi + 1
-		if lebi > #largeEnoughBasinIndices then
-			lebi = 1
+		astronomyIndex = astronomyIndex + 1
+		if astronomyIndex > #self.astronomyBasins then
+			astronomyIndex = 1
 		end
 	end
 	-- grow continents in astronomy basins
