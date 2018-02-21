@@ -762,6 +762,13 @@ local OptionDictionary = {
 			[3] = { name = "Random", values = "keys" },
  		}
 	},
+	{ name = "Climate Realism", keys = { "useMapLatitudes" }, default = 1,
+	values = {
+			[1] = { name = "Off", values = {false} },
+			[2] = { name = "On", values = {true} },
+			[3] = { name = "Random", values = "keys" },
+ 		}
+	},
 	{ name = "Granularity", keys = { "polygonCount" }, default = 3,
 	values = {
 			[1] = { name = "Very Low", values = {100} },
@@ -771,13 +778,6 @@ local OptionDictionary = {
 			[5] = { name = "Very High", values = {300} },
 			[6] = { name = "Random", values = "values", lowValues = {100}, highValues = {300} },
 		}
-	},
-	{ name = "Climate Realism", keys = { "useMapLatitudes" }, default = 1,
-	values = {
-			[1] = { name = "Off", values = {false} },
-			[2] = { name = "On", values = {true} },
-			[3] = { name = "Random", values = "keys" },
- 		}
 	},
 	{ name = "World Age", keys = { "mountainRatio", "hillynessMax", "hillChance" }, default = 4,
 	values = {
@@ -796,9 +796,9 @@ local OptionDictionary = {
 			[2] = { name = "Ice Age", values = {1.6, 0, 33} },
 			[3] = { name = "Cool", values = {1.4, 0, 71} },
 			[4] = { name = "Temperate", values = {1.2, 0, 99} },
-			[5] = { name = "Hot", values = {1.1, 6, 99} },
-			[6] = { name = "Jurassic", values = {0.9, 26, 99} },
-			[7] = { name = "Global Tropics", values = {0.7, 50, 99} },
+			[5] = { name = "Warm", values = {1.1, 6, 99} },
+			[6] = { name = "Hot", values = {0.9, 26, 99} },
+			[7] = { name = "Jurassic", values = {0.7, 50, 99} },
 			[8] = { name = "Random", values = "keys" },
 		}
 	},
@@ -6287,9 +6287,9 @@ function GetMapScriptInfo()
 			local title = Modding.GetModProperty(v.ID, v.Version, "Name")
 			if title == "Alpha Centauri Maps" then
 				EchoDebug("Alpha Centauri Maps enabled, changing default map options...")
-				OptionDictionary[1].default = 8 -- centauri-like
+				OptionDictionary[1].default = 8 -- alpha centaurish
 				OptionDictionary[2].default = 2 -- no land at poles
-				OptionDictionary[4].default = 2 -- climate realism on
+				OptionDictionary[3].default = 2 -- climate realism on
 				break
 			end
 		end

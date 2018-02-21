@@ -1,27 +1,27 @@
-Maps with not much bearing on reality. Vast jungles next to icy wastes, etc. Mountains tend to divide regions of differing terrain. Number of deep oceans (requiring Astronomy research to cross) is controllable.
+Maps with not much bearing on reality. Vast jungles next to icy wastes, etc. Mountains tend to divide regions of differing terrain. Number of deep oceans (requiring Astronomy to cross) is controllable.
 
-The map is a rendering of a polygonal world--a smaller map is just a lower resolution, therefore has smaller continents, regions, mountain ranges, rivers, etc.
+The map is a rendering of a polygonal world--a smaller map is just a lower resolution, therefore has smaller continents, regions, mountain ranges, rivers, etc. The number of polygons that make up the world of is controllable with the Granularity option.
 
 Names can be given to places on the map with the dependent mod [url=http://steamcommunity.com/sharedfiles/filedetails/?id=314699759]Fantastical Place Names[/url]. Just enable that mod, and names will be revealed when tiles are explored, and persist through savegames.
 
-It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based entirely upon latitude, with a little randomness.
+It is possible to enable Climate Realism, but it's no Planet Simulator or Perfect World. The "realism" is a simple model based on latitude, with some randomness.
 
-This script (version 6) is compatible with [url=http://steamcommunity.com/sharedfiles/filedetails/?id=220026971]Alpha Centauri Maps[/url]. To create a map similar to Map of Planet, set [b]Oceans[/b] to [i]One[/i], [b]Continents/Ocean[/b] to [i]Three[/i], [b]Climate Realism[/b] to [i]On[/i], and [b]Ancient Roads[/b] to [i]None[/i].
+This script (version 6 and above) is compatible with [url=http://steamcommunity.com/sharedfiles/filedetails/?id=220026971]Alpha Centauri Maps[/url]. To create a map similar to Map of Planet, set [b]Landmass Type[/b] to [i]Alpha Centaurish[/i], [b]Land at Poles[/b] to [i]No[/i], and [b]Climate Realism[/b] to [i]On[/i].
 
-[url=https://github.com/zoggop/Civ5FantasticalMapScript/]GitHub Repository[/url]
+[url=https://github.com/eronoobos/Civ5FantasticalMapScript/]GitHub Repository[/url]
 
-[url=https://raw.githubusercontent.com/zoggop/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]
+[url=https://raw.githubusercontent.com/eronoobos/Civ5FantasticalMapScript/master/Fantastical-dev.lua]Lua File[/url]
 
 [b][i][u]Custom Options[/u][/i][/b]
 
-[b]World Type:[/b] The map can be either a [i]Globe[/i] with east-west wrapping, or a [i]Realm[/i] with no wrapping. Can be [i]Realistic[/i], i.e., warmer at the equator than atthe poles. Can have [i]Land at Poles[/i] (default), or not. Can have [i]Old Roads[/i] (a preexisting road network connecting ruined cities), or not. (This one map option is so bloated because Civ 5 does not allow more than nine map options.)
+[b]Landmass Type[/b]: The arrangement of land and oceans. The first half of the options ([i]Land All Around[/i] to [i]Random Globe[/i]) are globes that wrap east to west. The second half ([i]Dry Land[/i] to [i]Random Realm[/i]) are realms that do no wrap.
 
-[b]Oceans:[/b] The number of deep oceans that cannot be crossed without Astronomy, [i]No Oceans[/i] to [i]Four[/i]. [i]No Oceans[/i] creates a map without any large bodies of water, only small lakes ([b]Continents/Ocean[/b] and [b]Islands[/b] will be ignored). [i]No Major Oceans[/i] means the whole map could be traversed without astronomy, i.e., all land could be connected by coast. On [i]Realm[/i] maps the number means the number of sides with ocean, i.e., 3 makes a peninsula, 4 makes an island.
+[b]Land at Poles[/b]: Whether or not land is placed at the top and bottom hexes of the map.
 
-[b]Continents/Ocean:[/b] The number of large continents per ocean, [i]One[/i] to [i]Four[/i]. (On [i]Realm[/i] maps this sets the number of major continents, regardless of how many sides of ocean there are.)
+[b]Climate Realism[/b]: If set to [i]On[/i], latitudes will more or less determine terrain. Left at [i]Off[/i], it is entirely possible that jungles will occur at the poles.
 
-[b]Islands:[/b] How many large and small islands. [i]Few[/i], [i]Some[/i], or [i]Many[/i]. More islands has a side effect of smaller continents.
-
-[b]Fallout:[/b] [i]Post-Apocalyptic[/i] puts fallout near ancient city ruins (which will be connected by roads if [b]Ancient Roads[/b] is enabled). [i]A Bit[/i] places bits of fallout around the map. [i]Contaminated Soil[/i] places fallout in dry areas. [i]Contaminated Water[/i] places fallout along rivers and coasts and in wet areas. [i]Contaminated Everything[/i] places fallout heavily all over the place.
+[b]Granularity[/b]: How many polygons make up the world. Higher granularity will create smaller regions, more isolated islands, and straighter, thinner ocean rifts.
 
 [b]World Age[/b], [b]Temperature[/b], [b]Rainfall[/b]: All have more than the usual number of options. [b]World Age[/b] goes from [i]1 Billion Years[/i] to [i]6 Billion Years[/i], [b]Temperature[/b] from [i]Snowball[/i] to [i]Global Tropics[/i], and [b]Rainfall[/b] from [i]Arrakis[/i] to [i]Arboria[/i].
+
+[b]Doomsday Age[/b]: How long ago has did this world pass through destruction? This controls the placement of city ruins, roads, and fallout.
