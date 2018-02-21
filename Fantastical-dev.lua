@@ -1890,10 +1890,14 @@ function Polygon:Flop(superPolygon)
 end
 
 function Polygon:PickTinyIslands()
-	if (self.bottomX or self.topX) and self.oceanIndex and not self.space.wrapX then return end
-	if (self.bottomY or self.topY) and self.oceanIndex and not self.space.wrapX then return end
+	if not self.space.wrapX and self.oceanIndex and (self.edgeX or self.edgeY) then
+		return
+	end
+	if #self.space.tinyIslandSubPolygons >= self.space.tinyIslandMax and not self.oceanIndex and not self.loneCoastal then
+		return
+	end
 	local subPolyBuffer = tDuplicate(self.subPolygons)
-	while #subPolyBuffer > 0 and #self.space.tinyIslandSubPolygons < self.space.tinyIslandMax do
+	while #subPolyBuffer > 0 do
 		local subPolygon = tRemoveRandom(subPolyBuffer)
 		local tooCloseForIsland = self.space.wrapX and (subPolygon.bottomY or subPolygon.topY) and mRandom(0, 100) > self.space.polarMaxLandPercent
 		if not tooCloseForIsland then
@@ -1912,7 +1916,7 @@ function Polygon:PickTinyIslands()
 			end
 		end
 		local chance = self.space.currentTinyIslandChance or 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandMax))
-		if self.oceanIndex or self.loneCoastal then chance = chance * 2 end
+		if (self.oceanIndex or self.loneCoastal) and not self.hasTinyIslands then chance = 1 end
 		if not tooCloseForIsland and mRandom() < chance then
 			subPolygon.tinyIsland = true
 			tInsert(self.space.tinyIslandSubPolygons, subPolygon)
@@ -2453,7 +2457,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandMax = 5 -- how many tiny islands will a map have at maximum
+	a.tinyIslandMax = 9 -- how many tiny islands will a map have at maximum
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
@@ -5961,9 +5965,7 @@ function Space:PickCoasts()
 				self.coastalPolygonCount = self.coastalPolygonCount + 1
 				if not polygon:NearOther(nil, "continent") then polygon.loneCoastal = true end
 			end
-			if #self.tinyIslandSubPolygons < self.tinyIslandMax then
-				polygon:PickTinyIslands()
-			end
+			polygon:PickTinyIslands()
 			if polygon.hasTinyIslands then
 				tInsert(self.tinyIslandPolygons, polygon)
 			end
@@ -6384,6 +6386,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
