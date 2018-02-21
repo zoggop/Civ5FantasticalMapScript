@@ -1,4 +1,4 @@
-- attempting to make growcontinentseeds independent so that it can be used to test sizes without affecting Space's totals and stuff
+- shift wrapped maps east or west to minimize continents split by the wrap line?
 
 - annoyed that desert regions tend not to contain anything but desert
 
@@ -7,6 +7,8 @@
 - need to prevent multiple inland seas from merging into one. possibly lake subpolygons are causing this to happen?
 
 ---
+
+/ attempting to make growcontinentseeds independent so that it can be used to test sizes without affecting Space's totals and stuff
 
 / need some way of preventing pangaea doughnuts. maybe any astronomy blobs need to begin either at a pole polygon, or at an ocean neighbor?
 

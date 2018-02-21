@@ -3365,6 +3365,69 @@ function Space:RemoveBadlyPlacedNaturalWonders()
 	end
 end
 
+function Space:ShiftGlobe()
+	if not self.wrapX or self.oceanNumber == -1 then return end
+	local splits = {}
+	for i, continent in pairs(self.continents) do
+		local occupiedXs = {}
+		for ii, polygon in pairs(continent) do
+			for iii, hex in pairs(polygon.hexes) do
+				occupiedXs[hex.x] = true
+			end
+		end
+		if occupiedXs[0] and occupiedXs[self.w] then
+			EchoDebug("continent is split")
+			-- the continent is split
+			local continuities = {}
+			local newCon = false
+			local continuity = {}
+			for x = 0, self.w + 1 do
+				if not occupiedXs[x] and newCon then
+					newCon = false
+					continuity.x2 = x-1
+					tInsert(continuities, continuity)
+					continuity = {}
+				elseif occupiedXs[x] and not newCon then
+					newCon = true
+					continuity.x1 = x
+				end
+			end
+			tInsert(splits, continuities)
+		end
+	end
+	EchoDebug(#splits .. " splits")
+	local largestShift
+	for i, continuities in pairs(splits) do
+		for ii, continuity in pairs(continuities) do
+			local shift = continuity.x2 - continuity.x1
+			if not largestShift or shift > mAbs(largestShift) then
+				largestShift = shift
+				if continuity.x1 == 0 then
+					largestShift = -largestShift
+				end
+			end
+		end
+	end
+	if largestShift then
+		if largestShift < 0 then
+			largestShift = largestShift - 2
+		else
+			largestShift = largestShift + 2
+		end
+		EchoDebug("shifting globe X by " .. largestShift)
+		for i, hex in pairs(self.hexes) do
+			local shiftedX = hex.x + largestShift
+			if shiftedX < 0 then
+				shiftedX = shiftedX + self.iW
+			elseif shiftedX > self.w then
+				shiftedX = shiftedX - self.iW
+			end
+			local shiftedHex = self:GetHexByXY(shiftedX, hex.y)
+			hex.plot = Map.GetPlotByIndex(shiftedHex.index-1)
+		end
+	end
+end
+
 function Space:StripResources()
 	for i, hex in pairs(self.hexes) do
 		hex.plot:SetResourceType(-1)
@@ -6359,6 +6422,8 @@ function GeneratePlotTypes()
 		EchoDebug(l, "temperature: " .. mySpace:GetTemperature(l), "rainfall: " .. mySpace:GetRainfall(l))
 	end
 	]]--
+	print("Shifting globe to accomodate continents (Fantastical) ...")
+	mySpace:ShiftGlobe()
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
 end
@@ -6402,6 +6467,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
