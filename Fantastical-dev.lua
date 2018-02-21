@@ -584,7 +584,7 @@ end
 ------------------------------------------------------------------------------
 
 local OptionDictionary = {
-	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "coastalPolygonChance", "islandRatio", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
+	{ name = "Landmass Type", keys = { "wrapX", "oceanNumber", "majorContinentNumber", "coastalPolygonChance", "inlandSeaContinentRatio", "inlandSeasMax", "lakeMinRatio", "astronomyBlobNumber", "astronomyBlobMinPolygons", "astronomyBlobMaxPolygons", "astronomyBlobsMustConnectToOcean" }, default = 9,
 	values = {
 			[1] = { name = "Land All Around", values = {
 				oceanNumber = -1,
@@ -611,7 +611,6 @@ local OptionDictionary = {
 			[5] = { name = "Low Seas", values = {
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.4,
 				inlandSeasMax = 0,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 1,
@@ -621,26 +620,25 @@ local OptionDictionary = {
 				oceanNumber = 0,
 				majorContinentNumber = 12,
 				coastalPolygonChance = 2,
-				islandRatio = 0.4,
+				islandNumber = 12,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
 				astronomyBlobMaxPolygons = 5,
 			}},
 			[7] = { name = "Pangaea", values = {
-				oceanNumber = 						1,
-				majorContinentNumber = 				1,
-				islandRatio = 						0.2,
-				inlandSeaContinentRatio = 			0.02,
-				inlandSeasMax = 					1,
-				astronomyBlobNumber = 				1,
-				astronomyBlobMinPolygons = 			3,
-				astronomyBlobMaxPolygons = 			7,
+				oceanNumber = 1,
+				majorContinentNumber = 1,
+				islandNumber = 2,
+				inlandSeaContinentRatio = 0.02,
+				inlandSeasMax = 1,
+				astronomyBlobNumber = 1,
+				astronomyBlobMinPolygons = 3,
+				astronomyBlobMaxPolygons = 7,
 				astronomyBlobsMustConnectToOcean = 	true,
 			}},
 			[8] = { name = "Centauri-like", values = {
 				oceanNumber = 1,
 				majorContinentNumber = 3,
-				islandRatio = 0.4,
 				inlandSeaContinentRatio = 0.03,
 				inlandSeasMax = 1,
 			}},
@@ -649,18 +647,21 @@ local OptionDictionary = {
 			}},
 			[10] = { name = "Earthish", values = {
 				majorContinentNumber = 5,
+				islandNumber = 4,
 			}},
 			[11] = { name = "Earthseaish", values = {
 				oceanNumber = 3,
-				majorContinentNumber = 13,
+				majorContinentNumber = 9,
 				coastalPolygonChance = 2,
-				islandRatio = 0.8,
+				islandNumber = 10,
+				tinyIslandTarget = 11,
 			}},
 			[12] = { name = "Lonely Oceans", values = {
 				oceanNumber = 0,
-				majorContinentNumber = 12,
+				majorContinentNumber = 15,
 				coastalPolygonChance = 1,
-				islandRatio = 0.85,
+				islandNumber = 12,
+				tinyIslandTarget = 12,
 				astronomyBlobNumber = 5,
 			}},
 			[13] = { name = "Random Globe", values = "keys", randomKeys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} },
@@ -694,34 +695,34 @@ local OptionDictionary = {
 				wrapX = false,
 				oceanNumber = 0,
 				majorContinentNumber = 3,
-				islandRatio = 0.2,
 				inlandSeasMax = 0,
 			}},
 			[19] = { name = "Coastline", values = {
 				wrapX = false,
 				oceanNumber = 1,
 				coastalPolygonChance = 2,
-				islandRatio = 0.25,
+				islandNumber = 1,
 				inlandSeasMax = 0,
 			}},
 			[20] = { name = "Coast", values = {
 				wrapX = false,
 				oceanNumber = 2,
 				coastalPolygonChance = 2,
-				islandRatio = 0.25,
+				islandNumber = 1,
 				inlandSeasMax = 0,
 			}},
 			[21] = { name = "Peninsula", values = {
 				wrapX = false,
 				oceanNumber = 3,
 				coastalPolygonChance = 2,
+				islandNumber = 2,
 				inlandSeasMax = 0,
 			}},
 			[22] = { name = "Continent", values = {
 				wrapX = false,
 				oceanNumber = 4,
 				coastalPolygonChance = 3,
-				islandRatio = 0.25,
+				islandNumber = 2,
 				astronomyBlobNumber = 1,
 				astronomyBlobMinPolygons = 3,
 				astronomyBlobMaxPolygons = 7,
@@ -732,7 +733,7 @@ local OptionDictionary = {
 				oceanNumber = 4,
 				majorContinentNumber = 7,
 				coastalPolygonChance = 2,
-				islandRatio = 0.85,
+				islandNumber = 10,
 				astronomyBlobNumber = 2,
 			}},
 			[24] = { name = "Random Realm", values = "keys", randomKeys = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23} },
@@ -1893,7 +1894,7 @@ function Polygon:PickTinyIslands()
 	if not self.space.wrapX and self.oceanIndex and (self.edgeX or self.edgeY) then
 		return
 	end
-	if #self.space.tinyIslandSubPolygons >= self.space.tinyIslandMax and not self.oceanIndex and not self.loneCoastal then
+	if #self.space.tinyIslandSubPolygons >= self.space.tinyIslandTarget and not self.oceanIndex and not self.loneCoastal then
 		return
 	end
 	local subPolyBuffer = tDuplicate(self.subPolygons)
@@ -1915,13 +1916,13 @@ function Polygon:PickTinyIslands()
 				if tooCloseForIsland then break end
 			end
 		end
-		local chance = self.space.currentTinyIslandChance or 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandMax))
+		local chance = self.space.currentTinyIslandChance or 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandTarget))
 		if (self.oceanIndex or self.loneCoastal) and not self.hasTinyIslands then chance = 1 end
 		if not tooCloseForIsland and mRandom() < chance then
 			subPolygon.tinyIsland = true
 			tInsert(self.space.tinyIslandSubPolygons, subPolygon)
 			self.hasTinyIslands = true
-			self.space.currentTinyIslandChance = 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandMax))
+			self.space.currentTinyIslandChance = 1 - (#self.space.tinyIslandSubPolygons/(1+self.space.tinyIslandTarget))
 			-- EchoDebug(self.space.currentTinyIslandChance, #self.space.tinyIslandSubPolygons)
 		end
 	end
@@ -2425,7 +2426,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 10 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 17 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2433,7 +2434,6 @@ Space = class(function(a)
 	a.astronomyBlobMaxPolygons = 20
 	a.astronomyBlobsMustConnectToOcean = false
 	a.majorContinentNumber = 2 -- how many large continents on the whole map
-	a.islandRatio = 0.35 -- what part of the continent polygons are taken up by 1-3 polygon continents
 	a.islandNumber = 3 -- how many 1-3-polygon islands on the whole map
 	a.openWaterRatio = 0.1 -- what part of an astronomy basin is reserved for open water
 	a.islandsPerAstronomyBasin = 2 -- how many 1-3-polygon islands per astronomy basin
@@ -2457,7 +2457,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
-	a.tinyIslandMax = 9 -- how many tiny islands will a map have at maximum
+	a.tinyIslandTarget = 9 -- how many tiny islands will a map attempt to have
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
