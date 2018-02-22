@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 28
+-- version 29
 
 --------------------------------------------------------------
 if include == nil then
@@ -6366,7 +6366,7 @@ end
 
 function GetMapInitData(worldSize)
 	-- i have to use Map.GetCustomOption because this is called before everything else
-	if Map.GetCustomOption(1) > 12 then
+	if Map.GetCustomOption(1) > 13 then
 		-- for Realm maps
 		-- create a random map aspect ratio for the given map size
 		local areas = {
