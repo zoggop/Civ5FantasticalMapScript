@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 27
+-- version 28
 
 --------------------------------------------------------------
 if include == nil then
@@ -6413,8 +6413,8 @@ function GeneratePlotTypes()
 		EchoDebug(l, "temperature: " .. mySpace:GetTemperature(l), "rainfall: " .. mySpace:GetRainfall(l))
 	end
 	]]--
-	print("Shifting globe to accomodate continents (Fantastical) ...")
-	mySpace:ShiftGlobe()
+	-- print("Shifting globe to accomodate continents (Fantastical) ...")
+	-- mySpace:ShiftGlobe()
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
 end
