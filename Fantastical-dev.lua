@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 29
+-- version 30
 
 --------------------------------------------------------------
 if include == nil then
@@ -3372,64 +3372,46 @@ end
 
 function Space:ShiftGlobe()
 	if not self.wrapX or self.oceanNumber == -1 then return end
-	local splits = {}
-	for i, continent in pairs(self.continents) do
-		local occupiedXs = {}
-		for ii, polygon in pairs(continent) do
-			for iii, hex in pairs(polygon.hexes) do
-				occupiedXs[hex.x] = true
+	local landCounts = {}
+	local coastCounts = {}
+	for x = 0, self.w do
+		local landCount = 0
+		local coastCount = 0
+		for y = 0, self.h do
+			local hex = self:GetHexByXY(x, y)
+			if hex.plotType == plotLand or hex.plotType == plotMountain then
+				landCount = landCount + 1
+			elseif hex.plotType == plotOcean and hex.terrainType == terrainCoast then
+				coastCount = coastCount + 1
 			end
 		end
-		if occupiedXs[0] and occupiedXs[self.w] then
-			-- the continent is split
-			local continuities = {}
-			local newCon = false
-			local continuity = {}
-			for x = 0, self.w + 1 do
-				if not occupiedXs[x] and newCon then
-					newCon = false
-					continuity.x2 = x-1
-					tInsert(continuities, continuity)
-					continuity = {}
-				elseif occupiedXs[x] and not newCon then
-					newCon = true
-					continuity.x1 = x
-				end
-			end
-			tInsert(splits, continuities)
+		landCounts[x] = landCount
+		coastCounts[x] = coastCount
+	end
+	local bestX
+	local bestCount
+	for x = 0, self.w do
+		local pairX = (x + 1) % self.iW
+		local count = landCounts[x] + landCounts[pairX] + ((coastCounts[x] + coastCounts[pairX]) / 2)
+		if not bestCount or count < bestCount then
+			bestCount = count
+			bestX = x
 		end
 	end
-	EchoDebug(#splits .. " splits")
-	local largestShift
-	for i, continuities in pairs(splits) do
-		local smallestShift
-		for ii, continuity in pairs(continuities) do
-			local shift = continuity.x2 - continuity.x1
-			if not smallestShift or shift < mAbs(smallestShift) then
-				smallestShift = shift
-				if continuity.x1 == 0 then
-					smallestShift = -smallestShift
-				end
-			end
-		end
-		if smallestShift and (not largestShift or mAbs(smallestShift) > largestShift) then
-			largestShift = smallestShift
-		end
-	end
-	if largestShift then
-		if largestShift < 0 then
-			largestShift = largestShift - 2
+	local shiftX
+	if bestX and bestX ~= self.w then
+		local pairX = (bestX + 1) % self.iW
+		if bestX > self.halfWidth then
+			shiftX = self.w - bestX
 		else
-			largestShift = largestShift + 2
+			shiftX = 0 - pairX
 		end
-		EchoDebug("shifting globe X by " .. largestShift .. "...")
+		EchoDebug("best x-edge pair is " .. bestX .. " and " .. pairX, "shiftX is " .. shiftX)
+	end
+	if shiftX and shiftX ~= 0 then
+		EchoDebug("shifting globe X by " .. shiftX .. "...")
 		for i, hex in pairs(self.hexes) do
-			local shiftedX = hex.x + largestShift
-			if shiftedX < 0 then
-				shiftedX = shiftedX + self.iW
-			elseif shiftedX > self.w then
-				shiftedX = shiftedX - self.iW
-			end
+			local shiftedX = (hex.x + shiftX) % self.iW
 			local shiftedHex = self:GetHexByXY(shiftedX, hex.y)
 			hex.plot = Map.GetPlotByIndex(shiftedHex.index-1)
 		end
@@ -6413,8 +6395,8 @@ function GeneratePlotTypes()
 		EchoDebug(l, "temperature: " .. mySpace:GetTemperature(l), "rainfall: " .. mySpace:GetRainfall(l))
 	end
 	]]--
-	-- print("Shifting globe to accomodate continents (Fantastical) ...")
-	-- mySpace:ShiftGlobe()
+	print("Shifting globe to accomodate continents (Fantastical) ...")
+	mySpace:ShiftGlobe()
     print("Setting Plot Types (Fantastical) ...")
     mySpace:SetPlots()
 end

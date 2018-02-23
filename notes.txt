@@ -1,4 +1,4 @@
-- shift wrapped maps east or west to minimize continents split by the wrap line?
+- idea for x-shift: find the column (x) that contains the least land, then put it at one of the edges of the map
 
 - annoyed that desert regions tend not to contain anything but desert
 
