@@ -2801,8 +2801,8 @@ end
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
-    self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    self.coastalMod = self.areaMod
+    -- self.areaMod = mFloor(mSqrt(self.iA) / 30)
+    self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
     self.subCollectionSizeMin = self.subCollectionSizeMin + mFloor(self.areaMod/2)
     self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
