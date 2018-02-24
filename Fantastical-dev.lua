@@ -2802,8 +2802,11 @@ function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
     -- self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
-    self.subCollectionSizeMin = self.subCollectionSizeMin + mFloor(self.areaMod/2)
+    -- self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
+    -- self.areaMod = mFloor( self.iA / 2600 )
+    self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
+    self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
+    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
     self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
     self.nonOceanArea = self.iA
@@ -4860,8 +4863,8 @@ function Space:CreateClimateVoronoi(number, relaxations)
 				for i, point in pairs(climateVoronoi) do
 					local dt = mAbs(t - point.temp)
 					local dr = mAbs(r - point.rain)
-					-- local dist = (dt * dt) + (dr * dr)
-					local dist = dt + dr
+					local dist = (dt * dt) + (dr * dr)
+					-- local dist = dt + dr
 					if not leastDist or dist < leastDist then
 						leastDist = dist
 						nearestPoint = point
@@ -6461,6 +6464,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
