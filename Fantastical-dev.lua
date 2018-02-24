@@ -620,9 +620,6 @@ local OptionDictionary = {
 				oceanNumber = 0,
 				majorContinentNumber = 3,
 				inlandSeasMax = 0,
-				astronomyBlobNumber = 1,
-				astronomyBlobMinPolygons = 1,
-				astronomyBlobMaxPolygons = 1,
 			}},
 			[6] = { name = "Archipelago", values = {
 				oceanNumber = 0,
@@ -632,7 +629,7 @@ local OptionDictionary = {
 				tinyIslandTarget = 16,
 				astronomyBlobNumber = 2,
 				astronomyBlobMinPolygons = 1,
-				astronomyBlobMaxPolygons = 5,
+				astronomyBlobMaxPolygons = 3,
 			}},
 			[7] = { name = "Pangaea", values = {
 				oceanNumber = 1,
@@ -1448,6 +1445,9 @@ end
 
 function Hex:SetTerrain()
 	if self.plot == nil then return end
+	-- if self.subPolygon.polar and (self.plotType == plotLand or self.plotType == plotMountain or self.plotType == plotHills) then
+		-- self.terrainType = terrainSnow
+	-- end
 	self.plot:SetTerrainType(self.terrainType, false, false)
 end
 
@@ -2211,9 +2211,30 @@ function Region:CreateCollection()
 		local subSize = mMin(self.space:GetSubCollectionSize(), #subPoint.pixels)
 		local subPixelBuffer = tDuplicate(subPoint.pixels)
 		for ii = 1, subSize do
-			local pixel = tRemoveRandom(subPixelBuffer)
+			local pixel
+			if ii == 1 or #subPixelBuffer == 1 then
+				pixel = tRemoveRandom(subPixelBuffer)
+			else
+				local bestDist = 0
+				local bestIndex
+				for iii, subPixel in pairs(subPixelBuffer) do
+					local totalDist = 0
+					for iiii, element in pairs(elements) do
+						local dt = subPixel.temp - element.temperature
+						local dr = subPixel.rain - element.rainfall
+						local dist = (dt * dt) + (dr * dr)
+						totalDist = totalDist + dist
+					end
+					if totalDist > bestDist then
+						bestDist = totalDist
+						bestIndex = iii
+					end
+				end
+				pixel = tRemove(subPixelBuffer, bestIndex)
+			end
 			local element = self:CreateElement(pixel.temp, pixel.rain, lake)
-			if element.terrainType == terrainSnow then
+			-- if element.terrainType == terrainSnow then
+			if pixel.temp == 0 then
 				polar = true
 				hasPolar = true
 			end
@@ -2453,8 +2474,8 @@ Space = class(function(a)
 	a.useMapLatitudes = false -- should the climate have anything to do with latitude?
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
-	a.subCollectionSizeMin = 2 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
+	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
@@ -3379,7 +3400,7 @@ function Space:ShiftGlobe()
 		local coastCount = 0
 		for y = 0, self.h do
 			local hex = self:GetHexByXY(x, y)
-			if hex.plotType == plotLand or hex.plotType == plotMountain then
+			if hex.plotType == plotLand or hex.plotType == plotMountain or hex.plotType == plotHills then
 				landCount = landCount + 1
 			elseif hex.plotType == plotOcean and hex.terrainType == terrainCoast then
 				coastCount = coastCount + 1
