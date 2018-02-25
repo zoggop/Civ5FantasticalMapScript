@@ -3493,14 +3493,11 @@ end
 function Space:PolygonDebugDisplay()
 	local fills = {}
 	for terrainType, terrainDef in pairs(TerrainDictionary) do
-		for i, featureType in pairs(terrainDef.features) do
-			if featureType == featureForest or featureType == featureNone then
-				tInsert(fills, {plotType = plotLand, terrainType = terrainType, featureType = featureType})
-			end
-		end
+		tInsert(fills, {plotType = plotLand, terrainType = terrainType, featureType = featureNone})
 	end
+	-- tInsert(fills, {plotType = plotLand, terrainType = terrainGrass, featureType = featureNone})
+	-- tInsert(fills, {plotType = plotLand, terrainType = terrainDesert, featureType = featureNone})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureNone})
-	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureIce})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainCoast, featureType = featureNone})
 	EchoDebug(#fills .. " fill types")
 	local highestNeighbors = 0
@@ -3527,9 +3524,9 @@ function Space:PolygonDebugDisplay()
 			hex.plot:SetTerrainType(fill.terrainType)
 			hex.plot:SetFeatureType(fill.featureType)
 			if hex.stranded then
-				hex.plot:SetFeatureType(featureFloodPlains)
+				-- hex.plot:SetFeatureType(featureFloodPlains)
 			elseif hex.x == polygon.x and hex.y == polygon.y then
-				hex.plot:SetFeatureType(featureReef)
+				-- hex.plot:SetFeatureType(featureReef)
 			end
 		end
 	end
@@ -6464,6 +6461,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
 end
