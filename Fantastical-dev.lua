@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 30
+-- version 31
 
 --------------------------------------------------------------
 if include == nil then
@@ -1667,6 +1667,25 @@ Polygon = class(function(a, space, x, y)
 	a.maxLatitude = 0
 end)
 
+function Polygon:Subdivide(divisionNumber)
+	local subPolygons = {}
+	local hexBuffer = tDuplicate(self.hexes)
+	for i = 1, mMin(divisionNumber, #hexBuffer) do
+		local hex = tRemoveRandom(hexBuffer)
+		local polygon = Polygon(self.space, hex.x, hex.y)
+		subPolygons[i] = polygon
+	end
+	for i = 1, #self.hexes do
+		local hex = self.hexes[i]
+		local poly = self.space:ClosestThing(hex, subPolygons)
+		if poly then
+			tInsert(poly.hexes, hex)
+			hex.subPolygon = poly
+		end
+	end
+	return subPolygons
+end
+
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex or self.nearOcean then
 		self.astronomyIndex = (self.oceanIndex or self.nearOcean) + 100
@@ -2885,18 +2904,25 @@ function Space:Compute()
     EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
     EchoDebug("initializing polygons...")
     self:InitPolygons()
+    -- EchoDebug("initializing subpolygons...")
+    -- self:InitSubPolygons()
     EchoDebug("initializing hexes...")
     self:InitHexes()
-    if self.subPolygonRelaxations > 0 then
-    	for r = 1, self.subPolygonRelaxations do
-    		EchoDebug("filling subpolygons pre-relaxation...")
-        	self:FillSubPolygons(true)
-    		print("relaxing subpolygons... (" .. r .. "/" .. self.subPolygonRelaxations .. ")")
-        	self:RelaxPolygons(self.subPolygons)
-        end
-    end
-    EchoDebug("filling subpolygons post-relaxation...")
-    self:FillSubPolygons()
+    -- if self.subPolygonRelaxations > 0 then
+    -- 	for r = 1, self.subPolygonRelaxations do
+    -- 		EchoDebug("filling subpolygons pre-relaxation...")
+    --     	self:FillSubPolygons(true)
+    -- 		print("relaxing subpolygons... (" .. r .. "/" .. self.subPolygonRelaxations .. ")")
+    --     	self:RelaxPolygons(self.subPolygons)
+    --     end
+    -- end
+    -- EchoDebug("filling subpolygons post-relaxation...")
+    -- self:FillSubPolygons()
+    EchoDebug("populating shill polygon hex tables...")
+    self:FillPolygonsSimply(self.polygons)
+    EchoDebug("subdividing shill polygons...")
+    local divisionNumber = mCeil(self.subPolygonCount / self.polygonCount)
+    self:SubdividePolygons(divisionNumber)
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
     EchoDebug("unstranding hexes...")
@@ -2904,6 +2930,9 @@ function Space:Compute()
 	EchoDebug("calculating subpolygon limits..")
 	self:CalcSubPolygonLimits()
 	EchoDebug("smallest subpolygon: " .. self.subPolygonMinArea, "largest subpolygon: " .. self.subPolygonMaxArea)
+	EchoDebug("initializing new polygons...")
+	self.polygons = {}
+	self:InitPolygons()
     if self.relaxations > 0 then
     	for r = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
@@ -3490,22 +3519,20 @@ function Space:SetContinentArtTypes()
 	end
 end
 
-function Space:PolygonDebugDisplay()
+function Space:PolygonDebugDisplay(polygons)
 	local fills = {}
 	for terrainType, terrainDef in pairs(TerrainDictionary) do
 		tInsert(fills, {plotType = plotLand, terrainType = terrainType, featureType = featureNone})
 	end
-	-- tInsert(fills, {plotType = plotLand, terrainType = terrainGrass, featureType = featureNone})
-	-- tInsert(fills, {plotType = plotLand, terrainType = terrainDesert, featureType = featureNone})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureNone})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainCoast, featureType = featureNone})
 	EchoDebug(#fills .. " fill types")
 	local highestNeighbors = 0
-	for i, polygon in pairs(self.polygons) do
-		local fillsLeft = tDuplicate(fills)
+	for i, polygon in pairs(polygons) do
 		if #polygon.neighbors > highestNeighbors then
 			highestNeighbors = #polygon.neighbors
 		end
+		local fillsLeft = tDuplicate(fills)
 		for ii, neighbor in pairs(polygon.neighbors) do
 			if neighbor.fill then
 				for iii = #fillsLeft, 1, -1 do
@@ -3518,15 +3545,17 @@ function Space:PolygonDebugDisplay()
 			end
 		end
 		local fill = tGetRandom(fillsLeft)
-		polygon.fill = fill
-		for ii, hex in pairs(polygon.hexes) do
-			hex.plot:SetPlotType(fill.plotType)
-			hex.plot:SetTerrainType(fill.terrainType)
-			hex.plot:SetFeatureType(fill.featureType)
-			if hex.stranded then
-				-- hex.plot:SetFeatureType(featureFloodPlains)
-			elseif hex.x == polygon.x and hex.y == polygon.y then
-				-- hex.plot:SetFeatureType(featureReef)
+		if fill then
+			polygon.fill = fill
+			for ii, hex in pairs(polygon.hexes) do
+				hex.plot:SetPlotType(fill.plotType)
+				hex.plot:SetTerrainType(fill.terrainType)
+				hex.plot:SetFeatureType(fill.featureType)
+				-- if hex.stranded then
+					-- hex.plot:SetFeatureType(featureFloodPlains)
+				-- elseif hex.x == polygon.x and hex.y == polygon.y then
+					-- hex.plot:SetFeatureType(featureReef)
+				-- end
 			end
 		end
 	end
@@ -3537,6 +3566,13 @@ end
     -- INTERNAL METAFUNCTIONS: --
 
 function Space:InitPolygons()
+	for i = 1, self.polygonCount do
+		local polygon = Polygon(self)
+		tInsert(self.polygons, polygon)
+	end
+end
+
+function Space:InitSubPolygons()
 	local XYs = {}
 	for x = 0, self.w do
 		for y = 0, self.h do
@@ -3552,10 +3588,6 @@ function Space:InitPolygons()
 			break
 		end
 	end
-	for i = 1, self.polygonCount do
-		local polygon = Polygon(self)
-		tInsert(self.polygons, polygon)
-	end
 end
 
 function Space:InitHexes()
@@ -3563,6 +3595,16 @@ function Space:InitHexes()
 		for y = 0, self.h do
 			local hex = Hex(self, x, y)
 			self.hexes[hex.index] = hex
+		end
+	end
+end
+
+function Space:SubdividePolygons(divisionNumber)
+	for i = 1, #self.polygons do
+		local polygon = self.polygons[i]
+		local subPolygons = polygon:Subdivide(divisionNumber)
+		for ii = 1, #subPolygons do
+			tInsert(self.subPolygons, subPolygons[ii])
 		end
 	end
 end
@@ -3602,6 +3644,17 @@ end
 function Space:FillPolygonHexes()
 	for i, polygon in pairs(self.polygons) do
 		polygon:FillHexes()
+	end
+end
+
+function Space:FillPolygonsSimply(polygons)
+	polygons = polygons or self.polygons
+	for i = 1, #self.hexes do
+		local hex = self.hexes[i]
+		local polygon = self:ClosestThing(hex, polygons)
+		if polygon then
+			tInsert(polygon.hexes, hex)
+		end
 	end
 end
 
@@ -6202,10 +6255,11 @@ function Space:GetSubCollectionSize()
 end
 
 function Space:ClosestThing(this, things, thingsCount)
+	thingsCount = thingsCount or #things
 	local closestDist
 	local closestThing
 	-- local thingsByDist = {}
-	for i = 1, thingsCount or #things do
+	for i = 1, thingsCount do
 		local thing = things[i]
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
 		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
@@ -6461,6 +6515,6 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug polygons
 end
