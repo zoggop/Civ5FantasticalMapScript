@@ -14,7 +14,7 @@ include("FLuaVector.lua")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = false
+local clockEnabled = true
 local lastDebugTimer
 
 local function StartDebugTimer()
@@ -2477,7 +2477,8 @@ Space = class(function(a)
 	a.wrapX = true -- globe wraps horizontally?
 	a.wrapY = false -- globe wraps vertically? (not possible, but this remains hopeful)
 	a.polygonCount = 200 -- how many polygons (map scale)
-	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	a.relaxations = 0 -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	a.hexesPerSubPolygon = 3.5
 	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 0 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
@@ -2494,7 +2495,7 @@ Space = class(function(a)
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
@@ -2823,10 +2824,10 @@ function Space:Compute()
     -- self.areaMod = mFloor(mSqrt(self.iA) / 30)
     -- self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
     -- self.areaMod = mFloor( self.iA / 2600 )
-    self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
-    self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
-    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
-    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
+    -- self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
+    -- self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
+    -- self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
+    -- self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
@@ -2903,8 +2904,18 @@ function Space:Compute()
     self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
     EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
     EchoDebug("creating shill polygons...")
+    -- self.hexesPerSubPolygon = self.iA / self.subPolygonCount
+    local shillCount, bestSpeed
+    local areaSq = self.iA ^ 2
+    for s = 10, mCeil(self.polygonCount / 2), 5 do
+    	local speed = (self.iA * s) + (areaSq / (self.hexesPerSubPolygon * s))
+    	if not bestSpeed or speed <= bestSpeed then
+    		bestSpeed = speed
+    		shillCount = s
+    	end
+    end
     local shillPolygons = {}
-    for i = 1, mCeil(self.subPolygonCount / 7) do
+    for i = 1, mCeil(shillCount) do
     	shillPolygons[#shillPolygons+1] = Polygon(self)
     end
     EchoDebug(#shillPolygons .. " shill polygons")
@@ -3607,7 +3618,7 @@ end
 
 function Space:SubdividePolygons(polygons)
 	polygons = polygons or self.polygons
-	local hexesPerDivision = #self.hexes / self.subPolygonCount
+	local hexesPerDivision = self.hexesPerSubPolygon
 	EchoDebug(hexesPerDivision .. " hexes per division")
 	for i = 1, #polygons do
 		local polygon = polygons[i]
@@ -6525,7 +6536,7 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 end
