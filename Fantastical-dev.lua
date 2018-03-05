@@ -14,8 +14,9 @@ include("FLuaVector.lua")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = false
+local clockEnabled = true
 local lastDebugTimer
+local firstDebugTimer
 
 local function StartDebugTimer()
 	return os.clock()
@@ -50,10 +51,9 @@ local function EchoDebug(...)
 	if debugEnabled then
 		local printResult = ""
 		if clockEnabled then
-			-- local clock = math.floor(os.clock() / 0.1) * 0.1
-			-- printResult = printResult .. "(" .. clock .. "): \t"
+			firstDebugTimer = firstDebugTimer or StartDebugTimer()
 			if lastDebugTimer then
-				printResult = printResult .. "(" .. StopDebugTimer(lastDebugTimer) .. "): \t"
+				printResult = printResult .. StopDebugTimer(firstDebugTimer) .. "\t\t" .. StopDebugTimer(lastDebugTimer) .. ": \t\t"
 			end
 			lastDebugTimer = StartDebugTimer()
 		end
@@ -2902,53 +2902,22 @@ function Space:Compute()
     if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     -- self:PrintClimate()
-    self.subPolygonCount = mFloor(265 + (self.iA * 0.257))
-    EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
-    EchoDebug("creating shill polygons...")
-    -- self.hexesPerSubPolygon = self.iA / self.subPolygonCount
-    -- self.hexesPerSubPolygon = 2 + (self.iA / 6827)
-    self.hexesPerSubPolygon = (0.6383562275 * math.log(self.iA)) - 2.319
-    local shillCount, bestSpeed
-    local areaSq = self.iA ^ 2
-    for s = 10, mCeil(self.polygonCount / 2), 5 do
-    	local speed = (self.iA * s) + (areaSq / (self.hexesPerSubPolygon * s))
-    	if not bestSpeed or speed <= bestSpeed then
-    		bestSpeed = speed
-    		shillCount = s
-    	end
-    end
-    local shillPolygons = {}
-    for i = 1, mCeil(shillCount) do
-    	shillPolygons[#shillPolygons+1] = Polygon(self)
-    end
-    self.shillPolygons = shillPolygons
-    EchoDebug(#shillPolygons .. " shill polygons")
-    -- self:InitPolygons()
-    -- EchoDebug("initializing subpolygons...")
-    -- self:InitSubPolygons()
     EchoDebug("initializing hexes...")
     self:InitHexes()
-    -- if self.subPolygonRelaxations > 0 then
-    -- 	for r = 1, self.subPolygonRelaxations do
-    -- 		EchoDebug("filling subpolygons pre-relaxation...")
-    --     	self:FillSubPolygons(true)
-    -- 		print("relaxing subpolygons... (" .. r .. "/" .. self.subPolygonRelaxations .. ")")
-    --     	self:RelaxPolygons(self.subPolygons)
-    --     end
-    -- end
-    -- EchoDebug("filling subpolygons post-relaxation...")
-    -- self:FillSubPolygons()
+    -- self.hexesPerSubPolygon = self.iA / self.subPolygonCount
+    -- self.hexesPerSubPolygon = 2 + (self.iA / 6827)
+    -- self.hexesPerSubPolygon = (0.6383562275 * math.log(self.iA)) - 2.319
+    -- self.hexesPerSubPolygon = 3.60250103 - (2034.85378040 / self.iA)
+    self.hexesPerSubPolygon = (1.05292 * math.log(self.iA)) - 5.74245
+    self.hexesPerSubPolygon = mMax(1, self.hexesPerSubPolygon)
+    self.subPolygonCount = mCeil(self.iA / self.hexesPerSubPolygon)
+	EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes", self.hexesPerSubPolygon .. " hexes per subpolygon")
     local subPolyTimer = StartDebugTimer()
-    EchoDebug("populating shill polygon hex tables...")
-    if self.shillRelaxations > 0 then
-    	for r = 1, self.shillRelaxations do
-    		self:FillPolygonsSimply(shillPolygons)
-    		self:RelaxPolygons(shillPolygons)
-    	end
-    end
-    self:FillPolygonsSimply(shillPolygons)
+    EchoDebug("creating shill polygons...")
+    local hexesAvailableToPolygons = tDuplicate(self.hexes)
+    local shillPolygons = self:CreateShillPolygons(hexesAvailableToPolygons)
     EchoDebug("subdividing shill polygons...")
-    self:SubdividePolygons(shillPolygons)
+    self.subPolygons = self:SubdividePolygons(shillPolygons)
     EchoDebug(StopDebugTimer(subPolyTimer) .. " to create subpolygons")
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
@@ -2959,7 +2928,7 @@ function Space:Compute()
 	EchoDebug("smallest subpolygon: " .. self.subPolygonMinArea, "largest subpolygon: " .. self.subPolygonMaxArea)
 	EchoDebug("initializing new polygons...")
 	self.polygons = {}
-	self:InitPolygons()
+	self:InitPolygons(hexesAvailableToPolygons)
     if self.relaxations > 0 then
     	for r = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
@@ -2973,8 +2942,9 @@ function Space:Compute()
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("flip-flopping subpolygons...")
+    self.unstrandedSubPolyCount = 0
     self:FlipFlopSubPolygons()
-    EchoDebug((self.flopCount or 0) .. " subpolygons flopped")
+    EchoDebug((self.flopCount or 0) .. " subpolygons flopped", "(" .. self.unstrandedSubPolyCount .. " unstranded)")
     EchoDebug("populating polygon hex tables...")
     self:FillPolygonHexes()
     EchoDebug("culling empty polygons...")
@@ -3592,9 +3562,20 @@ end
     ----------------------------------
     -- INTERNAL METAFUNCTIONS: --
 
-function Space:InitPolygons()
+function Space:InitPolygons(availableHexes)
+	if not availableHexes then
+		if self.hexes then
+			availableHexes = tDuplicate(self.hexes)
+		end
+	end
 	for i = 1, self.polygonCount do
-		local polygon = Polygon(self)
+		local polygon
+		if availableHexes then
+			local hex = tRemoveRandom(availableHexes)
+			polygon = Polygon(self, hex.x, hex.y)
+		else
+			polygon = Polygon(self)
+		end
 		tInsert(self.polygons, polygon)
 	end
 end
@@ -3626,18 +3607,48 @@ function Space:InitHexes()
 	end
 end
 
-function Space:SubdividePolygons(polygons)
+function Space:CreateShillPolygons(availableHexes)
+	local shillCount, bestSpeed
+    local areaSq = self.iA ^ 2
+    for s = 10, mCeil(self.polygonCount / 2), 5 do
+    	local speed = (self.iA * s) + (areaSq / (self.hexesPerSubPolygon * s))
+    	if not bestSpeed or speed <= bestSpeed then
+    		bestSpeed = speed
+    		shillCount = s
+    	end
+    end
+    local shillPolygons = {}
+    for i = 1, mCeil(shillCount) do
+    	local hex = tRemoveRandom(availableHexes)
+    	shillPolygons[#shillPolygons+1] = Polygon(self, hex.x, hex.y)
+    end
+    self.shillPolygons = shillPolygons
+    EchoDebug(#shillPolygons .. " shill polygons")
+    EchoDebug("filling & relaxing shill polygons...")
+    if self.shillRelaxations > 0 then
+    	for r = 1, self.shillRelaxations do
+    		self:FillPolygonsSimply(shillPolygons)
+    		self:RelaxPolygons(shillPolygons)
+    	end
+    end
+    self:FillPolygonsSimply(shillPolygons)
+    return shillPolygons
+end
+
+function Space:SubdividePolygons(polygons, hexesPerDivision)
 	polygons = polygons or self.polygons
-	local hexesPerDivision = self.hexesPerSubPolygon
+	hexesPerDivision = hexesPerDivision or self.hexesPerSubPolygon
 	EchoDebug(hexesPerDivision .. " hexes per division")
+	local subPolygons = {}
 	for i = 1, #polygons do
 		local polygon = polygons[i]
 		local number = mCeil(#polygon.hexes / hexesPerDivision)
-		local subPolygons = polygon:Subdivide(number)
-		for ii = 1, #subPolygons do
-			tInsert(self.subPolygons, subPolygons[ii])
+		local subPolys = polygon:Subdivide(number)
+		for ii = 1, #subPolys do
+			tInsert(subPolygons, subPolys[ii])
 		end
 	end
+	return subPolygons
 end
 
 function Space:FillSubPolygons(relax)
@@ -3746,6 +3757,7 @@ function Space:FlipFlopSubPolygons()
 		end
 		if not hasFriendlyNeighbors and not subPolygon.flopped and #subPolygon.superPolygon.subPolygons > 1 and #uchoices > 0 then
 			subPolygon:Flop(tGetRandom(uchoices))
+			self.unstrandedSubPolyCount = self.unstrandedSubPolyCount + 1
 		end
 	end
 end
