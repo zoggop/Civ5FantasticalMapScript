@@ -2479,7 +2479,7 @@ Space = class(function(a)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
 	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 17 -- out of 100 subpolygons, how many flop to another polygon
+	a.subPolygonFlopPercent = 0 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2902,8 +2902,13 @@ function Space:Compute()
     -- self:PrintClimate()
     self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
     EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
-    EchoDebug("initializing polygons...")
-    self:InitPolygons()
+    EchoDebug("creating shill polygons...")
+    local shillPolygons = {}
+    for i = 1, mCeil(self.subPolygonCount / 7) do
+    	shillPolygons[#shillPolygons+1] = Polygon(self)
+    end
+    EchoDebug(#shillPolygons .. " shill polygons")
+    -- self:InitPolygons()
     -- EchoDebug("initializing subpolygons...")
     -- self:InitSubPolygons()
     EchoDebug("initializing hexes...")
@@ -2918,11 +2923,12 @@ function Space:Compute()
     -- end
     -- EchoDebug("filling subpolygons post-relaxation...")
     -- self:FillSubPolygons()
+    local subPolyTimer = StartDebugTimer()
     EchoDebug("populating shill polygon hex tables...")
-    self:FillPolygonsSimply(self.polygons)
+    self:FillPolygonsSimply(shillPolygons)
     EchoDebug("subdividing shill polygons...")
-    local divisionNumber = mCeil(self.subPolygonCount / self.polygonCount)
-    self:SubdividePolygons(divisionNumber)
+    self:SubdividePolygons(shillPolygons)
+    EchoDebug(StopDebugTimer(subPolyTimer) .. " to create subpolygons")
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
     EchoDebug("unstranding hexes...")
@@ -3599,10 +3605,14 @@ function Space:InitHexes()
 	end
 end
 
-function Space:SubdividePolygons(divisionNumber)
-	for i = 1, #self.polygons do
-		local polygon = self.polygons[i]
-		local subPolygons = polygon:Subdivide(divisionNumber)
+function Space:SubdividePolygons(polygons)
+	polygons = polygons or self.polygons
+	local hexesPerDivision = #self.hexes / self.subPolygonCount
+	EchoDebug(hexesPerDivision .. " hexes per division")
+	for i = 1, #polygons do
+		local polygon = polygons[i]
+		local number = mCeil(#polygon.hexes / hexesPerDivision)
+		local subPolygons = polygon:Subdivide(number)
 		for ii = 1, #subPolygons do
 			tInsert(self.subPolygons, subPolygons[ii])
 		end
@@ -6516,5 +6526,6 @@ function DetermineContinents()
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
 	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-	mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug polygons
+	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
+	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 end
