@@ -14,7 +14,7 @@ include("FLuaVector.lua")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = true
+local clockEnabled = false
 local lastDebugTimer
 
 local function StartDebugTimer()
@@ -2478,7 +2478,8 @@ Space = class(function(a)
 	a.wrapY = false -- globe wraps vertically? (not possible, but this remains hopeful)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 0 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.hexesPerSubPolygon = 3.5
+	a.hexesPerSubPolygon = 3
+	a.shillRelaxations = 1
 	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 0 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
@@ -2901,10 +2902,12 @@ function Space:Compute()
     if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     -- self:PrintClimate()
-    self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
+    self.subPolygonCount = mFloor(265 + (self.iA * 0.257))
     EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
     EchoDebug("creating shill polygons...")
     -- self.hexesPerSubPolygon = self.iA / self.subPolygonCount
+    -- self.hexesPerSubPolygon = 2 + (self.iA / 6827)
+    self.hexesPerSubPolygon = (0.6383562275 * math.log(self.iA)) - 2.319
     local shillCount, bestSpeed
     local areaSq = self.iA ^ 2
     for s = 10, mCeil(self.polygonCount / 2), 5 do
@@ -2918,6 +2921,7 @@ function Space:Compute()
     for i = 1, mCeil(shillCount) do
     	shillPolygons[#shillPolygons+1] = Polygon(self)
     end
+    self.shillPolygons = shillPolygons
     EchoDebug(#shillPolygons .. " shill polygons")
     -- self:InitPolygons()
     -- EchoDebug("initializing subpolygons...")
@@ -2936,6 +2940,12 @@ function Space:Compute()
     -- self:FillSubPolygons()
     local subPolyTimer = StartDebugTimer()
     EchoDebug("populating shill polygon hex tables...")
+    if self.shillRelaxations > 0 then
+    	for r = 1, self.shillRelaxations do
+    		self:FillPolygonsSimply(shillPolygons)
+    		self:RelaxPolygons(shillPolygons)
+    	end
+    end
     self:FillPolygonsSimply(shillPolygons)
     EchoDebug("subdividing shill polygons...")
     self:SubdividePolygons(shillPolygons)
@@ -6539,4 +6549,5 @@ function DetermineContinents()
 	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
+	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons
 end
