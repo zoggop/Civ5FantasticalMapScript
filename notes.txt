@@ -1,6 +1,4 @@
-- possibly instead of using min and max to for global climate options, use an exponent (like polarexponent) that the whole climate grid is distorted by. this would have to be used in conjunction with modifying mins and maxes, because it tends to leave in too much of the upper or lower part of the curve
-
-- need to prevent multiple inland seas from merging into one. possibly lake subpolygons are causing this to happen?
+- the problem with climate voronoi is that regions become less interesting the more of them there are. should use a fixed number of voronoi that will always be less than the number of regions, and reuse some of them (but the regions themselves won't be identical because different pixels will be chosen)
 
 ---
 

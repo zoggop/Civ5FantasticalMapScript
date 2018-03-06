@@ -2496,7 +2496,7 @@ Space = class(function(a)
 	a.collectionSizeMin = 2 -- of how many groups of kinds of tiles does a region consist, at minimum
 	a.collectionSizeMax = 3 -- of how many groups of kinds of tiles does a region consist, at maximum
 	a.subCollectionSizeMin = 1 -- of how many kinds of tiles does a group consist, at minimum (modified by map size)
-	a.subCollectionSizeMax = 4 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
+	a.subCollectionSizeMax = 3 -- of how many kinds of tiles does a group consist, at maximum (modified by map size)
 	a.regionSizeMin = 1 -- least number of polygons a region can have
 	a.regionSizeMax = 3 -- most number of polygons a region can have (but most will be limited by their area, which must not exceed half the largest polygon's area)
 	a.climateVoronoiRelaxations = 3 -- number of lloyd relaxations for a region's temperature/rainfall. higher number means less region internal variation
@@ -2822,13 +2822,10 @@ end
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
-    -- self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    -- self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
-    -- self.areaMod = mFloor( self.iA / 2600 )
-    -- self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
-    -- self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
-    -- self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
-    -- self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
+    self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
+    self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
+    self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
+    self.subCollectionSizeMax = self.subCollectionSizeMax + self.areaMod
     EchoDebug("subcollection size: " .. self.subCollectionSizeMin .. " minimum, " .. self.subCollectionSizeMax .. " maximum")
     self.nonOceanArea = self.iA
     self.w = self.iW - 1
@@ -2983,10 +2980,12 @@ function Space:Compute()
 	self:PickRegions()
 	-- EchoDebug("distorting climate grid...")
 	-- climateGrid = self:DistortClimateGrid(climateGrid, 1.5, 1)
+	EchoDebug(#self.regions .. " regions")
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
-	self.climateVoronoi = self:CreateClimateVoronoi(#self.regions, self.climateVoronoiRelaxations)
-	EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
+	local cliVorNum = mMin(self.polygonCount / 4, #self.regions)
+	self.climateVoronoi = self:CreateClimateVoronoi(cliVorNum, self.climateVoronoiRelaxations)
+	EchoDebug(cliVorNum .. " climate voronoi created in " .. StopDebugTimer(regionclimatetime))
 	EchoDebug("assigning climate voronoi to regions...")
 	self:AssignClimateVoronoiToRegions(self.climateVoronoi)
 	EchoDebug("filling regions...")
