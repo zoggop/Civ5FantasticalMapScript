@@ -14,7 +14,7 @@ include("FLuaVector.lua")
 ----------------------------------------------------------------------------------
 
 local debugEnabled = true
-local clockEnabled = true
+local clockEnabled = false
 local lastDebugTimer
 local firstDebugTimer
 
@@ -23,6 +23,7 @@ local function StartDebugTimer()
 end
 
 local function StopDebugTimer(timer)
+	if not timer then return "NO TIMER" end
 	local time = os.clock() - timer
 	local multiplier
 	local unit
@@ -1448,14 +1449,28 @@ function Hex:FloodFillToLand(searched)
 	end
 end
 
-function Hex:FloodFillToOcean(searched)
+function Hex:FloodFillAwayFromCoast(searched)
 	searched = searched or {}
 	if searched[self] then return end
 	searched[self] = true
-	if self.polygon.oceanIndex or (self.space.wrapX and (self.y == 0 or self.y == self.space.h)) then return true end
+	if not self.subPolygon.coast and not self.polygon.continent and not self.subPolygon.tinyIsland then return true end
 	if self.terrainType ~= terrainOcean then return end
 	for d, nhex in pairs(self:Neighbors()) do
-		if nhex:FloodFillToOcean(searched) then return true end
+		if nhex:FloodFillAwayFromCoast(searched) then return true end
+	end
+end
+
+function Hex:FloodFillAwayFromIce(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.featureType == featureIce then
+		return
+	elseif self.polygon.oceanIndex or self.polygon.continent or self.subPolygon.tinyIsland then
+		return true
+	end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillAwayFromIce(searched) then return true end
 	end
 end
 
@@ -3108,6 +3123,7 @@ end
 function Space:ComputeCoasts()
 	local coastHexes = {}
 	local unCoastHexes = {}
+	local unIceHexes = {}
 	for i, subPolygon in pairs(self.subPolygons) do
 		subPolygon.temperature = subPolygon.temperature or subPolygon.superPolygon.temperature or self:GetTemperature(subPolygon.latitude)
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
@@ -3158,8 +3174,12 @@ function Space:ComputeCoasts()
 						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
 						badIce = true
 					end
-					if not badIce and ice and self:GimmeIce(subPolygon.oceanTemperature) then
-						hex.featureType = featureIce
+					if not badIce and ice then
+						if self:GimmeIce(subPolygon.oceanTemperature) then
+							hex.featureType = featureIce
+						else
+							unIceHexes[#unIceHexes+1] = hex
+						end
 					end
 					if nearLand or mRandom(1, 100) < self.coastalExpansionPercent then
 						hex.terrainType = terrainCoast
@@ -3176,8 +3196,12 @@ function Space:ComputeCoasts()
 				end
 			else
 				for hi, hex in pairs(subPolygon.hexes) do
-					if ice and self:GimmeIce(subPolygon.oceanTemperature) then
-						hex.featureType = featureIce
+					if ice then
+						if self:GimmeIce(subPolygon.oceanTemperature) then
+							hex.featureType = featureIce
+						else
+							unIceHexes[#unIceHexes+1] = hex
+						end
 					end
 					hex.terrainType = terrainOcean
 				end
@@ -3189,7 +3213,7 @@ function Space:ComputeCoasts()
 	local unstrandedOceanHexCount = 0
 	for i = 1, #unCoastHexes do
 		local hex = unCoastHexes[i]
-		if not hex:FloodFillToOcean() then
+		if not hex:FloodFillAwayFromCoast() then
 			hex.terrainType = terrainCoast
 			unstrandedOceanHexCount = unstrandedOceanHexCount + 1
 		end
@@ -3207,61 +3231,16 @@ function Space:ComputeCoasts()
 	end
 	EchoDebug("unstranded " .. unstrandedCoastHexCount .. " / " .. #coastHexes .. " coast hexes in " .. StopDebugTimer(coastHexTimer))
 	-- fill in gaps in the ice
-	for i, subPolygon in pairs(self.subPolygons) do
-		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
-			for hi, hex in pairs(subPolygon.hexes) do
-				if hex.featureType ~= featureIce then
-					local surrounded = true
-					for d, nhex in pairs(hex:Neighbors()) do
-						if nhex.featureType ~= featureIce then
-							surrounded = false
-							break
-						end
-					end
-					if not surrounded then
-						local picked = {}
-						local notPicked = {}
-						local chex = hex
-						for n = 1, 24 do
-							picked[chex] = true
-							local newHex
-							for d, nhex in pairs(chex:Neighbors()) do
-								if nhex.plotType ~= plotOcean then
-									newHex = true
-									break
-								elseif nhex.featureType ~= featureIce and not picked[nhex] then
-									if newHex then
-										tInsert(notPicked, nhex)
-									else
-										newHex = nhex
-									end
-								end
-							end
-							if newHex == true then
-								break -- found land
-							elseif not newHex then
-								if #notPicked > 0 then
-									continue = true
-									repeat
-										newHex = tRemove(notPicked)
-									until not picked[newHex] or #notPicked == 0
-									if picked[newHex] then newHex = nil end
-								end
-								if not newHex then
-									for chex, yes in pairs(picked) do
-										chex.featureType = featureIce
-									end
-									break
-								end
-							end
-							chex = newHex
-						end
-					end
-					if surrounded then hex.featureType = featureIce end
-				end
-			end
+	local iceFillTimer = StartDebugTimer()
+	local filledIceHexCount = 0
+	for i = 1, #unIceHexes do
+		local hex = unIceHexes[i]
+		if not hex:FloodFillAwayFromIce() then
+			hex.featureType = featureIce
+			filledIceHexCount = filledIceHexCount + 1
 		end
 	end
+	EchoDebug("filled " .. filledIceHexCount .. " / " .. #unIceHexes .. " hexes with ice in " .. StopDebugTimer(iceFillTimer))
 end
 
 function Space:ComputeOceanTemperatures()
