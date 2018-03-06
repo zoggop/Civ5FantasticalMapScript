@@ -4618,8 +4618,8 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 							end
 						end
 						local nearPole = neighbor.betaBottomY or neighbor.betaTopY
-						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) then
-							if (neighbor.topY and not seed.hasBottomY) or (neighbor.bottomY and not seed.hasTopY) then
+						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) or (seed.hasTopY and neighbor.betaBottomY) or (seed.hasBottomY and neighbor.betaTopY) then
+							if ((neighbor.topY or neighbor.betaTopY) and not seed.hasBottomY) or ((neighbor.bottomY or neighbor.betaBottomY) and not seed.hasTopY) then
 								tInsert(polarCandidates, neighbor)
 							end
 						elseif onGoodSide then
