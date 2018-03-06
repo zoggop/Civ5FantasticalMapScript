@@ -1437,6 +1437,28 @@ function Hex:IsNeighbor(hex)
 	return false
 end
 
+function Hex:FloodFillToLand(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.polygon.continent or self.subPolygon.tinyIsland then return true end
+	if self.terrainType ~= terrainCoast then return end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillToLand(searched) then return true end
+	end
+end
+
+function Hex:FloodFillToOcean(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.polygon.oceanIndex or (self.space.wrapX and (self.y == 0 or self.y == self.space.h)) then return true end
+	if self.terrainType ~= terrainOcean then return end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillToOcean(searched) then return true end
+	end
+end
+
 function Hex:SetPlot()
 	if self.plotType == nil then EchoDebug("nil plotType at " .. self.x .. ", " .. self.y) end
 	if self.plot == nil then return end
@@ -2524,6 +2546,7 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
+	a.coastalExpansionPercent = 67 -- out of 100, how often are hexes within coastal subpolygons but without adjacent land hexes coastal?
 	a.tinyIslandTarget = 7 -- how many tiny islands will a map attempt to have
 	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
 	a.atollTemperature = 75 -- this temperature and above creates atolls
@@ -3083,6 +3106,8 @@ function Space:ComputeSeas()
 end
 
 function Space:ComputeCoasts()
+	local coastHexes = {}
+	local unCoastHexes = {}
 	for i, subPolygon in pairs(self.subPolygons) do
 		subPolygon.temperature = subPolygon.temperature or subPolygon.superPolygon.temperature or self:GetTemperature(subPolygon.latitude)
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
@@ -3118,23 +3143,36 @@ function Space:ComputeCoasts()
 			end
 			if subPolygon.coast then
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
-				for hi, hex in pairs(subPolygon.hexes) do
-					local bad = false
-					if self.polarMaxLandRatio == 0 and self.useMapLatitudes and hex.y ~= 0 and hex.y ~= self.h then
-						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
-						for d, nhex in pairs(hex:Neighbors()) do
-							if nhex.polygon.continent then
-								bad = true
-								break
-							end
+				for ih, hex in pairs(subPolygon.hexes) do
+					local nearContinent, nearLand
+					for d, nhex in pairs(hex:Neighbors()) do
+						if nhex.polygon.continent then
+							nearContinent = true
+							nearLand = true
+						elseif nhex.subPolygon.tinyIsland then
+							nearLand = true
 						end
 					end
-					if not bad and ice and self:GimmeIce(subPolygon.oceanTemperature) then
-						hex.featureType = featureIce
-					elseif atoll and mRandom(1, 100) < self.atollPercent then
-						hex.featureType = featureAtoll
+					local badIce
+					if self.polarMaxLandRatio == 0 and self.useMapLatitudes and hex.y ~= 0 and hex.y ~= self.h and nearContinent then
+						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
+						badIce = true
 					end
-					hex.terrainType = terrainCoast
+					if not badIce and ice and self:GimmeIce(subPolygon.oceanTemperature) then
+						hex.featureType = featureIce
+					end
+					if nearLand or mRandom(1, 100) < self.coastalExpansionPercent then
+						hex.terrainType = terrainCoast
+						coastHexes[#coastHexes+1] = hex
+						if atoll and mRandom(1, 100) < self.atollPercent then
+							hex.featureType = featureAtoll
+						end
+					else
+						hex.terrainType = terrainOcean
+						if not hex.subPolygon.lake and not hex.polygon.sea then
+							unCoastHexes[#unCoastHexes+1] = hex
+						end
+					end
 				end
 			else
 				for hi, hex in pairs(subPolygon.hexes) do
@@ -3146,6 +3184,28 @@ function Space:ComputeCoasts()
 			end
 		end
 	end
+	-- remove stranded bits of ocean
+	local oceanHexTimer = StartDebugTimer()
+	local unstrandedOceanHexCount = 0
+	for i = 1, #unCoastHexes do
+		local hex = unCoastHexes[i]
+		if not hex:FloodFillToOcean() then
+			hex.terrainType = terrainCoast
+			unstrandedOceanHexCount = unstrandedOceanHexCount + 1
+		end
+	end
+	EchoDebug("unstranded " .. unstrandedOceanHexCount .. " / " .. #unCoastHexes .. " ocean hexes in " .. StopDebugTimer(oceanHexTimer))
+	-- remove stranded bits of coast
+	local coastHexTimer = StartDebugTimer()
+	local unstrandedCoastHexCount = 0
+	for i = 1, #coastHexes do
+		local hex = coastHexes[i]
+		if not hex:FloodFillToLand() then
+			hex.terrainType = terrainOcean
+			unstrandedCoastHexCount = unstrandedCoastHexCount + 1
+		end
+	end
+	EchoDebug("unstranded " .. unstrandedCoastHexCount .. " / " .. #coastHexes .. " coast hexes in " .. StopDebugTimer(coastHexTimer))
 	-- fill in gaps in the ice
 	for i, subPolygon in pairs(self.subPolygons) do
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
