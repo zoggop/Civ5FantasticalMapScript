@@ -1667,7 +1667,7 @@ Polygon = class(function(a, space, x, y)
 	a.maxLatitude = 0
 end)
 
-function Polygon:Subdivide(divisionNumber)
+function Polygon:Subdivide(divisionNumber, relaxations)
 	local subPolygons = {}
 	local hexBuffer = tDuplicate(self.hexes)
 	for i = 1, mMin(divisionNumber, #hexBuffer) do
@@ -1675,14 +1675,30 @@ function Polygon:Subdivide(divisionNumber)
 		local polygon = Polygon(self.space, hex.x, hex.y)
 		subPolygons[i] = polygon
 	end
-	for i = 1, #self.hexes do
-		local hex = self.hexes[i]
-		local poly = self.space:ClosestThing(hex, subPolygons)
-		if poly then
-			tInsert(poly.hexes, hex)
-			hex.subPolygon = poly
+	local iterations = 0
+	repeat
+		for i = 1, #self.hexes do
+			local hex = self.hexes[i]
+			local poly = self.space:ClosestThing(hex, subPolygons)
+			if poly then
+				tInsert(poly.hexes, hex)
+				if iterations == relaxations then
+					hex.subPolygon = poly
+				end
+			end
 		end
-	end
+		if iterations < relaxations then
+			for i = #subPolygons, 1, -1 do
+				local poly = subPolygons[i]
+				if #poly.hexes == 0 then
+					tRemove(subPolygons, i)
+				else
+					poly:RelaxToCentroid()
+				end
+			end
+		end
+		iterations = iterations + 1
+	until iterations > relaxations
 	return subPolygons
 end
 
@@ -2264,7 +2280,7 @@ function Region:CreateCollection()
 		tInsert(collection, subCollection)
 	end
 	if self.polar and not hasPolar then
-		EchoDebug("provide a polar subcollection")
+		-- EchoDebug("provide a polar subcollection")
 		local rainPixel = tGetRandom(self.point.pixels)
 		local elements = { self:CreateElement(0, rainPixel.rain) }
 		local subSize = self.space:GetSubCollectionSize()
@@ -2478,9 +2494,7 @@ Space = class(function(a)
 	a.wrapY = false -- globe wraps vertically? (not possible, but this remains hopeful)
 	a.polygonCount = 200 -- how many polygons (map scale)
 	a.relaxations = 0 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.hexesPerSubPolygon = 3
 	a.shillRelaxations = 1
-	a.subPolygonCount = 1700 -- how many subpolygons
 	a.subPolygonFlopPercent = 0 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
@@ -2914,7 +2928,7 @@ function Space:Compute()
     local hexesAvailableToPolygons = tDuplicate(self.hexes)
     local shillPolygons = self:CreateShillPolygons(hexesAvailableToPolygons)
     EchoDebug("subdividing shill polygons...")
-    self.subPolygons = self:SubdividePolygons(shillPolygons)
+    self.subPolygons = self:SubdividePolygons(shillPolygons, self.hexesPerSubPolygon, self.subPolygonRelaxations)
     EchoDebug(StopDebugTimer(subPolyTimer) .. " to create subpolygons")
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
@@ -2983,7 +2997,7 @@ function Space:Compute()
 	EchoDebug(#self.regions .. " regions")
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
-	local cliVorNum = mMin(self.polygonCount / 4, #self.regions)
+	local cliVorNum = mMin(62 - (self.polygonCount / 8), #self.regions) -- higher granularity makes greater intraregion variability
 	self.climateVoronoi = self:CreateClimateVoronoi(cliVorNum, self.climateVoronoiRelaxations)
 	EchoDebug(cliVorNum .. " climate voronoi created in " .. StopDebugTimer(regionclimatetime))
 	EchoDebug("assigning climate voronoi to regions...")
@@ -3634,15 +3648,16 @@ function Space:CreateShillPolygons(availableHexes)
     return shillPolygons
 end
 
-function Space:SubdividePolygons(polygons, hexesPerDivision)
+function Space:SubdividePolygons(polygons, hexesPerDivision, relaxations)
 	polygons = polygons or self.polygons
 	hexesPerDivision = hexesPerDivision or self.hexesPerSubPolygon
+	relaxations = relaxations or 0
 	EchoDebug(hexesPerDivision .. " hexes per division")
 	local subPolygons = {}
 	for i = 1, #polygons do
 		local polygon = polygons[i]
 		local number = mCeil(#polygon.hexes / hexesPerDivision)
-		local subPolys = polygon:Subdivide(number)
+		local subPolys = polygon:Subdivide(number, relaxations)
 		for ii = 1, #subPolys do
 			tInsert(subPolygons, subPolys[ii])
 		end
@@ -3729,17 +3744,19 @@ function Space:FindSubPolygonNeighbors()
 end
 
 function Space:FlipFlopSubPolygons()
-	for i, subPolygon in pairs(self.subPolygons) do
-		-- see if it's next to another superpolygon
-		local choices = {}
-		for n, neighbor in pairs(subPolygon.neighbors) do
-			if neighbor.superPolygon ~= subPolygon.superPolygon then
-				choices[#choices+1] = neighbor.superPolygon
+	if self.subPolygonFlopPercent > 0 then
+		for i, subPolygon in pairs(self.subPolygons) do
+			-- see if it's next to another superpolygon
+			local choices = {}
+			for n, neighbor in pairs(subPolygon.neighbors) do
+				if neighbor.superPolygon ~= subPolygon.superPolygon then
+					choices[#choices+1] = neighbor.superPolygon
+				end
 			end
-		end
-		if #choices > 0 and mRandom(1, 100) < self.subPolygonFlopPercent then
-			-- flop the subpolygon
-			subPolygon:Flop(tGetRandom(choices))
+			if #choices > 0 and mRandom(1, 100) < self.subPolygonFlopPercent then
+				-- flop the subpolygon
+				subPolygon:Flop(tGetRandom(choices))
+			end
 		end
 	end
 	-- fix stranded single subpolygons
