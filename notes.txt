@@ -1,6 +1,9 @@
-- the problem with climate voronoi is that regions become less interesting the more of them there are. should use a fixed number of voronoi that will always be less than the number of regions, and reuse some of them (but the regions themselves won't be identical because different pixels will be chosen)
 
 ---
+
+/ continents shouldn't touch both poles
+
+/ the problem with climate voronoi is that regions become less interesting the more of them there are. should use a fixed number of voronoi that will always be less than the number of regions, and reuse some of them (but the regions themselves won't be identical because different pixels will be chosen)
 
 / idea for x-shift: find the column (x) that contains the least land, then put it at one of the edges of the map
 

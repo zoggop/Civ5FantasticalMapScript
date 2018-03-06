@@ -4525,6 +4525,13 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 			local polygon = seed.polygon
 			local continent = seed.continent
 			local candidate
+			if self.wrapX and polygon.edgeY then
+				if polygon.topY then
+					seed.hasTopY = true
+				elseif polygon.bottomY then
+					seed.hasBottomY = true
+				end
+			end
 			filledArea = filledArea + #polygon.hexes
 			seed.filledContinentArea = seed.filledContinentArea + #polygon.hexes
 			filledSubPolygons = filledSubPolygons + #polygon.subPolygons
@@ -4573,7 +4580,9 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 						end
 						local nearPole = neighbor.betaBottomY or neighbor.betaTopY
 						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) then
-							tInsert(polarCandidates, neighbor)
+							if (neighbor.topY and not seed.hasBottomY) or (neighbor.bottomY and not seed.hasTopY) then
+								tInsert(polarCandidates, neighbor)
+							end
 						elseif onGoodSide then
 							tInsert(goodSideCandidates, neighbor)
 						else
