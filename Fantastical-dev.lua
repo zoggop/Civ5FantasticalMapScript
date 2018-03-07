@@ -1443,6 +1443,14 @@ function Hex:Distance(hex)
 	return self.space:HexDistance(self.x, self.y, hex.x, hex.y)
 end
 
+function Hex:Blacklisted(blacklist)
+	for key, value in pairs(blacklist) do
+		if self[key] == value then
+			return true
+		end
+	end
+end
+
 function Hex:FloodFillToLand(searched)
 	searched = searched or {}
 	if searched[self] then return end
@@ -3269,36 +3277,37 @@ end
 function Space:UnblockIce()
 	if self.temperatureMax > self.freezingTemperature * 2 then return end
 	-- open up landmasses surrounded by ice
+	local landmasses = tDuplicate(self.continents)
+	for i, subPolygon in pairs(self.tinyIslandSubPolygons) do
+		tInsert(landmasses, {subPolygon})
+	end
+	local blacklist = { plotType = plotMountain }
 	local openIceTimer = StartDebugTimer()
 	local connected = {}
-	for i, continent in pairs(self.continents) do
+	for i, continent in pairs(landmasses) do
 		connected[continent] = connected[continent] or {}
-		local hex = continent[1].hexes[1]
-		local ip = 1
-		local ih = 1
-		while hex.plotType == plotMountain do
-			ih = ih + 1
-			if ih > #continent[ip].hexes then
-				ih = 1
-				ip = ip + 1
-				if ip > #continent then
-					break
+		local targetContinent, leastDist, aBestPoly, bBestPoly
+		for ii, tContinent in pairs(landmasses) do
+			if tContinent ~= continent and not connected[continent][tContinent] then
+				local dist, aPoly, bPoly = self:ContinentDistance(continent, tContinent)
+				if not leastDist or dist < leastDist then
+					leastDist = dist
+					targetContinent = tContinent
+					aBestPoly = aPoly
+					bBestPoly = bPoly
 				end
 			end
-			hex = continent[ip].hexes[ih]
 		end
-		local targetContinent
-		local continentBuffer = tDuplicate(self.continents)
-		repeat
-			local tContinent = tGetRandom(continentBuffer)
-			if tContinent ~= continent and not connected[continent][tContinent] then
-				targetContinent = tContinent
-				break
-			end
-		until #continentBuffer == 0
 		if targetContinent then
 			-- EchoDebug(tostring(continent), tostring(targetContinent))
-			local targetHex = tGetRandom(tGetRandom(targetContinent).hexes)
+			local hex = self:GetValidHexOnContinent({aBestPoly}, blacklist)
+			if hex:Blacklisted(blacklist) then 
+				hex = self:GetValidHexOnContinent(continent, blacklist)
+			end
+			local targetHex = self:GetValidHexOnContinent({bBestPoly}, blacklist)
+			if targetHex:Blacklisted(blacklist) then
+				targetHex = self:GetValidHexOnContinent(targetContinent, blacklist)
+			end
 			local success, iceRemovedCount, iterations = self:PathThroughIce(hex, targetHex)
 			if success then
 				EchoDebug("found path", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
@@ -3311,6 +3320,55 @@ function Space:UnblockIce()
 		end
 	end
 	EchoDebug("intercontinent access through ice cleared in " .. StopDebugTimer(openIceTimer))
+end
+
+
+function Space:GetValidHexOnContinent(continent, blacklist)
+	local hex = continent[1].hexes[1]
+	local ip = 1
+	local ih = 1
+	while hex:Blacklisted(blacklist) do
+		ih = ih + 1
+		if ih > #continent[ip].hexes then
+			ih = 1
+			ip = ip + 1
+			if ip > #continent then
+				break
+			end
+		end
+		hex = continent[ip].hexes[ih]
+	end
+	return hex
+end
+
+function Space:ContinentDistance(aContinent, bContinent, downToTheHex)
+	local leastDist, aBestPoly, bBestPoly
+	for i, aPolygon in pairs(aContinent) do
+		for ii, bPolygon in pairs(bContinent) do
+			local dist = aPolygon:DistanceToPolygon(bPolygon)
+			if not leastDist or dist < leastDist then
+				leastDist = dist
+				aBestPoly = aPolygon
+				bBestPoly = bPolygon
+			end
+		end
+	end
+	if downToTheHex and leastDist then
+		local leastHexDist, aBestHex, bBestHex
+		for i, aHex in pairs(aBestPoly.hexes) do
+			for ii, bHex in pairs(bBestPoly.hexes) do
+				local dist = aHex:Distance(bHex)
+				if not leastHexDist or dist < leastHexDist then
+					leastHexDist = dist
+					aBestHex = aHex
+					bBestHex = bHex
+				end
+			end
+		end
+		return leastHexDist, aBestPoly, bBestPoly, aBestHex, bBestHex
+	else
+		return leastDist, aBestPoly, bBestPoly
+	end
 end
 
 function Space:PathThroughIce(originHex, targetHex)
@@ -3338,9 +3396,9 @@ function Space:PathThroughIce(originHex, targetHex)
 			end
 			if nhex.plotType ~= plotMountain and not onPath[nhex] then
 				-- local dist = targetHex:Distance(nhex)
-				local dist = self:EucDistance(targetHex.x, targetHex.y, nhex.x, nhex.y)
+				local dist = self:EucDistance(targetHex.x, targetHex.y, nhex.x, nhex.y) -- creates less linear shapes
 				if nhex.featureType == featureIce then
-					dist = dist + 2
+					dist = dist + 1
 				end
 				local sortDist = mCeil(dist)
 				hexesByDist[sortDist] = hexesByDist[sortDist] or {}
@@ -6746,7 +6804,7 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons
