@@ -1438,6 +1438,11 @@ function Hex:IsNeighbor(hex)
 	return false
 end
 
+function Hex:Distance(hex)
+	if not hex then return end
+	return self.space:HexDistance(self.x, self.y, hex.x, hex.y)
+end
+
 function Hex:FloodFillToLand(searched)
 	searched = searched or {}
 	if searched[self] then return end
@@ -3262,76 +3267,104 @@ function Space:ComputeCoasts()
 end
 
 function Space:UnblockIce()
+	if self.temperatureMax > self.freezingTemperature * 2 then return end
 	-- open up landmasses surrounded by ice
-	if #self.continents == 1 then return end
 	local openIceTimer = StartDebugTimer()
+	local connected = {}
 	for i, continent in pairs(self.continents) do
-		-- find adjacent coastal hexes
-		local isStartHex = {}
-		local startHexCount = 0
-		for ii, polygon in pairs(continent) do
-			for iii, neighPoly in pairs(polygon.neighbors) do
-				if not neighPoly.continent then
-					for iiii, subPolygon in pairs(polygon.subPolygons) do
-						for iiiii, neighSubPoly in pairs(subPolygon.neighbors) do
-							if not neighSubPoly.superPolygon.continent then
-								for iiiiii, hex in pairs(subPolygon.hexes) do
-									for d, nhex in pairs(hex:Neighbors()) do
-										if not isStartHex[nhex] and not nhex.polygon.continent and nhex.featureType ~= featureIce then
-											isStartHex[nhex] = true
-											startHexCount = startHexCount + 1
-										end
-									end
-								end
-								break
-							end
-						end
-					end
+		connected[continent] = connected[continent] or {}
+		local hex = continent[1].hexes[1]
+		local ip = 1
+		local ih = 1
+		while hex.plotType == plotMountain do
+			ih = ih + 1
+			if ih > #continent[ip].hexes then
+				ih = 1
+				ip = ip + 1
+				if ip > #continent then
 					break
 				end
 			end
+			hex = continent[ip].hexes[ih]
 		end
-		local iterations = 0
-		local nextI = i + 1
-		if nextI > #self.continents then nextI = 1 end
-		local otherContinent = self.continents[nextI]
+		local targetContinent
+		local continentBuffer = tDuplicate(self.continents)
 		repeat
-			-- look for a way out
-			local open, iceHexes
-			for hex, yes in pairs(isStartHex) do
-				local ih
-				open, ih = hex:FloodFillToOtherContinent(otherContinent)
-				iceHexes = ih
+			local tContinent = tGetRandom(continentBuffer)
+			if tContinent ~= continent and not connected[continent][tContinent] then
+				targetContinent = tContinent
 				break
 			end
-			if not open then
-				EchoDebug(startHexCount .. " adjacent coastal hexes without ice")
-				if iceHexes then EchoDebug(#iceHexes) else EchoDebug("no ice hexes") end
+		until #continentBuffer == 0
+		if targetContinent then
+			-- EchoDebug(tostring(continent), tostring(targetContinent))
+			local targetHex = tGetRandom(tGetRandom(targetContinent).hexes)
+			local success, iceRemovedCount, iterations = self:PathThroughIce(hex, targetHex)
+			if success then
+				EchoDebug("found path", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
+				connected[continent][targetContinent] = true
+				connected[targetContinent] = connected[targetContinent] or {}
+				connected[targetContinent][continent] = true
+			else
+				EchoDebug("path not found", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
 			end
-			-- try to create a way if there is none
-			if not open and iceHexes then
-				local leastIce, bestHex
-				for ii, hex in pairs(iceHexes) do
-					local iceCount = 0
-					for d, nhex in pairs(hex:Neighbors()) do
-						if nhex.featureType == featureIce then
-							iceCount = iceCount + 1
-						end
-					end
-					if iceCount > 1 and (not leastIce or iceCount < leastIce) then
-						leastIce = iceCount
-						bestHex = hex
-					end
-				end
-				bestHex.featureType = featureNone
-			end
-			iterations = iterations + 1
-		until open or iterations > 20 or not iceHexes
-		if iterations > 1 then
-			EchoDebug("way out found after " .. iterations .. " iterations")
 		end
 	end
 	EchoDebug("intercontinent access through ice cleared in " .. StopDebugTimer(openIceTimer))
+end
+
+function Space:PathThroughIce(originHex, targetHex)
+	-- EchoDebug("looking for path", originHex:Locate(), targetHex:Locate())
+	if originHex == targetHex then return true, 0, 0 end
+	local i = 0
+	local maxI = self.w * 3
+	local iceRemovedCount = 0
+	local onPath = {}
+	local hex = originHex
+	while hex ~= targetHex and i < maxI do
+		if hex.featureType == featureIce then
+			hex.featureType = featureNone
+			iceRemovedCount = iceRemovedCount + 1
+		end
+		onPath[hex] = true
+		-- EchoDebug(i, hex:Locate())
+		-- hex.featureType = featureFallout -- to see the paths
+		local leastDist, bestHex
+		local hexesByDist = {}
+		for d, nhex in pairs(hex:Neighbors()) do
+			if nhex == targetHex then
+				-- bestHex = nhex
+				-- break
+			end
+			if nhex.plotType ~= plotMountain and not onPath[nhex] then
+				-- local dist = targetHex:Distance(nhex)
+				local dist = self:EucDistance(targetHex.x, targetHex.y, nhex.x, nhex.y)
+				if nhex.featureType == featureIce then
+					dist = dist + 2
+				end
+				local sortDist = mCeil(dist)
+				hexesByDist[sortDist] = hexesByDist[sortDist] or {}
+				tInsert(hexesByDist[sortDist], nhex)
+				if not leastDist or dist < leastDist then
+					leastDist = dist
+					bestHex = nhex
+				end
+			end
+		end
+		if bestHex then
+			if #hexesByDist[mCeil(leastDist)] > 1 then
+				-- EchoDebug("using random")
+				hex = tGetRandom(hexesByDist[mCeil(leastDist)])
+			else
+				hex = bestHex
+			end
+		else
+			EchoDebug("path cannot go any farther")
+			break
+		end
+		i = i + 1
+	end
+	return hex == targetHex, iceRemovedCount, i
 end
 
 function Space:ComputeOceanTemperatures()
