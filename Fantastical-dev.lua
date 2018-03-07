@@ -795,9 +795,9 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
+	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax", "freezingTemperature" }, default = 4,
 	values = {
-			[1] = { name = "Snowball", values = {1.8, 0, 13} },
+			[1] = { name = "Snowball", values = {1.8, 0, 13, 15} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 33} },
 			[3] = { name = "Cool", values = {1.4, 0, 71} },
 			[4] = { name = "Temperate", values = {1.2, 0, 99} },
@@ -1466,12 +1466,29 @@ function Hex:FloodFillAwayFromIce(searched)
 	searched[self] = true
 	if self.featureType == featureIce then
 		return
-	elseif self.polygon.oceanIndex or self.polygon.continent or self.subPolygon.tinyIsland then
+	elseif self.polygon.continent or self.subPolygon.tinyIsland then
 		return true
 	end
 	for d, nhex in pairs(self:Neighbors()) do
 		if nhex:FloodFillAwayFromIce(searched) then return true end
 	end
+end
+
+function Hex:FloodFillToOtherContinent(otherContinent, searched, iceHexes)
+	searched = searched or {}
+	iceHexes = iceHexes or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.featureType == featureIce then
+		tInsert(iceHexes, self)
+		return false, iceHexes
+	elseif self.polygon.continent and self.polygon.continent == otherContinent then
+		return true, iceHexes
+	end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillToOtherContinent(otherContinent, searched, iceHexes) then return true, iceHexes end
+	end
+	return false, iceHexes
 end
 
 function Hex:SetPlot()
@@ -2563,7 +2580,7 @@ Space = class(function(a)
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
 	a.coastalExpansionPercent = 67 -- out of 100, how often are hexes within coastal subpolygons but without adjacent land hexes coastal?
 	a.tinyIslandTarget = 7 -- how many tiny islands will a map attempt to have
-	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
+	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 99
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
@@ -2667,7 +2684,6 @@ function Space:SetOptions(optDict)
 		else
 			-- each value is listed in order of the option's listed keys
 	 		for valueNumber, key in ipairs(option.keys) do
-				EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
 				local val = option.values[optionChoice].values[valueNumber]
 				if val == nil then
 					if type(self[key]) == "number" then
@@ -2676,6 +2692,7 @@ function Space:SetOptions(optDict)
 				end
 				self[key] = val
 				keySetByOption[key] = true
+				EchoDebug(option.name, option.values[optionChoice].name, key, val)
 			end
 		end
 	end
@@ -3218,7 +3235,7 @@ function Space:ComputeCoasts()
 			unstrandedOceanHexCount = unstrandedOceanHexCount + 1
 		end
 	end
-	EchoDebug("unstranded " .. unstrandedOceanHexCount .. " / " .. #unCoastHexes .. " ocean hexes in " .. StopDebugTimer(oceanHexTimer))
+	EchoDebug("removed " .. unstrandedOceanHexCount .. " / " .. #unCoastHexes .. " stranded ocean hexes in " .. StopDebugTimer(oceanHexTimer))
 	-- remove stranded bits of coast
 	local coastHexTimer = StartDebugTimer()
 	local unstrandedCoastHexCount = 0
@@ -3229,18 +3246,92 @@ function Space:ComputeCoasts()
 			unstrandedCoastHexCount = unstrandedCoastHexCount + 1
 		end
 	end
-	EchoDebug("unstranded " .. unstrandedCoastHexCount .. " / " .. #coastHexes .. " coast hexes in " .. StopDebugTimer(coastHexTimer))
+	EchoDebug("removed " .. unstrandedCoastHexCount .. " / " .. #coastHexes .. " stranded coast hexes in " .. StopDebugTimer(coastHexTimer))
 	-- fill in gaps in the ice
 	local iceFillTimer = StartDebugTimer()
 	local filledIceHexCount = 0
-	for i = 1, #unIceHexes do
+	for i = #unIceHexes, 1, -1 do
 		local hex = unIceHexes[i]
 		if not hex:FloodFillAwayFromIce() then
 			hex.featureType = featureIce
 			filledIceHexCount = filledIceHexCount + 1
 		end
 	end
-	EchoDebug("filled " .. filledIceHexCount .. " / " .. #unIceHexes .. " hexes with ice in " .. StopDebugTimer(iceFillTimer))
+	EchoDebug("filled " .. filledIceHexCount .. " / " .. #unIceHexes .. " ice-stranded hexes with ice in " .. StopDebugTimer(iceFillTimer))
+	self:UnblockIce()
+end
+
+function Space:UnblockIce()
+	-- open up landmasses surrounded by ice
+	if #self.continents == 1 then return end
+	local openIceTimer = StartDebugTimer()
+	for i, continent in pairs(self.continents) do
+		-- find adjacent coastal hexes
+		local isStartHex = {}
+		local startHexCount = 0
+		for ii, polygon in pairs(continent) do
+			for iii, neighPoly in pairs(polygon.neighbors) do
+				if not neighPoly.continent then
+					for iiii, subPolygon in pairs(polygon.subPolygons) do
+						for iiiii, neighSubPoly in pairs(subPolygon.neighbors) do
+							if not neighSubPoly.superPolygon.continent then
+								for iiiiii, hex in pairs(subPolygon.hexes) do
+									for d, nhex in pairs(hex:Neighbors()) do
+										if not isStartHex[nhex] and not nhex.polygon.continent and nhex.featureType ~= featureIce then
+											isStartHex[nhex] = true
+											startHexCount = startHexCount + 1
+										end
+									end
+								end
+								break
+							end
+						end
+					end
+					break
+				end
+			end
+		end
+		local iterations = 0
+		local nextI = i + 1
+		if nextI > #self.continents then nextI = 1 end
+		local otherContinent = self.continents[nextI]
+		repeat
+			-- look for a way out
+			local open, iceHexes
+			for hex, yes in pairs(isStartHex) do
+				local ih
+				open, ih = hex:FloodFillToOtherContinent(otherContinent)
+				iceHexes = ih
+				break
+			end
+			if not open then
+				EchoDebug(startHexCount .. " adjacent coastal hexes without ice")
+				if iceHexes then EchoDebug(#iceHexes) else EchoDebug("no ice hexes") end
+			end
+			-- try to create a way if there is none
+			if not open and iceHexes then
+				local leastIce, bestHex
+				for ii, hex in pairs(iceHexes) do
+					local iceCount = 0
+					for d, nhex in pairs(hex:Neighbors()) do
+						if nhex.featureType == featureIce then
+							iceCount = iceCount + 1
+						end
+					end
+					if iceCount > 1 and (not leastIce or iceCount < leastIce) then
+						leastIce = iceCount
+						bestHex = hex
+					end
+				end
+				bestHex.featureType = featureNone
+			end
+			iterations = iterations + 1
+		until open or iterations > 20 or not iceHexes
+		if iterations > 1 then
+			EchoDebug("way out found after " .. iterations .. " iterations")
+		end
+	end
+	EchoDebug("intercontinent access through ice cleared in " .. StopDebugTimer(openIceTimer))
 end
 
 function Space:ComputeOceanTemperatures()
@@ -6622,7 +6713,7 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons

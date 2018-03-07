@@ -1,3 +1,6 @@
+- unblock ice: if the global max temp is below some level, flood fill ice-blocked "basins" like astronomy basins. if there's more than one basin, connect each basin to another (keep track of connections, and always connect to a basin that has not yet been connected to this one). connect by pathfinding from a random hex within one basin to a hex within another basin. while pathfinding, all plots are valid except for mountains; an ice plot increases the distance slightly (so that small bits of ice will be evaded); any ice in the path is removed.
+
+- landmass types that are a continent and/or an astronomy basin for every team or player?
 
 ---
 
