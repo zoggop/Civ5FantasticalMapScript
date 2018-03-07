@@ -797,7 +797,7 @@ local OptionDictionary = {
 	},
 	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax", "freezingTemperature" }, default = 4,
 	values = {
-			[1] = { name = "Snowball", values = {1.8, 0, 13, 15} },
+			[1] = { name = "Snowball", values = {1.8, 0, 13, 16} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 33} },
 			[3] = { name = "Cool", values = {1.4, 0, 71} },
 			[4] = { name = "Temperate", values = {1.2, 0, 99} },
@@ -3277,13 +3277,14 @@ end
 function Space:UnblockIce()
 	if self.temperatureMax > self.freezingTemperature * 2 then return end
 	-- open up landmasses surrounded by ice
+	local openIceTimer = StartDebugTimer()
 	local landmasses = tDuplicate(self.continents)
 	for i, subPolygon in pairs(self.tinyIslandSubPolygons) do
 		tInsert(landmasses, {subPolygon})
 	end
 	local blacklist = { plotType = plotMountain }
-	local openIceTimer = StartDebugTimer()
 	local connected = {}
+	local totalIceRemoved = 0
 	for i, continent in pairs(landmasses) do
 		connected[continent] = connected[continent] or {}
 		local targetContinent, leastDist, aBestPoly, bBestPoly
@@ -3308,18 +3309,20 @@ function Space:UnblockIce()
 			if targetHex:Blacklisted(blacklist) then
 				targetHex = self:GetValidHexOnContinent(targetContinent, blacklist)
 			end
-			local success, iceRemovedCount, iterations = self:PathThroughIce(hex, targetHex)
+			local maxI = leastDist * 4
+			local success, iceRemovedCount, iterations = self:PathThroughIce(hex, targetHex, maxI)
 			if success then
-				EchoDebug("found path", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
+				-- EchoDebug("found path", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
 				connected[continent][targetContinent] = true
 				connected[targetContinent] = connected[targetContinent] or {}
 				connected[targetContinent][continent] = true
 			else
-				EchoDebug("path not found", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
+				EchoDebug("path not found", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " / " .. maxI .. " iterations")
 			end
+			totalIceRemoved = totalIceRemoved + iceRemovedCount
 		end
 	end
-	EchoDebug("intercontinent access through ice cleared in " .. StopDebugTimer(openIceTimer))
+	EchoDebug("intercontinent access through ice cleared by removing " .. totalIceRemoved .. " ice hexes in " .. StopDebugTimer(openIceTimer))
 end
 
 
@@ -3371,11 +3374,11 @@ function Space:ContinentDistance(aContinent, bContinent, downToTheHex)
 	end
 end
 
-function Space:PathThroughIce(originHex, targetHex)
+function Space:PathThroughIce(originHex, targetHex, maxI)
 	-- EchoDebug("looking for path", originHex:Locate(), targetHex:Locate())
+	maxI = maxI or self.iW / 2
 	if originHex == targetHex then return true, 0, 0 end
 	local i = 0
-	local maxI = self.w * 3
 	local iceRemovedCount = 0
 	local onPath = {}
 	local hex = originHex
@@ -3391,10 +3394,10 @@ function Space:PathThroughIce(originHex, targetHex)
 		local hexesByDist = {}
 		for d, nhex in pairs(hex:Neighbors()) do
 			if nhex == targetHex then
-				-- bestHex = nhex
-				-- break
+				bestHex = nhex
+				break
 			end
-			if nhex.plotType ~= plotMountain and not onPath[nhex] then
+			if nhex.plotType ~= plotMountain and not onPath[nhex] and (not self.useMapLatitudes or not self.wrapX or (nhex.y ~= 0 and nhex.y ~= self.h)) then
 				-- local dist = targetHex:Distance(nhex)
 				local dist = self:EucDistance(targetHex.x, targetHex.y, nhex.x, nhex.y) -- creates less linear shapes
 				if nhex.featureType == featureIce then
@@ -3410,7 +3413,7 @@ function Space:PathThroughIce(originHex, targetHex)
 			end
 		end
 		if bestHex then
-			if #hexesByDist[mCeil(leastDist)] > 1 then
+			if leastDist and hexesByDist[mCeil(leastDist)] and #hexesByDist[mCeil(leastDist)] > 1 then
 				-- EchoDebug("using random")
 				hex = tGetRandom(hexesByDist[mCeil(leastDist)])
 			else
