@@ -3066,6 +3066,10 @@ function Space:Compute()
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
 	local cliVorNum = mMin(62 - (self.polygonCount / 8), #self.regions) -- higher granularity makes greater intraregion variability
+	if self.useMapLatitudes then
+		-- limited number of voronoi messes with climate realism
+		cliVorNum = #self.regions
+	end
 	self.climateVoronoi = self:CreateClimateVoronoi(cliVorNum, self.climateVoronoiRelaxations)
 	EchoDebug(cliVorNum .. " climate voronoi created in " .. StopDebugTimer(regionclimatetime))
 	EchoDebug("assigning climate voronoi to regions...")
@@ -6807,7 +6811,7 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons

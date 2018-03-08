@@ -1,3 +1,5 @@
+- fix climate realism issues with limited number of climate voronoi (remove the limit?)
+
 - landmass types that are a continent and/or an astronomy basin for every team or player?
 
 ---
