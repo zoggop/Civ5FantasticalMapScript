@@ -1,6 +1,6 @@
 -- Map Script: Fantastical
 -- Author: eronoobos
--- version 30
+-- version 31
 
 --------------------------------------------------------------
 if include == nil then
@@ -16,12 +16,14 @@ include("FLuaVector.lua")
 local debugEnabled = true
 local clockEnabled = false
 local lastDebugTimer
+local firstDebugTimer
 
 local function StartDebugTimer()
 	return os.clock()
 end
 
 local function StopDebugTimer(timer)
+	if not timer then return "NO TIMER" end
 	local time = os.clock() - timer
 	local multiplier
 	local unit
@@ -50,10 +52,9 @@ local function EchoDebug(...)
 	if debugEnabled then
 		local printResult = ""
 		if clockEnabled then
-			-- local clock = math.floor(os.clock() / 0.1) * 0.1
-			-- printResult = printResult .. "(" .. clock .. "): \t"
+			firstDebugTimer = firstDebugTimer or StartDebugTimer()
 			if lastDebugTimer then
-				printResult = printResult .. "(" .. StopDebugTimer(lastDebugTimer) .. "): \t"
+				printResult = printResult .. StopDebugTimer(firstDebugTimer) .. "\t\t" .. StopDebugTimer(lastDebugTimer) .. ": \t\t"
 			end
 			lastDebugTimer = StartDebugTimer()
 		end
@@ -794,9 +795,9 @@ local OptionDictionary = {
 			[7] = { name = "Random", values = "keys" },
 		}
 	},
-	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax" }, default = 4,
+	{ name = "Temperature", keys = { "polarExponent", "temperatureMin", "temperatureMax", "freezingTemperature" }, default = 4,
 	values = {
-			[1] = { name = "Snowball", values = {1.8, 0, 13} },
+			[1] = { name = "Snowball", values = {1.8, 0, 13, 16} },
 			[2] = { name = "Ice Age", values = {1.6, 0, 33} },
 			[3] = { name = "Cool", values = {1.4, 0, 71} },
 			[4] = { name = "Temperate", values = {1.2, 0, 99} },
@@ -1437,6 +1438,55 @@ function Hex:IsNeighbor(hex)
 	return false
 end
 
+function Hex:Distance(hex)
+	if not hex then return end
+	return self.space:HexDistance(self.x, self.y, hex.x, hex.y)
+end
+
+function Hex:Blacklisted(blacklist)
+	for key, value in pairs(blacklist) do
+		if self[key] == value then
+			return true
+		end
+	end
+end
+
+function Hex:FloodFillToLand(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.polygon.continent or self.subPolygon.tinyIsland then return true end
+	if self.terrainType ~= terrainCoast then return end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillToLand(searched) then return true end
+	end
+end
+
+function Hex:FloodFillAwayFromCoast(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if not self.subPolygon.coast and not self.polygon.continent and not self.subPolygon.tinyIsland then return true end
+	if self.terrainType ~= terrainOcean then return end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillAwayFromCoast(searched) then return true end
+	end
+end
+
+function Hex:FloodFillAwayFromIce(searched)
+	searched = searched or {}
+	if searched[self] then return end
+	searched[self] = true
+	if self.featureType == featureIce then
+		return
+	elseif self.polygon.continent or self.subPolygon.tinyIsland then
+		return true
+	end
+	for d, nhex in pairs(self:Neighbors()) do
+		if nhex:FloodFillAwayFromIce(searched) then return true end
+	end
+end
+
 function Hex:SetPlot()
 	if self.plotType == nil then EchoDebug("nil plotType at " .. self.x .. ", " .. self.y) end
 	if self.plot == nil then return end
@@ -1666,6 +1716,41 @@ Polygon = class(function(a, space, x, y)
 	a.minLatitude = 90
 	a.maxLatitude = 0
 end)
+
+function Polygon:Subdivide(divisionNumber, relaxations)
+	local subPolygons = {}
+	local hexBuffer = tDuplicate(self.hexes)
+	for i = 1, mMin(divisionNumber, #hexBuffer) do
+		local hex = tRemoveRandom(hexBuffer)
+		local polygon = Polygon(self.space, hex.x, hex.y)
+		subPolygons[i] = polygon
+	end
+	local iterations = 0
+	repeat
+		for i = 1, #self.hexes do
+			local hex = self.hexes[i]
+			local poly = self.space:ClosestThing(hex, subPolygons)
+			if poly then
+				tInsert(poly.hexes, hex)
+				if iterations == relaxations then
+					hex.subPolygon = poly
+				end
+			end
+		end
+		if iterations < relaxations then
+			for i = #subPolygons, 1, -1 do
+				local poly = subPolygons[i]
+				if #poly.hexes == 0 then
+					tRemove(subPolygons, i)
+				else
+					poly:RelaxToCentroid()
+				end
+			end
+		end
+		iterations = iterations + 1
+	until iterations > relaxations
+	return subPolygons
+end
 
 function Polygon:FloodFillAstronomy(astronomyIndex)
 	if self.oceanIndex or self.nearOcean then
@@ -2245,7 +2330,7 @@ function Region:CreateCollection()
 		tInsert(collection, subCollection)
 	end
 	if self.polar and not hasPolar then
-		EchoDebug("provide a polar subcollection")
+		-- EchoDebug("provide a polar subcollection")
 		local rainPixel = tGetRandom(self.point.pixels)
 		local elements = { self:CreateElement(0, rainPixel.rain) }
 		local subSize = self.space:GetSubCollectionSize()
@@ -2458,9 +2543,9 @@ Space = class(function(a)
 	a.wrapX = true -- globe wraps horizontally?
 	a.wrapY = false -- globe wraps vertically? (not possible, but this remains hopeful)
 	a.polygonCount = 200 -- how many polygons (map scale)
-	a.relaxations = 1 -- how many lloyd relaxations (higher number is greater polygon uniformity)
-	a.subPolygonCount = 1700 -- how many subpolygons
-	a.subPolygonFlopPercent = 17 -- out of 100 subpolygons, how many flop to another polygon
+	a.relaxations = 0 -- how many lloyd relaxations (higher number is greater polygon uniformity)
+	a.shillRelaxations = 1
+	a.subPolygonFlopPercent = 0 -- out of 100 subpolygons, how many flop to another polygon
 	a.subPolygonRelaxations = 0 -- how many lloyd relaxations for subpolygons (higher number is greater polygon uniformity, also slower)
 	a.oceanNumber = 2 -- how many large ocean basins
 	a.astronomyBlobNumber = 0
@@ -2489,8 +2574,9 @@ Space = class(function(a)
 	a.mountainSubPolygonMult = 2 -- higher mult means more (globally) scattered subpolygon mountain clumps
 	a.mountainTinyIslandMult = 12
 	a.coastalPolygonChance = 1 -- out of ten, how often do water polygons become coastal?
+	a.coastalExpansionPercent = 67 -- out of 100, how often are hexes within coastal subpolygons but without adjacent land hexes coastal?
 	a.tinyIslandTarget = 7 -- how many tiny islands will a map attempt to have
-	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 100
+	a.freezingTemperature = 19 -- this temperature and below creates ice. temperature is 0 to 99
 	a.atollTemperature = 75 -- this temperature and above creates atolls
 	a.atollPercent = 4 -- of 100 hexes, how often does atoll temperature produce atolls
 	a.polarExponent = 1.2 -- exponent. lower exponent = smaller poles (somewhere between 0 and 2 is advisable)
@@ -2506,7 +2592,7 @@ Space = class(function(a)
 	a.lakeynessMin = 5 -- in those lake regions, what's the minimum percentage of water in their collection
 	a.lakeynessMax = 50 -- in those lake regions, what's the maximum percentage of water in their collection
 	a.marshynessMin = 5
-	a.marshynessMax = 50
+	a.marshynessMax = 33
 	a.marshMinHexRatio = 0.015
 	a.inlandSeaContinentRatio = 0.02 -- maximum size of each inland sea as a fraction of the polygons of the continent they're inside
 	a.inlandSeasMax = 1 -- maximum number of inland seas
@@ -2594,7 +2680,6 @@ function Space:SetOptions(optDict)
 		else
 			-- each value is listed in order of the option's listed keys
 	 		for valueNumber, key in ipairs(option.keys) do
-				EchoDebug(option.name, option.values[optionChoice].name, key, option.values[optionChoice].values[valueNumber])
 				local val = option.values[optionChoice].values[valueNumber]
 				if val == nil then
 					if type(self[key]) == "number" then
@@ -2603,6 +2688,7 @@ function Space:SetOptions(optDict)
 				end
 				self[key] = val
 				keySetByOption[key] = true
+				EchoDebug(option.name, option.values[optionChoice].name, key, val)
 			end
 		end
 	end
@@ -2801,9 +2887,6 @@ end
 function Space:Compute()
     self.iW, self.iH = Map.GetGridSize()
     self.iA = self.iW * self.iH
-    -- self.areaMod = mFloor(mSqrt(self.iA) / 30)
-    -- self.areaMod = mFloor( (self.iA ^ 0.67) / 120 )
-    -- self.areaMod = mFloor( self.iA / 2600 )
     self.areaMod = mFloor( (self.iA ^ 0.75) / 360 )
     self.areaMod2 = mFloor( (self.iA ^ 0.75) / 500 )
     self.subCollectionSizeMin = self.subCollectionSizeMin + self.areaMod2
@@ -2881,22 +2964,23 @@ function Space:Compute()
     if self.useMapLatitudes and self.polarMaxLandRatio == 0 then self.noContinentsNearPoles = true end
     self:CreatePseudoLatitudes()
     -- self:PrintClimate()
-    self.subPolygonCount = mFloor(18 * (self.iA ^ 0.5)) + 200
-    EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes")
-    EchoDebug("initializing polygons...")
-    self:InitPolygons()
     EchoDebug("initializing hexes...")
     self:InitHexes()
-    if self.subPolygonRelaxations > 0 then
-    	for r = 1, self.subPolygonRelaxations do
-    		EchoDebug("filling subpolygons pre-relaxation...")
-        	self:FillSubPolygons(true)
-    		print("relaxing subpolygons... (" .. r .. "/" .. self.subPolygonRelaxations .. ")")
-        	self:RelaxPolygons(self.subPolygons)
-        end
-    end
-    EchoDebug("filling subpolygons post-relaxation...")
-    self:FillSubPolygons()
+    -- self.hexesPerSubPolygon = self.iA / self.subPolygonCount
+    -- self.hexesPerSubPolygon = 2 + (self.iA / 6827)
+    -- self.hexesPerSubPolygon = (0.6383562275 * math.log(self.iA)) - 2.319
+    -- self.hexesPerSubPolygon = 3.60250103 - (2034.85378040 / self.iA)
+    self.hexesPerSubPolygon = (1.05292 * math.log(self.iA)) - 5.74245
+    self.hexesPerSubPolygon = mMax(1, self.hexesPerSubPolygon)
+    self.subPolygonCount = mCeil(self.iA / self.hexesPerSubPolygon)
+	EchoDebug(self.polygonCount .. " polygons", self.subPolygonCount .. " subpolygons", self.iA .. " hexes", self.hexesPerSubPolygon .. " hexes per subpolygon")
+    local subPolyTimer = StartDebugTimer()
+    EchoDebug("creating shill polygons...")
+    local hexesAvailableToPolygons = tDuplicate(self.hexes)
+    local shillPolygons = self:CreateShillPolygons(hexesAvailableToPolygons)
+    EchoDebug("subdividing shill polygons...")
+    self.subPolygons = self:SubdividePolygons(shillPolygons, self.hexesPerSubPolygon, self.subPolygonRelaxations)
+    EchoDebug(StopDebugTimer(subPolyTimer) .. " to create subpolygons")
     EchoDebug("culling empty subpolygons...")
     self:CullPolygons(self.subPolygons)
     EchoDebug("unstranding hexes...")
@@ -2904,6 +2988,9 @@ function Space:Compute()
 	EchoDebug("calculating subpolygon limits..")
 	self:CalcSubPolygonLimits()
 	EchoDebug("smallest subpolygon: " .. self.subPolygonMinArea, "largest subpolygon: " .. self.subPolygonMaxArea)
+	EchoDebug("initializing new polygons...")
+	self.polygons = {}
+	self:InitPolygons(hexesAvailableToPolygons)
     if self.relaxations > 0 then
     	for r = 1, self.relaxations do
     		EchoDebug("filling polygons pre-relaxation...")
@@ -2917,8 +3004,9 @@ function Space:Compute()
     EchoDebug("determining subpolygon neighbors...")
     self:FindSubPolygonNeighbors()
     EchoDebug("flip-flopping subpolygons...")
+    self.unstrandedSubPolyCount = 0
     self:FlipFlopSubPolygons()
-    EchoDebug((self.flopCount or 0) .. " subpolygons flopped")
+    EchoDebug((self.flopCount or 0) .. " subpolygons flopped", "(" .. self.unstrandedSubPolyCount .. " unstranded)")
     EchoDebug("populating polygon hex tables...")
     self:FillPolygonHexes()
     EchoDebug("culling empty polygons...")
@@ -2957,10 +3045,16 @@ function Space:Compute()
 	self:PickRegions()
 	-- EchoDebug("distorting climate grid...")
 	-- climateGrid = self:DistortClimateGrid(climateGrid, 1.5, 1)
+	EchoDebug(#self.regions .. " regions")
 	EchoDebug("creating climate voronoi...")
 	local regionclimatetime = StartDebugTimer()
-	self.climateVoronoi = self:CreateClimateVoronoi(#self.regions, self.climateVoronoiRelaxations)
-	EchoDebug("region climate voronoi calculations took " .. StopDebugTimer(regionclimatetime))
+	local cliVorNum = mMin(62 - (self.polygonCount / 8), #self.regions) -- higher granularity makes greater intraregion variability
+	if self.useMapLatitudes then
+		-- limited number of voronoi messes with climate realism
+		cliVorNum = #self.regions
+	end
+	self.climateVoronoi = self:CreateClimateVoronoi(cliVorNum, self.climateVoronoiRelaxations)
+	EchoDebug(cliVorNum .. " climate voronoi created in " .. StopDebugTimer(regionclimatetime))
 	EchoDebug("assigning climate voronoi to regions...")
 	self:AssignClimateVoronoiToRegions(self.climateVoronoi)
 	EchoDebug("filling regions...")
@@ -3044,6 +3138,9 @@ function Space:ComputeSeas()
 end
 
 function Space:ComputeCoasts()
+	local coastHexes = {}
+	local unCoastHexes = {}
+	local unIceHexes = {}
 	for i, subPolygon in pairs(self.subPolygons) do
 		subPolygon.temperature = subPolygon.temperature or subPolygon.superPolygon.temperature or self:GetTemperature(subPolygon.latitude)
 		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
@@ -3079,90 +3176,243 @@ function Space:ComputeCoasts()
 			end
 			if subPolygon.coast then
 				local atoll = subPolygon.oceanTemperature >= self.atollTemperature
-				for hi, hex in pairs(subPolygon.hexes) do
-					local bad = false
-					if self.polarMaxLandRatio == 0 and self.useMapLatitudes and hex.y ~= 0 and hex.y ~= self.h then
-						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
-						for d, nhex in pairs(hex:Neighbors()) do
-							if nhex.polygon.continent then
-								bad = true
-								break
-							end
+				for ih, hex in pairs(subPolygon.hexes) do
+					local nearContinent, nearLand
+					for d, nhex in pairs(hex:Neighbors()) do
+						if nhex.polygon.continent then
+							nearContinent = true
+							nearLand = true
+						elseif nhex.subPolygon.tinyIsland then
+							nearLand = true
 						end
 					end
-					if not bad and ice and self:GimmeIce(subPolygon.oceanTemperature) then
-						hex.featureType = featureIce
-					elseif atoll and mRandom(1, 100) < self.atollPercent then
-						hex.featureType = featureAtoll
+					local badIce
+					if self.polarMaxLandRatio == 0 and self.useMapLatitudes and hex.y ~= 0 and hex.y ~= self.h and nearContinent then
+						-- try not to interfere w/ navigation at poles if no land at poles and icy poles
+						badIce = true
 					end
-					hex.terrainType = terrainCoast
+					if not badIce and ice then
+						if self:GimmeIce(subPolygon.oceanTemperature) then
+							hex.featureType = featureIce
+						else
+							unIceHexes[#unIceHexes+1] = hex
+						end
+					end
+					if nearLand or mRandom(1, 100) < self.coastalExpansionPercent then
+						hex.terrainType = terrainCoast
+						coastHexes[#coastHexes+1] = hex
+						if atoll and mRandom(1, 100) < self.atollPercent then
+							hex.featureType = featureAtoll
+						end
+					else
+						hex.terrainType = terrainOcean
+						if not hex.subPolygon.lake and not hex.polygon.sea then
+							unCoastHexes[#unCoastHexes+1] = hex
+						end
+					end
 				end
 			else
 				for hi, hex in pairs(subPolygon.hexes) do
-					if ice and self:GimmeIce(subPolygon.oceanTemperature) then
-						hex.featureType = featureIce
+					if ice then
+						if self:GimmeIce(subPolygon.oceanTemperature) then
+							hex.featureType = featureIce
+						else
+							unIceHexes[#unIceHexes+1] = hex
+						end
 					end
 					hex.terrainType = terrainOcean
 				end
 			end
 		end
 	end
+	-- remove stranded bits of ocean
+	local oceanHexTimer = StartDebugTimer()
+	local unstrandedOceanHexCount = 0
+	for i = 1, #unCoastHexes do
+		local hex = unCoastHexes[i]
+		if not hex:FloodFillAwayFromCoast() then
+			hex.terrainType = terrainCoast
+			unstrandedOceanHexCount = unstrandedOceanHexCount + 1
+		end
+	end
+	EchoDebug("removed " .. unstrandedOceanHexCount .. " / " .. #unCoastHexes .. " stranded ocean hexes in " .. StopDebugTimer(oceanHexTimer))
+	-- remove stranded bits of coast
+	local coastHexTimer = StartDebugTimer()
+	local unstrandedCoastHexCount = 0
+	for i = 1, #coastHexes do
+		local hex = coastHexes[i]
+		if not hex:FloodFillToLand() then
+			hex.terrainType = terrainOcean
+			unstrandedCoastHexCount = unstrandedCoastHexCount + 1
+		end
+	end
+	EchoDebug("removed " .. unstrandedCoastHexCount .. " / " .. #coastHexes .. " stranded coast hexes in " .. StopDebugTimer(coastHexTimer))
 	-- fill in gaps in the ice
-	for i, subPolygon in pairs(self.subPolygons) do
-		if (not subPolygon.superPolygon.continent or subPolygon.lake) and not subPolygon.tinyIsland then
-			for hi, hex in pairs(subPolygon.hexes) do
-				if hex.featureType ~= featureIce then
-					local surrounded = true
-					for d, nhex in pairs(hex:Neighbors()) do
-						if nhex.featureType ~= featureIce then
-							surrounded = false
-							break
-						end
-					end
-					if not surrounded then
-						local picked = {}
-						local notPicked = {}
-						local chex = hex
-						for n = 1, 24 do
-							picked[chex] = true
-							local newHex
-							for d, nhex in pairs(chex:Neighbors()) do
-								if nhex.plotType ~= plotOcean then
-									newHex = true
-									break
-								elseif nhex.featureType ~= featureIce and not picked[nhex] then
-									if newHex then
-										tInsert(notPicked, nhex)
-									else
-										newHex = nhex
-									end
-								end
-							end
-							if newHex == true then
-								break -- found land
-							elseif not newHex then
-								if #notPicked > 0 then
-									continue = true
-									repeat
-										newHex = tRemove(notPicked)
-									until not picked[newHex] or #notPicked == 0
-									if picked[newHex] then newHex = nil end
-								end
-								if not newHex then
-									for chex, yes in pairs(picked) do
-										chex.featureType = featureIce
-									end
-									break
-								end
-							end
-							chex = newHex
-						end
-					end
-					if surrounded then hex.featureType = featureIce end
+	local iceFillTimer = StartDebugTimer()
+	local filledIceHexCount = 0
+	for i = #unIceHexes, 1, -1 do
+		local hex = unIceHexes[i]
+		if not hex:FloodFillAwayFromIce() then
+			hex.featureType = featureIce
+			filledIceHexCount = filledIceHexCount + 1
+		end
+	end
+	EchoDebug("filled " .. filledIceHexCount .. " / " .. #unIceHexes .. " ice-stranded hexes with ice in " .. StopDebugTimer(iceFillTimer))
+	self:UnblockIce()
+end
+
+function Space:UnblockIce()
+	if self.temperatureMax > self.freezingTemperature * 2 then return end
+	-- open up landmasses surrounded by ice
+	local openIceTimer = StartDebugTimer()
+	local landmasses = tDuplicate(self.continents)
+	for i, subPolygon in pairs(self.tinyIslandSubPolygons) do
+		tInsert(landmasses, {subPolygon})
+	end
+	local blacklist = { plotType = plotMountain }
+	local connected = {}
+	local totalIceRemoved = 0
+	for i, continent in pairs(landmasses) do
+		connected[continent] = connected[continent] or {}
+		local targetContinent, leastDist, aBestPoly, bBestPoly
+		for ii, tContinent in pairs(landmasses) do
+			if tContinent ~= continent and not connected[continent][tContinent] then
+				local dist, aPoly, bPoly = self:ContinentDistance(continent, tContinent)
+				if not leastDist or dist < leastDist then
+					leastDist = dist
+					targetContinent = tContinent
+					aBestPoly = aPoly
+					bBestPoly = bPoly
 				end
 			end
 		end
+		if targetContinent then
+			-- EchoDebug(tostring(continent), tostring(targetContinent))
+			local hex = self:GetValidHexOnContinent({aBestPoly}, blacklist)
+			if hex:Blacklisted(blacklist) then 
+				hex = self:GetValidHexOnContinent(continent, blacklist)
+			end
+			local targetHex = self:GetValidHexOnContinent({bBestPoly}, blacklist)
+			if targetHex:Blacklisted(blacklist) then
+				targetHex = self:GetValidHexOnContinent(targetContinent, blacklist)
+			end
+			local maxI = leastDist * 4
+			local success, iceRemovedCount, iterations = self:PathThroughIce(hex, targetHex, maxI)
+			if success then
+				-- EchoDebug("found path", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " iterations")
+				connected[continent][targetContinent] = true
+				connected[targetContinent] = connected[targetContinent] or {}
+				connected[targetContinent][continent] = true
+			else
+				EchoDebug("path not found", "removed ice from " .. iceRemovedCount .. " hexes", iterations .. " / " .. maxI .. " iterations")
+			end
+			totalIceRemoved = totalIceRemoved + iceRemovedCount
+		end
 	end
+	EchoDebug("intercontinent access through ice cleared by removing " .. totalIceRemoved .. " ice hexes in " .. StopDebugTimer(openIceTimer))
+end
+
+
+function Space:GetValidHexOnContinent(continent, blacklist)
+	local hex = continent[1].hexes[1]
+	local ip = 1
+	local ih = 1
+	while hex:Blacklisted(blacklist) do
+		ih = ih + 1
+		if ih > #continent[ip].hexes then
+			ih = 1
+			ip = ip + 1
+			if ip > #continent then
+				break
+			end
+		end
+		hex = continent[ip].hexes[ih]
+	end
+	return hex
+end
+
+function Space:ContinentDistance(aContinent, bContinent, downToTheHex)
+	local leastDist, aBestPoly, bBestPoly
+	for i, aPolygon in pairs(aContinent) do
+		for ii, bPolygon in pairs(bContinent) do
+			local dist = aPolygon:DistanceToPolygon(bPolygon)
+			if not leastDist or dist < leastDist then
+				leastDist = dist
+				aBestPoly = aPolygon
+				bBestPoly = bPolygon
+			end
+		end
+	end
+	if downToTheHex and leastDist then
+		local leastHexDist, aBestHex, bBestHex
+		for i, aHex in pairs(aBestPoly.hexes) do
+			for ii, bHex in pairs(bBestPoly.hexes) do
+				local dist = aHex:Distance(bHex)
+				if not leastHexDist or dist < leastHexDist then
+					leastHexDist = dist
+					aBestHex = aHex
+					bBestHex = bHex
+				end
+			end
+		end
+		return leastHexDist, aBestPoly, bBestPoly, aBestHex, bBestHex
+	else
+		return leastDist, aBestPoly, bBestPoly
+	end
+end
+
+function Space:PathThroughIce(originHex, targetHex, maxI)
+	-- EchoDebug("looking for path", originHex:Locate(), targetHex:Locate())
+	maxI = maxI or self.iW / 2
+	if originHex == targetHex then return true, 0, 0 end
+	local i = 0
+	local iceRemovedCount = 0
+	local onPath = {}
+	local hex = originHex
+	while hex ~= targetHex and i < maxI do
+		if hex.featureType == featureIce then
+			hex.featureType = featureNone
+			iceRemovedCount = iceRemovedCount + 1
+		end
+		onPath[hex] = true
+		-- EchoDebug(i, hex:Locate())
+		-- hex.featureType = featureFallout -- to see the paths
+		local leastDist, bestHex
+		local hexesByDist = {}
+		for d, nhex in pairs(hex:Neighbors()) do
+			if nhex == targetHex then
+				bestHex = nhex
+				break
+			end
+			if nhex.plotType ~= plotMountain and not onPath[nhex] and (not self.useMapLatitudes or not self.wrapX or (nhex.y ~= 0 and nhex.y ~= self.h)) then
+				-- local dist = targetHex:Distance(nhex)
+				local dist = self:EucDistance(targetHex.x, targetHex.y, nhex.x, nhex.y) -- creates less linear shapes
+				if nhex.featureType == featureIce then
+					dist = dist + 1
+				end
+				local sortDist = mCeil(dist)
+				hexesByDist[sortDist] = hexesByDist[sortDist] or {}
+				tInsert(hexesByDist[sortDist], nhex)
+				if not leastDist or dist < leastDist then
+					leastDist = dist
+					bestHex = nhex
+				end
+			end
+		end
+		if bestHex then
+			if leastDist and hexesByDist[mCeil(leastDist)] and #hexesByDist[mCeil(leastDist)] > 1 then
+				-- EchoDebug("using random")
+				hex = tGetRandom(hexesByDist[mCeil(leastDist)])
+			else
+				hex = bestHex
+			end
+		else
+			EchoDebug("path cannot go any farther")
+			break
+		end
+		i = i + 1
+	end
+	return hex == targetHex, iceRemovedCount, i
 end
 
 function Space:ComputeOceanTemperatures()
@@ -3490,22 +3740,20 @@ function Space:SetContinentArtTypes()
 	end
 end
 
-function Space:PolygonDebugDisplay()
+function Space:PolygonDebugDisplay(polygons)
 	local fills = {}
 	for terrainType, terrainDef in pairs(TerrainDictionary) do
 		tInsert(fills, {plotType = plotLand, terrainType = terrainType, featureType = featureNone})
 	end
-	-- tInsert(fills, {plotType = plotLand, terrainType = terrainGrass, featureType = featureNone})
-	-- tInsert(fills, {plotType = plotLand, terrainType = terrainDesert, featureType = featureNone})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainOcean, featureType = featureNone})
 	tInsert(fills, {plotType = plotOcean, terrainType = terrainCoast, featureType = featureNone})
 	EchoDebug(#fills .. " fill types")
 	local highestNeighbors = 0
-	for i, polygon in pairs(self.polygons) do
-		local fillsLeft = tDuplicate(fills)
+	for i, polygon in pairs(polygons) do
 		if #polygon.neighbors > highestNeighbors then
 			highestNeighbors = #polygon.neighbors
 		end
+		local fillsLeft = tDuplicate(fills)
 		for ii, neighbor in pairs(polygon.neighbors) do
 			if neighbor.fill then
 				for iii = #fillsLeft, 1, -1 do
@@ -3518,15 +3766,17 @@ function Space:PolygonDebugDisplay()
 			end
 		end
 		local fill = tGetRandom(fillsLeft)
-		polygon.fill = fill
-		for ii, hex in pairs(polygon.hexes) do
-			hex.plot:SetPlotType(fill.plotType)
-			hex.plot:SetTerrainType(fill.terrainType)
-			hex.plot:SetFeatureType(fill.featureType)
-			if hex.stranded then
-				-- hex.plot:SetFeatureType(featureFloodPlains)
-			elseif hex.x == polygon.x and hex.y == polygon.y then
-				-- hex.plot:SetFeatureType(featureReef)
+		if fill then
+			polygon.fill = fill
+			for ii, hex in pairs(polygon.hexes) do
+				hex.plot:SetPlotType(fill.plotType)
+				hex.plot:SetTerrainType(fill.terrainType)
+				hex.plot:SetFeatureType(fill.featureType)
+				-- if hex.stranded then
+					-- hex.plot:SetFeatureType(featureFloodPlains)
+				-- elseif hex.x == polygon.x and hex.y == polygon.y then
+					-- hex.plot:SetFeatureType(featureReef)
+				-- end
 			end
 		end
 	end
@@ -3536,7 +3786,25 @@ end
     ----------------------------------
     -- INTERNAL METAFUNCTIONS: --
 
-function Space:InitPolygons()
+function Space:InitPolygons(availableHexes)
+	if not availableHexes then
+		if self.hexes then
+			availableHexes = tDuplicate(self.hexes)
+		end
+	end
+	for i = 1, self.polygonCount do
+		local polygon
+		if availableHexes then
+			local hex = tRemoveRandom(availableHexes)
+			polygon = Polygon(self, hex.x, hex.y)
+		else
+			polygon = Polygon(self)
+		end
+		tInsert(self.polygons, polygon)
+	end
+end
+
+function Space:InitSubPolygons()
 	local XYs = {}
 	for x = 0, self.w do
 		for y = 0, self.h do
@@ -3552,10 +3820,6 @@ function Space:InitPolygons()
 			break
 		end
 	end
-	for i = 1, self.polygonCount do
-		local polygon = Polygon(self)
-		tInsert(self.polygons, polygon)
-	end
 end
 
 function Space:InitHexes()
@@ -3565,6 +3829,51 @@ function Space:InitHexes()
 			self.hexes[hex.index] = hex
 		end
 	end
+end
+
+function Space:CreateShillPolygons(availableHexes)
+	local shillCount, bestSpeed
+    local areaSq = self.iA ^ 2
+    for s = 10, mCeil(self.polygonCount / 2), 5 do
+    	local speed = (self.iA * s) + (areaSq / (self.hexesPerSubPolygon * s))
+    	if not bestSpeed or speed <= bestSpeed then
+    		bestSpeed = speed
+    		shillCount = s
+    	end
+    end
+    local shillPolygons = {}
+    for i = 1, mCeil(shillCount) do
+    	local hex = tRemoveRandom(availableHexes)
+    	shillPolygons[#shillPolygons+1] = Polygon(self, hex.x, hex.y)
+    end
+    self.shillPolygons = shillPolygons
+    EchoDebug(#shillPolygons .. " shill polygons")
+    EchoDebug("filling & relaxing shill polygons...")
+    if self.shillRelaxations > 0 then
+    	for r = 1, self.shillRelaxations do
+    		self:FillPolygonsSimply(shillPolygons)
+    		self:RelaxPolygons(shillPolygons)
+    	end
+    end
+    self:FillPolygonsSimply(shillPolygons)
+    return shillPolygons
+end
+
+function Space:SubdividePolygons(polygons, hexesPerDivision, relaxations)
+	polygons = polygons or self.polygons
+	hexesPerDivision = hexesPerDivision or self.hexesPerSubPolygon
+	relaxations = relaxations or 0
+	EchoDebug(hexesPerDivision .. " hexes per division")
+	local subPolygons = {}
+	for i = 1, #polygons do
+		local polygon = polygons[i]
+		local number = mCeil(#polygon.hexes / hexesPerDivision)
+		local subPolys = polygon:Subdivide(number, relaxations)
+		for ii = 1, #subPolys do
+			tInsert(subPolygons, subPolys[ii])
+		end
+	end
+	return subPolygons
 end
 
 function Space:FillSubPolygons(relax)
@@ -3605,6 +3914,17 @@ function Space:FillPolygonHexes()
 	end
 end
 
+function Space:FillPolygonsSimply(polygons)
+	polygons = polygons or self.polygons
+	for i = 1, #self.hexes do
+		local hex = self.hexes[i]
+		local polygon = self:ClosestThing(hex, polygons)
+		if polygon then
+			tInsert(polygon.hexes, hex)
+		end
+	end
+end
+
 function Space:CullPolygons(polygons)
 	local culled = 0
 	for i = #polygons, 1, -1 do -- have to go backwards, otherwise table.remove screws up the iteration
@@ -3635,17 +3955,19 @@ function Space:FindSubPolygonNeighbors()
 end
 
 function Space:FlipFlopSubPolygons()
-	for i, subPolygon in pairs(self.subPolygons) do
-		-- see if it's next to another superpolygon
-		local choices = {}
-		for n, neighbor in pairs(subPolygon.neighbors) do
-			if neighbor.superPolygon ~= subPolygon.superPolygon then
-				choices[#choices+1] = neighbor.superPolygon
+	if self.subPolygonFlopPercent > 0 then
+		for i, subPolygon in pairs(self.subPolygons) do
+			-- see if it's next to another superpolygon
+			local choices = {}
+			for n, neighbor in pairs(subPolygon.neighbors) do
+				if neighbor.superPolygon ~= subPolygon.superPolygon then
+					choices[#choices+1] = neighbor.superPolygon
+				end
 			end
-		end
-		if #choices > 0 and mRandom(1, 100) < self.subPolygonFlopPercent then
-			-- flop the subpolygon
-			subPolygon:Flop(tGetRandom(choices))
+			if #choices > 0 and mRandom(1, 100) < self.subPolygonFlopPercent then
+				-- flop the subpolygon
+				subPolygon:Flop(tGetRandom(choices))
+			end
 		end
 	end
 	-- fix stranded single subpolygons
@@ -3662,6 +3984,7 @@ function Space:FlipFlopSubPolygons()
 		end
 		if not hasFriendlyNeighbors and not subPolygon.flopped and #subPolygon.superPolygon.subPolygons > 1 and #uchoices > 0 then
 			subPolygon:Flop(tGetRandom(uchoices))
+			self.unstrandedSubPolyCount = self.unstrandedSubPolyCount + 1
 		end
 	end
 end
@@ -4413,6 +4736,13 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 			local polygon = seed.polygon
 			local continent = seed.continent
 			local candidate
+			if self.wrapX and polygon.edgeY then
+				if polygon.topY then
+					seed.hasTopY = true
+				elseif polygon.bottomY then
+					seed.hasBottomY = true
+				end
+			end
 			filledArea = filledArea + #polygon.hexes
 			seed.filledContinentArea = seed.filledContinentArea + #polygon.hexes
 			filledSubPolygons = filledSubPolygons + #polygon.subPolygons
@@ -4460,8 +4790,10 @@ function Space:GrowContinentSeeds(seedPolygons, coastOrContinentLimit, astronomy
 							end
 						end
 						local nearPole = neighbor.betaBottomY or neighbor.betaTopY
-						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) then
-							tInsert(polarCandidates, neighbor)
+						if self.wrapX and not self.wrapY and (neighbor.edgeY or (self.noContinentsNearPoles and nearPole)) or (seed.hasTopY and neighbor.betaBottomY) or (seed.hasBottomY and neighbor.betaTopY) then
+							if ((neighbor.topY or neighbor.betaTopY) and not seed.hasBottomY) or ((neighbor.bottomY or neighbor.betaBottomY) and not seed.hasTopY) then
+								tInsert(polarCandidates, neighbor)
+							end
 						elseif onGoodSide then
 							tInsert(goodSideCandidates, neighbor)
 						else
@@ -6202,10 +6534,11 @@ function Space:GetSubCollectionSize()
 end
 
 function Space:ClosestThing(this, things, thingsCount)
+	thingsCount = thingsCount or #things
 	local closestDist
 	local closestThing
 	-- local thingsByDist = {}
-	for i = 1, thingsCount or #things do
+	for i = 1, thingsCount do
 		local thing = things[i]
 		-- local dist = self:SquaredDistance(thing.x, thing.y, this.x, this.y)
 		-- local dist = self:ManhattanDistance(thing.x, thing.y, this.x, this.y)
@@ -6462,5 +6795,7 @@ function DetermineContinents()
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
 	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
-	-- mySpace:PolygonDebugDisplay()-- uncomment to debug polygons
+	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
+	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
+	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons
 end

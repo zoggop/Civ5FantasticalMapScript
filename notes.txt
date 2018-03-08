@@ -1,8 +1,14 @@
-- possibly instead of using min and max to for global climate options, use an exponent (like polarexponent) that the whole climate grid is distorted by. this would have to be used in conjunction with modifying mins and maxes, because it tends to leave in too much of the upper or lower part of the curve
+- fix climate realism issues with limited number of climate voronoi (remove the limit?)
 
-- need to prevent multiple inland seas from merging into one. possibly lake subpolygons are causing this to happen?
+- landmass types that are a continent and/or an astronomy basin for every team or player?
 
 ---
+
+/ unblock ice: if the global max temp is below some level, connect by pathfinding from a random hex within one landmass to a hex within another. while pathfinding, all plots are valid except for mountains; an ice plot increases the distance slightly (so that small bits of ice will be evaded); any ice in the path is removed.
+
+/ continents shouldn't touch both poles
+
+/ the problem with climate voronoi is that regions become less interesting the more of them there are. should use a fixed number of voronoi that will always be less than the number of regions, and reuse some of them (but the regions themselves won't be identical because different pixels will be chosen)
 
 / idea for x-shift: find the column (x) that contains the least land, then put it at one of the edges of the map
 
