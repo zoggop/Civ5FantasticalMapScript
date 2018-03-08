@@ -1487,23 +1487,6 @@ function Hex:FloodFillAwayFromIce(searched)
 	end
 end
 
-function Hex:FloodFillToOtherContinent(otherContinent, searched, iceHexes)
-	searched = searched or {}
-	iceHexes = iceHexes or {}
-	if searched[self] then return end
-	searched[self] = true
-	if self.featureType == featureIce then
-		tInsert(iceHexes, self)
-		return false, iceHexes
-	elseif self.polygon.continent and self.polygon.continent == otherContinent then
-		return true, iceHexes
-	end
-	for d, nhex in pairs(self:Neighbors()) do
-		if nhex:FloodFillToOtherContinent(otherContinent, searched, iceHexes) then return true, iceHexes end
-	end
-	return false, iceHexes
-end
-
 function Hex:SetPlot()
 	if self.plotType == nil then EchoDebug("nil plotType at " .. self.x .. ", " .. self.y) end
 	if self.plot == nil then return end
@@ -6811,7 +6794,7 @@ function DetermineContinents()
 	print('setting Fantastical routes and improvements...')
 	mySpace:SetRoads()
 	mySpace:SetImprovements()
-	mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
+	-- mySpace:StripResources()-- uncomment to remove all resources for world builder screenshots
 	-- mySpace:PolygonDebugDisplay(mySpace.polygons)-- uncomment to debug polygons
 	-- mySpace:PolygonDebugDisplay(mySpace.subPolygons)-- uncomment to debug subpolygons
 	-- mySpace:PolygonDebugDisplay(mySpace.shillPolygons)-- uncomment to debug shill polygons
